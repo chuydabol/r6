@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>R6 Team Research Base</title>
+  <title>R6 Props Board</title>
   <style>
     * {
       box-sizing: border-box;
@@ -17,7 +17,7 @@
     }
 
     .app {
-      max-width: 1300px;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -29,11 +29,12 @@
     .topbar {
       display: flex;
       gap: 10px;
-      margin-bottom: 20px;
       flex-wrap: wrap;
+      margin-bottom: 20px;
+      align-items: center;
     }
 
-    input {
+    .search-box {
       flex: 1;
       min-width: 240px;
       padding: 12px 14px;
@@ -44,7 +45,7 @@
       outline: none;
     }
 
-    button {
+    .btn {
       padding: 12px 16px;
       border: none;
       border-radius: 10px;
@@ -54,14 +55,8 @@
       font-weight: bold;
     }
 
-    button:hover {
+    .btn:hover {
       background: #1d4ed8;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
     }
 
     .card {
@@ -70,6 +65,129 @@
       border-radius: 16px;
       padding: 18px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    .empty {
+      padding: 18px;
+      border: 1px dashed #334155;
+      border-radius: 12px;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .filter-chip {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e5e7eb;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .filter-chip.active {
+      background: #1d4ed8;
+      border-color: #3b82f6;
+    }
+
+    .props-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .prop-card {
+      background: linear-gradient(180deg, #0f172a 0%, #0b1227 100%);
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .prop-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .player-name {
+      font-size: 20px;
+      font-weight: bold;
+      line-height: 1.2;
+    }
+
+    .line-badge {
+      min-width: 64px;
+      text-align: center;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #172554;
+      color: #93c5fd;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .stat-line {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .meta {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .section-spacing {
+      margin-top: 24px;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .player-item,
+    .match-item {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
     }
 
     .team-header {
@@ -88,32 +206,13 @@
       padding: 6px;
     }
 
-    .list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .player-item,
-    .match-item,
-    .prop-item {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      padding: 12px;
-    }
-
-    .muted {
-      color: #94a3b8;
-      font-size: 14px;
-    }
-
-    .match-top,
-    .prop-top {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 8px;
+    .status-pill {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: #1e293b;
+      text-transform: capitalize;
     }
 
     .maps {
@@ -123,8 +222,7 @@
       gap: 8px;
     }
 
-    .map-tag,
-    .pill {
+    .map-tag {
       background: #1e293b;
       color: #cbd5e1;
       padding: 6px 10px;
@@ -132,35 +230,12 @@
       font-size: 12px;
     }
 
-    .status {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: #1e293b;
-      text-transform: capitalize;
-    }
-
-    .line-box {
-      font-size: 18px;
-      font-weight: bold;
-      color: #93c5fd;
-    }
-
-    .empty {
-      padding: 18px;
-      border: 1px dashed #334155;
-      border-radius: 12px;
-      color: #94a3b8;
-      text-align: center;
-    }
-
-    .section-spacing {
-      margin-top: 20px;
-    }
-
     @media (max-width: 900px) {
-      .grid {
+      .grid-two {
+        grid-template-columns: 1fr;
+      }
+
+      .props-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -168,50 +243,183 @@
 </head>
 <body>
   <div class="app">
-    <h1>R6 Team Research Base</h1>
+    <h1>R6 Props Board</h1>
 
-    <div class="topbar">
-      <input
-        id="teamSlug"
-        placeholder="Enter team slug (example: shopify-rebellion-r6)"
-        value="shopify-rebellion-r6"
-      />
-      <button onclick="loadTeamBase()">Load Team</button>
-    </div>
-
-    <div id="teamSection" class="card" style="margin-bottom: 20px;">
-      <div class="empty">Load a team to begin.</div>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h2>Roster</h2>
-        <div id="playersSection" class="list">
-          <div class="empty">No roster loaded yet.</div>
-        </div>
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="topbar">
+        <input
+          id="playerSearch"
+          class="search-box"
+          placeholder="Search player or team..."
+        />
+        <button class="btn" onclick="loadPropsBoard()">Refresh Props</button>
       </div>
 
-      <div class="card">
-        <h2>Recent Matches</h2>
-        <div id="matchesSection" class="list">
-          <div class="empty">No matches loaded yet.</div>
-        </div>
+      <div class="toolbar">
+        <button class="filter-chip active" data-filter="all" onclick="setStatFilter('all', this)">All</button>
+        <button class="filter-chip" data-filter="MAP 1 Kills" onclick="setStatFilter('MAP 1 Kills', this)">MAP 1 Kills</button>
+      </div>
+
+      <div id="propsSection">
+        <div class="empty">Loading props...</div>
       </div>
     </div>
 
     <div class="card section-spacing">
-      <h2>PrizePicks Props</h2>
-      <div id="propsSection" class="list">
-        <div class="empty">No props loaded yet.</div>
+      <h2>Team Research Base</h2>
+
+      <div class="topbar">
+        <input
+          id="teamSlug"
+          class="search-box"
+          placeholder="Enter team slug (example: shopify-rebellion-r6)"
+          value="shopify-rebellion-r6"
+        />
+        <button class="btn" onclick="loadTeamBase()">Load Team</button>
+      </div>
+
+      <div id="teamSection" class="card" style="margin-bottom: 20px; background:#0f172a;">
+        <div class="empty">Load a team to begin.</div>
+      </div>
+
+      <div class="grid-two">
+        <div class="card" style="background:#0f172a;">
+          <h2>Roster</h2>
+          <div id="playersSection" class="list">
+            <div class="empty">No roster loaded yet.</div>
+          </div>
+        </div>
+
+        <div class="card" style="background:#0f172a;">
+          <h2>Recent Matches</h2>
+          <div id="matchesSection" class="list">
+            <div class="empty">No matches loaded yet.</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
+    const propsSection = document.getElementById("propsSection");
+    const playerSearch = document.getElementById("playerSearch");
+
     const teamSection = document.getElementById("teamSection");
     const playersSection = document.getElementById("playersSection");
     const matchesSection = document.getElementById("matchesSection");
-    const propsSection = document.getElementById("propsSection");
+
+    let allProps = [];
+    let activeStatFilter = "all";
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadPropsBoard();
+      playerSearch.addEventListener("input", applyPropFilters);
+    });
+
+    async function loadPropsBoard() {
+      propsSection.innerHTML = `<div class="empty">Loading PrizePicks props...</div>`;
+
+      try {
+        const props = await fetchPrizePicksR6();
+        console.log("ALL PRIZEPICKS PROPS:", props);
+        allProps = props;
+        applyPropFilters();
+      } catch (err) {
+        console.error("PRIZEPICKS ERROR:", err);
+        propsSection.innerHTML = `<div class="empty">Could not load PrizePicks props.</div>`;
+      }
+    }
+
+    function setStatFilter(filterValue, button) {
+      activeStatFilter = filterValue;
+
+      document.querySelectorAll(".filter-chip").forEach(chip => {
+        chip.classList.remove("active");
+      });
+
+      button.classList.add("active");
+      applyPropFilters();
+    }
+
+    function applyPropFilters() {
+      const searchValue = normalizeName(playerSearch.value);
+
+      let filtered = [...allProps];
+
+      if (activeStatFilter !== "all") {
+        filtered = filtered.filter(prop => prop.statType === activeStatFilter);
+      }
+
+      if (searchValue) {
+        filtered = filtered.filter(prop => {
+          const player = normalizeName(prop.playerName);
+          const team = normalizeName(prop.teamName);
+          const matchup = normalizeName(getMatchupText(prop));
+          return player.includes(searchValue) || team.includes(searchValue) || matchup.includes(searchValue);
+        });
+      }
+
+      renderAllProps(filtered);
+    }
+
+    async function fetchPrizePicksR6() {
+      const res = await fetch(`/api/prizepicks/r6`);
+      if (!res.ok) {
+        throw new Error(`PrizePicks request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data.props || [];
+    }
+
+    function renderAllProps(props) {
+      if (!props.length) {
+        propsSection.innerHTML = `<div class="empty">No PrizePicks props found.</div>`;
+        return;
+      }
+
+      propsSection.innerHTML = `
+        <div class="props-grid">
+          ${props.map(prop => {
+            const time = formatDate(prop.startTime);
+            const matchup = getMatchupText(prop);
+
+            return `
+              <div class="prop-card">
+                <div class="prop-top">
+                  <div>
+                    <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                    <div class="muted">${escapeHtml(prop.teamName || "Unknown Team")}</div>
+                  </div>
+                  <div class="line-badge">${prop.lineScore ?? "N/A"}</div>
+                </div>
+
+                <div class="stat-line">${escapeHtml(prop.statType || "Unknown Stat")}</div>
+
+                <div class="meta">
+                  <div class="muted">Matchup: ${escapeHtml(matchup)}</div>
+                  <div class="muted">Time: ${escapeHtml(time)}</div>
+                  <div class="muted">Description: ${escapeHtml(prop.description || "N/A")}</div>
+                </div>
+
+                <div class="pill-row">
+                  <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
+                  <span class="pill">${escapeHtml(prop.status || "unknown")}</span>
+                  ${prop.durationName ? `<span class="pill">${escapeHtml(prop.durationName)}</span>` : ""}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function getMatchupText(prop) {
+      if (prop.homeTeam && prop.awayTeam) {
+        return `${prop.homeTeam} vs ${prop.awayTeam}`;
+      }
+      return "Unknown matchup";
+    }
 
     async function loadTeamBase() {
       const slug = document.getElementById("teamSlug").value.trim();
@@ -224,7 +432,6 @@
       teamSection.innerHTML = `<div class="muted">Loading team...</div>`;
       playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
       matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
-      propsSection.innerHTML = `<div class="muted">Loading PrizePicks props...</div>`;
 
       let team = null;
 
@@ -237,7 +444,6 @@
         teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
         playersSection.innerHTML = `<div class="empty">Could not load roster.</div>`;
         matchesSection.innerHTML = `<div class="empty">Matches not loaded.</div>`;
-        propsSection.innerHTML = `<div class="empty">Props not loaded.</div>`;
         return;
       }
 
@@ -247,15 +453,6 @@
       } catch (err) {
         console.error("MATCHES ERROR:", err);
         matchesSection.innerHTML = `<div class="empty">Could not load matches.</div>`;
-      }
-
-      try {
-        const props = await fetchPrizePicksR6();
-        const teamProps = filterPropsForTeam(props, team);
-        renderProps(teamProps, team);
-      } catch (err) {
-        console.error("PRIZEPICKS ERROR:", err);
-        propsSection.innerHTML = `<div class="empty">Could not load PrizePicks props.</div>`;
       }
     }
 
@@ -275,46 +472,6 @@
 
       const data = await res.json();
       return data.results || data.data || [];
-    }
-
-    async function fetchPrizePicksR6() {
-      const res = await fetch(`/api/prizepicks/r6`);
-      if (!res.ok) {
-        throw new Error(`PrizePicks request failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-      return data.props || [];
-    }
-
-    function filterPropsForTeam(props, team) {
-      const teamNames = new Set([
-        normalizeName(team.name),
-        normalizeName(team.acronym),
-        normalizeName(team.slug)
-      ]);
-
-      return props.filter(prop => {
-        const propTeam = normalizeName(prop.teamName);
-        return teamNames.has(propTeam) || fuzzyTeamMatch(propTeam, team);
-      });
-    }
-
-    function fuzzyTeamMatch(propTeam, team) {
-      const teamName = normalizeName(team.name);
-      const teamSlug = normalizeName(team.slug).replace(/r6/g, "");
-
-      if (!propTeam) return false;
-      if (teamName && (propTeam.includes(teamName) || teamName.includes(propTeam))) return true;
-      if (teamSlug && propTeam.includes(teamSlug)) return true;
-
-      return false;
-    }
-
-    function normalizeName(value) {
-      return String(value || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
     }
 
     function renderTeam(team) {
@@ -377,9 +534,9 @@
 
         return `
           <div class="match-item">
-            <div class="match-top">
+            <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
               <strong>${escapeHtml(team1)} vs ${escapeHtml(team2)}</strong>
-              <span class="status">${escapeHtml(match.status || "unknown")}</span>
+              <span class="status-pill">${escapeHtml(match.status || "unknown")}</span>
             </div>
 
             <div class="muted">Match ID: ${match.id ?? "N/A"}</div>
@@ -398,62 +555,17 @@
       }).join("");
     }
 
-    function renderProps(props, team) {
-      if (!props.length) {
-        propsSection.innerHTML = `<div class="empty">No active PrizePicks props found for ${escapeHtml(team.name || "this team")}.</div>`;
-        return;
-      }
-
-      propsSection.innerHTML = props.map(prop => {
-        const opponent = getOpponentText(prop, team);
-        const time = formatDate(prop.startTime);
-
-        return `
-          <div class="prop-item">
-            <div class="prop-top">
-              <strong>${escapeHtml(prop.playerName || "Unknown Player")}</strong>
-              <span class="line-box">${prop.lineScore ?? "N/A"}</span>
-            </div>
-
-            <div class="muted">${escapeHtml(prop.statType || "Unknown Stat")}</div>
-            <div class="muted">Team: ${escapeHtml(prop.teamName || "Unknown Team")}</div>
-            <div class="muted">Opponent: ${escapeHtml(opponent)}</div>
-            <div class="muted">Time: ${escapeHtml(time)}</div>
-
-            <div class="maps" style="margin-top:10px;">
-              <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
-              <span class="pill">${escapeHtml(prop.status || "unknown")}</span>
-              ${prop.durationName ? `<span class="pill">${escapeHtml(prop.durationName)}</span>` : ""}
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    function getOpponentText(prop, team) {
-      const currentTeam = normalizeName(team.name);
-
-      const away = prop.awayTeam || "";
-      const home = prop.homeTeam || "";
-
-      if (!away && !home) return "Unknown";
-
-      if (normalizeName(away) === currentTeam) return home || "Unknown";
-      if (normalizeName(home) === currentTeam) return away || "Unknown";
-
-      if (normalizeName(prop.teamName) === currentTeam) {
-        if (away && normalizeName(away) !== currentTeam) return away;
-        if (home && normalizeName(home) !== currentTeam) return home;
-      }
-
-      return [home, away].filter(Boolean).join(" vs ") || "Unknown";
-    }
-
     function formatDate(dateString) {
       if (!dateString) return "Unknown date";
       const d = new Date(dateString);
       if (Number.isNaN(d.getTime())) return dateString;
       return d.toLocaleString();
+    }
+
+    function normalizeName(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
     }
 
     function escapeHtml(value) {
