@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -57,56 +59,22 @@ app.get("/api/team-matches/:teamId", async (req, res) => {
   }
 });
 
-app.get("/api/prizepicks/r6", async (req, res) => {
+app.get("/api/prizepicks/manual", (req, res) => {
   try {
-    const url = new URL("https://api.prizepicks.com/projections");
-    url.searchParams.set("league_id", "274");
-    url.searchParams.set("per_page", "250");
-    url.searchParams.set("single_stat", "true");
-    url.searchParams.set("in_game", "true");
-    url.searchParams.set("state_code", "CA");
-    url.searchParams.set("game_mode", "prizepools");
+    const filePath = path.join(__dirname, "data", "prizepicks.json");
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "Host": "api.prizepicks.com",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Origin": "https://app.prizepicks.com",
-        "Referer": "https://app.prizepicks.com/",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Sec-Ch-Ua": `"Not_A Brand";v="99", "Google Chrome";v="109", "Chromium";v="109"`,
-        "Sec-Ch-Ua-Mobile": "?1",
-        "Sec-Ch-Ua-Platform": `"Android"`,
-        "Sec-Fetch-Site": "same-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty"
-      }
-    });
-
-    const text = await response.text();
-
-    console.log("PRIZEPICKS STATUS:", response.status);
-    console.log("PRIZEPICKS RAW:", text.slice(0, 500));
-
-    let payload;
-    try {
-      payload = JSON.parse(text);
-    } catch (parseError) {
-      return res.json({
-        debug: true,
-        parseFailed: true,
-        status: response.status,
-        rawPreview: text.slice(0, 500),
-        count: 0,
-        props: []
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        error: "Manual PrizePicks file not found",
+        message: "Create data/prizepicks.json and paste the PrizePicks API response into it."
       });
     }
 
-    const included = Array.isArray(payload.included) ? payload.included : [];
-    const projections = Array.isArray(payload.data) ? payload.data : [];
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const json = JSON.parse(raw);
+
+    const included = Array.isArray(json.included) ? json.included : [];
+    const projections = Array.isArray(json.data) ? json.data : [];
 
     const includedMap = new Map();
     included.forEach(item => {
@@ -117,10 +85,15 @@ app.get("/api/prizepicks/r6", async (req, res) => {
       const attrs = projection.attributes || {};
       const rel = projection.relationships || {};
 
-      const player = includedMap.get(`new_player:${rel.new_player?.data?.id}`);
-      const game = includedMap.get(`game:${rel.game?.data?.id}`);
-      const statType = includedMap.get(`stat_type:${rel.stat_type?.data?.id}`);
-      const duration = includedMap.get(`duration:${rel.duration?.data?.id}`);
+      const playerId = rel.new_player?.data?.id || null;
+      const gameId = rel.game?.data?.id || null;
+      const statTypeId = rel.stat_type?.data?.id || null;
+      const durationId = rel.duration?.data?.id || null;
+
+      const player = playerId ? includedMap.get(`new_player:${playerId}`) : null;
+      const game = gameId ? includedMap.get(`game:${gameId}`) : null;
+      const statType = statTypeId ? includedMap.get(`stat_type:${statTypeId}`) : null;
+      const duration = durationId ? includedMap.get(`duration:${durationId}`) : null;
 
       const playerAttrs = player?.attributes || {};
       const gameAttrs = game?.attributes || {};
@@ -130,6 +103,8 @@ app.get("/api/prizepicks/r6", async (req, res) => {
 
       return {
         projectionId: projection.id,
+        playerId,
+        gameId,
         playerName: playerAttrs.display_name || playerAttrs.name || "Unknown",
         teamName: playerAttrs.team || playerAttrs.team_name || "Unknown",
         lineScore: attrs.line_score ?? null,
@@ -145,16 +120,14 @@ app.get("/api/prizepicks/r6", async (req, res) => {
     });
 
     res.json({
-      debug: true,
-      status: response.status,
       count: props.length,
       firstProp: props[0] || null,
       props
     });
   } catch (error) {
-    console.error("PRIZEPICKS ERROR:", error);
+    console.error("MANUAL PRIZEPICKS ERROR:", error);
     res.status(500).json({
-      error: "Failed to fetch PrizePicks R6 board",
+      error: "Failed to read manual PrizePicks data",
       message: error.message
     });
   }
