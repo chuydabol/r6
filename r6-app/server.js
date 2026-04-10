@@ -87,6 +87,29 @@ app.get("/api/match-details/:slug", async (req, res) => {
   }
 });
 
+app.get("/api/match-player-stats/:matchId", async (req, res) => {
+  try {
+    const matchId = req.params.matchId;
+    const url = `https://api.bo3.gg/api/v1/r6siege/stats/matches/${matchId}/players_stats`;
+
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("PLAYER STATS ERROR:", error);
+    res.status(500).json({
+      error: "Failed to fetch player stats",
+      message: error.message
+    });
+  }
+});
+
 app.get("/api/prizepicks/manual", (req, res) => {
   try {
     const filePath = path.join(__dirname, "data", "prizepicks.json");
