@@ -190,6 +190,16 @@
       padding: 12px;
     }
 
+    .player-item.clickable {
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .player-item.clickable:hover {
+      border-color: #3b82f6;
+      transform: translateY(-1px);
+    }
+
     .team-header {
       display: flex;
       align-items: center;
@@ -242,12 +252,90 @@
       word-break: break-word;
     }
 
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat-box {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .stat-label {
+      color: #94a3b8;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: bold;
+      color: #e5e7eb;
+    }
+
+    .analysis-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .analysis-controls input,
+    .analysis-controls select {
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: white;
+      outline: none;
+    }
+
+    .game-log {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr auto;
+      gap: 10px;
+      align-items: center;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .hit {
+      color: #4ade80;
+      font-weight: bold;
+    }
+
+    .miss {
+      color: #f87171;
+      font-weight: bold;
+    }
+
     @media (max-width: 900px) {
       .grid-two {
         grid-template-columns: 1fr;
       }
 
       .props-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .analysis-controls {
+        grid-template-columns: 1fr;
+      }
+
+      .log-row {
         grid-template-columns: 1fr;
       }
     }
@@ -312,6 +400,13 @@
         </div>
       </div>
     </div>
+
+    <div class="card section-spacing">
+      <h2>Player Analysis</h2>
+      <div id="analysisSection">
+        <div class="empty">Select a player after loading a team.</div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -322,9 +417,15 @@
     const teamSection = document.getElementById("teamSection");
     const playersSection = document.getElementById("playersSection");
     const matchesSection = document.getElementById("matchesSection");
+    const analysisSection = document.getElementById("analysisSection");
 
     let allProps = [];
     let activeStatFilter = "all";
+
+    let currentTeam = null;
+    let currentPlayers = [];
+    let selectedPlayer = null;
+    let selectedPlayerGameLog = [];
 
     window.addEventListener("DOMContentLoaded", () => {
       loadPropsBoard();
@@ -337,8 +438,8 @@
       debugSection.textContent = "";
 
       try {
-        const data = await fetchPrizePicksR6();
-        console.log("PRIZEPICKS RESPONSE:", data);
+        const data = await fetchPrizePicksManual();
+        console.log("MANUAL PRIZEPICKS RESPONSE:", data);
 
         showDebug(data);
 
@@ -384,10 +485,10 @@
       renderAllProps(filtered);
     }
 
-    async function fetchPrizePicksR6() {
-      const res = await fetch(`/api/prizepicks/r6`);
+    async function fetchPrizePicksManual() {
+      const res = await fetch(`/api/prizepicks/manual`);
       if (!res.ok) {
-        throw new Error(`PrizePicks request failed: ${res.status}`);
+        throw new Error(`Manual PrizePicks request failed: ${res.status}`);
       }
       return await res.json();
     }
@@ -443,11 +544,8 @@
 
     function showDebug(data) {
       const summary = {
-        status: data.status,
         count: data.count,
-        firstProp: data.firstProp || null,
-        parseFailed: data.parseFailed || false,
-        rawPreview: data.rawPreview || null
+        firstProp: data.firstProp || null
       };
 
       debugSection.style.display = "block";
@@ -465,13 +563,16 @@
       teamSection.innerHTML = `<div class="muted">Loading team...</div>`;
       playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
       matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
+      analysisSection.innerHTML = `<div class="empty">Select a player after loading a team.</div>`;
 
       let team = null;
 
       try {
         team = await fetchTeam(slug);
+        currentTeam = team;
+        currentPlayers = team.players || [];
         renderTeam(team);
-        renderPlayers(team.players || []);
+        renderPlayers(currentPlayers);
       } catch (err) {
         console.error("TEAM ERROR:", err);
         teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
@@ -536,7 +637,7 @@
         const country = player.country?.name || "Unknown";
 
         return `
-          <div class="player-item">
+          <div class="player-item clickable" onclick="selectPlayer(${player.id})">
             <strong>${escapeHtml(player.nickname || "Unknown")}</strong>
             <div class="muted">${escapeHtml(role)}</div>
             <div class="muted">Player ID: ${player.id ?? "N/A"}</div>
@@ -586,6 +687,127 @@
           </div>
         `;
       }).join("");
+    }
+
+    function selectPlayer(playerId) {
+      const player = currentPlayers.find(p => p.id === playerId);
+
+      if (!player) {
+        analysisSection.innerHTML = `<div class="empty">Player not found.</div>`;
+        return;
+      }
+
+      selectedPlayer = player;
+      selectedPlayerGameLog = generateMockGameLog(player);
+
+      renderPlayerAnalysis();
+    }
+
+    function renderPlayerAnalysis() {
+      if (!selectedPlayer) {
+        analysisSection.innerHTML = `<div class="empty">Select a player after loading a team.</div>`;
+        return;
+      }
+
+      analysisSection.innerHTML = `
+        <div>
+          <h3 style="margin:0 0 6px 0;">${escapeHtml(selectedPlayer.nickname || "Unknown Player")}</h3>
+          <div class="muted">${escapeHtml(currentTeam?.name || "Unknown Team")}</div>
+
+          <div class="analysis-controls">
+            <input id="lineInput" type="number" step="0.5" placeholder="Enter line (example 8.5)" />
+            <select id="statSelect">
+              <option value="kills">Kills</option>
+            </select>
+            <button class="btn" onclick="runAnalysis()">Analyze</button>
+          </div>
+
+          <div id="analysisOutput" style="margin-top:16px;">
+            <div class="empty">Enter a line and click Analyze.</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function runAnalysis() {
+      const line = parseFloat(document.getElementById("lineInput").value);
+
+      if (Number.isNaN(line)) {
+        document.getElementById("analysisOutput").innerHTML = `<div class="empty">Enter a valid line first.</div>`;
+        return;
+      }
+
+      const values = selectedPlayerGameLog.map(game => game.kills);
+      const l5 = values.slice(0, 5);
+      const l10 = values.slice(0, 10);
+
+      const l5Avg = calcAverage(l5);
+      const l10Avg = calcAverage(l10);
+      const l5Over = calcHitRate(l5, line);
+      const l10Over = calcHitRate(l10, line);
+
+      document.getElementById("analysisOutput").innerHTML = `
+        <div class="analysis-grid">
+          <div class="stat-box">
+            <div class="stat-label">Line</div>
+            <div class="stat-value">${line}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">L5 Avg</div>
+            <div class="stat-value">${l5Avg.toFixed(2)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">L10 Avg</div>
+            <div class="stat-value">${l10Avg.toFixed(2)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">L5 Over Hit Rate</div>
+            <div class="stat-value">${l5Over.toFixed(1)}%</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">L10 Over Hit Rate</div>
+            <div class="stat-value">${l10Over.toFixed(1)}%</div>
+          </div>
+        </div>
+
+        <div class="game-log">
+          ${selectedPlayerGameLog.map(game => {
+            const hit = game.kills > line;
+            return `
+              <div class="log-row">
+                <div>${escapeHtml(game.opponent)}</div>
+                <div>${escapeHtml(game.date)}</div>
+                <div>Kills: <strong>${game.kills}</strong></div>
+                <div>Map: ${escapeHtml(game.map)}</div>
+                <div class="${hit ? "hit" : "miss"}">${hit ? "OVER" : "UNDER"}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function calcAverage(arr) {
+      if (!arr.length) return 0;
+      return arr.reduce((sum, value) => sum + value, 0) / arr.length;
+    }
+
+    function calcHitRate(arr, line) {
+      if (!arr.length) return 0;
+      const hits = arr.filter(value => value > line).length;
+      return (hits / arr.length) * 100;
+    }
+
+    function generateMockGameLog(player) {
+      const maps = ["Bank", "Lair", "Clubhouse", "Chalet", "Kafe"];
+      const opponents = ["M80", "DarkZero", "Spacestation", "Cloud9", "Oxygen", "Wildcard", "ENVY", "FURIA", "FaZe", "Team Secret"];
+
+      return Array.from({ length: 10 }, (_, index) => ({
+        opponent: opponents[index % opponents.length],
+        date: new Date(Date.now() - index * 86400000 * 3).toLocaleDateString(),
+        kills: Math.floor(Math.random() * 9) + 4,
+        map: maps[index % maps.length]
+      }));
     }
 
     function formatDate(dateString) {
