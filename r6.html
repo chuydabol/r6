@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>R6 Team Research Base</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b1020;
+      color: #e5e7eb;
+    }
+
+    .app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    input {
+      flex: 1;
+      min-width: 240px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: white;
+      outline: none;
+    }
+
+    button {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    .team-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .team-header img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 6px;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .player-item,
+    .match-item {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    .match-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .maps {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .map-tag {
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: #1e293b;
+    }
+
+    .empty {
+      padding: 18px;
+      border: 1px dashed #334155;
+      border-radius: 12px;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>R6 Team Research Base</h1>
+
+    <div class="topbar">
+      <input id="teamSlug" placeholder="Enter team slug (example: shopify-rebellion-r6)" />
+      <button onclick="loadTeamBase()">Load Team</button>
+    </div>
+
+    <div id="teamSection" class="card" style="margin-bottom: 20px;">
+      <div class="empty">Load a team to begin.</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Roster</h2>
+        <div id="playersSection" class="list">
+          <div class="empty">No roster loaded yet.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent Matches</h2>
+        <div id="matchesSection" class="list">
+          <div class="empty">No matches loaded yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const teamSection = document.getElementById("teamSection");
+    const playersSection = document.getElementById("playersSection");
+    const matchesSection = document.getElementById("matchesSection");
+
+    async function loadTeamBase() {
+      const slug = document.getElementById("teamSlug").value.trim();
+
+      if (!slug) {
+        alert("Enter a team slug first.");
+        return;
+      }
+
+      teamSection.innerHTML = `<div class="muted">Loading team...</div>`;
+      playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
+      matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
+
+      try {
+        const team = await fetchTeam(slug);
+        renderTeam(team);
+        renderPlayers(team.players || []);
+
+        const matches = await fetchTeamMatches(team.id);
+        renderMatches(matches);
+      } catch (err) {
+        console.error(err);
+        teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
+        playersSection.innerHTML = `<div class="empty">Could not load roster.</div>`;
+        matchesSection.innerHTML = `<div class="empty">Could not load matches.</div>`;
+      }
+    }
+
+    async function fetchTeam(slug) {
+      const url = `https://api.bo3.gg/api/v1/teams/${slug}`;
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        throw new Error(`Team request failed: ${res.status}`);
+      }
+
+      return await res.json();
+    }
+
+    async function fetchTeamMatches(teamId) {
+      const url =
+        `https://api.bo3.gg/api/v1/matches` +
+        `?page[offset]=0` +
+        `&page[limit]=20` +
+        `&sort=-start_date` +
+        `&filter[matches.status][in]=current,upcoming,finished,defwin` +
+        `&filter[matches.team_ids][overlap]=${teamId}` +
+        `&filter[matches.discipline_id][eq]=7` +
+        `&with=teams,tournament,ai_predictions,r6siege_games`;
+
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        throw new Error(`Matches request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data.results || data.data || [];
+    }
+
+    function renderTeam(team) {
+      const country = team.country?.name || "Unknown country";
+      const acronym = team.acronym ? `(${team.acronym})` : "";
+
+      teamSection.innerHTML = `
+        <div class="team-header">
+          <img src="${team.image_url || ""}" alt="${team.name || "Team"} logo" />
+          <div>
+            <h2 style="margin:0;">${team.name || "Unknown Team"} ${acronym}</h2>
+            <div class="muted">Team ID: ${team.id}</div>
+            <div class="muted">Country: ${country}</div>
+            <div class="muted">Slug: ${team.slug}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPlayers(players) {
+      if (!players.length) {
+        playersSection.innerHTML = `<div class="empty">No players found.</div>`;
+        return;
+      }
+
+      playersSection.innerHTML = players.map(player => {
+        const role = player.is_coach ? "Coach" : "Player";
+        const country = player.country?.name || "Unknown";
+        return `
+          <div class="player-item">
+            <strong>${player.nickname || "Unknown"}</strong>
+            <div class="muted">${role}</div>
+            <div class="muted">Player ID: ${player.id}</div>
+            <div class="muted">Country: ${country}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderMatches(matches) {
+      if (!matches.length) {
+        matchesSection.innerHTML = `<div class="empty">No matches found.</div>`;
+        return;
+      }
+
+      matchesSection.innerHTML = matches.map(match => {
+        const team1 = match.team1?.name || "Team 1";
+        const team2 = match.team2?.name || "Team 2";
+        const date = formatDate(match.start_date);
+        const maps = Array.isArray(match.r6siege_games)
+          ? [...new Set(
+              match.r6siege_games
+                .map(g => g.r6siege_map?.name?.trim())
+                .filter(Boolean)
+            )]
+          : [];
+
+        return `
+          <div class="match-item">
+            <div class="match-top">
+              <strong>${team1} vs ${team2}</strong>
+              <span class="status">${match.status || "unknown"}</span>
+            </div>
+
+            <div class="muted">Match ID: ${match.id}</div>
+            <div class="muted">Date: ${date}</div>
+            <div class="muted">Score: ${match.team1_score ?? "-"} - ${match.team2_score ?? "-"}</div>
+
+            <div class="maps">
+              ${maps.length
+                ? maps.map(map => `<span class="map-tag">${map}</span>`).join("")
+                : `<span class="map-tag">No map data</span>`}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return "Unknown date";
+      const d = new Date(dateString);
+      if (Number.isNaN(d.getTime())) return dateString;
+      return d.toLocaleString();
+    }
+  </script>
+</body>
+</html>
