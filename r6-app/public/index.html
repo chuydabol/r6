@@ -771,6 +771,13 @@
       return await res.json();
     }
 
+    async function fetchPlayerMatches(playerId) {
+      const res = await fetch(`/api/player-matches/${playerId}`);
+      if (!res.ok) throw new Error(`Player matches request failed: ${res.status}`);
+      const data = await res.json();
+      return data.results || data.data || [];
+    }
+
     function renderTeam(team) {
       const country = team.country?.name || "Unknown country";
       const acronym = team.acronym ? `(${team.acronym})` : "";
@@ -994,13 +1001,26 @@
     }
 
     async function buildPlayerGameLog(playerId) {
-      const finishedMatches = currentMatches
-        .filter(match => match.status === "finished")
-        .slice(0, 10);
+      const playerMatches = await fetchPlayerMatches(playerId);
+      const sortedMatches = [...playerMatches].sort((a, b) => {
+        const aTime = new Date(a.start_date || 0).getTime();
+        const bTime = new Date(b.start_date || 0).getTime();
+        return bTime - aTime;
+      });
+
+      // Explicit dedupe by match.id, keeping the first valid finished match after date sort.
+      const dedupedFinishedMatches = [];
+      const seenMatchIds = new Set();
+      for (const match of sortedMatches) {
+        if (match.status !== "finished") continue;
+        if (!match?.id || seenMatchIds.has(match.id)) continue;
+        seenMatchIds.add(match.id);
+        dedupedFinishedMatches.push(match);
+      }
 
       const logs = [];
 
-      for (const match of finishedMatches) {
+      for (const match of dedupedFinishedMatches) {
         const statsData = await fetchMatchPlayerStats(match.id);
         const games = Array.isArray(statsData) ? statsData : [];
 
@@ -1011,14 +1031,20 @@
 
           if (!playerRow) continue;
 
-          const opponentName =
-            match.team1?.id === currentTeam.id
-              ? match.team2?.name || "Unknown"
-              : match.team1?.name || "Unknown";
+          let opponentName = "Unknown";
+          if (match.team1?.id && match.team2?.id && playerRow.team_id) {
+            opponentName =
+              playerRow.team_id === match.team1.id
+                ? match.team2?.name || "Unknown"
+                : playerRow.team_id === match.team2.id
+                  ? match.team1?.name || "Unknown"
+                  : "Unknown";
+          }
 
           logs.push({
             matchId: match.id,
             matchSlug: match.slug,
+            matchStartDate: match.start_date || null,
             date: formatDate(match.start_date),
             opponent: opponentName,
             map: game.r6siege_map?.name?.trim() || "Unknown",
@@ -1033,7 +1059,12 @@
         }
       }
 
-      return logs;
+      return logs.sort((a, b) => {
+        const aTime = new Date(a.matchStartDate || 0).getTime();
+        const bTime = new Date(b.matchStartDate || 0).getTime();
+        if (bTime !== aTime) return bTime - aTime;
+        return (a.gameNumber ?? 0) - (b.gameNumber ?? 0);
+      });
     }
 
     function renderPlayerAnalysis() {

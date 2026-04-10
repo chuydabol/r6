@@ -92,6 +92,36 @@ app.get("/api/team-matches/:teamId", async (req, res) => {
   }
 });
 
+app.get("/api/player-matches/:playerId", async (req, res) => {
+  try {
+    const playerId = req.params.playerId;
+    const url =
+      `https://api.bo3.gg/api/v1/matches` +
+      `?page[offset]=0` +
+      `&page[limit]=40` +
+      `&sort=-start_date` +
+      `&filter[matches.player_ids][overlap]=${playerId}` +
+      `&filter[matches.discipline_id][eq]=7` +
+      `&with=teams,tournament,ai_predictions,r6siege_games`;
+
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("PLAYER MATCHES ERROR:", error);
+    res.status(500).json({
+      error: "Failed to fetch player matches",
+      message: error.message
+    });
+  }
+});
+
 app.get("/api/match-details/:slug", async (req, res) => {
   try {
     const slug = req.params.slug;
