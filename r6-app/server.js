@@ -47,36 +47,19 @@ app.get("/api/prizepicks/r6", async (req, res) => {
     };
 
     const queryVariants = [
-      // Original strict query (kept first for expected board behavior).
-      "?league_id=274&per_page=250&single_stat=true&in_game=true&state_code=CA&game_mode=prizepools",
-      // Alternate board modes seen in production.
-      "?league_id=274&per_page=250&single_stat=true&in_game=true&state_code=CA&game_mode=pickem",
-      "?league_id=274&per_page=250&single_stat=true&in_game=true&game_mode=pickem",
-      // Relax state / in-game constraints.
-      "?league_id=274&per_page=250&single_stat=true&in_game=true",
-      "?league_id=274&per_page=250&single_stat=true",
-      // Last-resort league query with minimal filters.
-      "?league_id=274&per_page=250"
+
     ];
 
     let payload = null;
     let selectedQuery = null;
-    let bestCount = -1;
+
 
     for (const query of queryVariants) {
       const url = `https://api.prizepicks.com/projections${query}`;
       const response = await fetch(url, { headers });
       const candidate = await response.json();
       const candidateData = Array.isArray(candidate?.data) ? candidate.data : [];
-      const candidateCount = candidateData.length;
 
-      if (candidateCount > bestCount) {
-        payload = candidate;
-        selectedQuery = query;
-        bestCount = candidateCount;
-      }
-
-      // Do not break early: keep scanning variants and choose the richest payload.
     }
 
     if (!payload) {
