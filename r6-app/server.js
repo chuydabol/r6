@@ -19,6 +19,7 @@ app.get("/api/team/:slug", async (req, res) => {
 app.get("/api/team-matches/:teamId", async (req, res) => {
   try {
     const teamId = req.params.teamId;
+
     const url =
       `https://api.bo3.gg/api/v1/matches` +
       `?page[offset]=0` +
@@ -35,6 +36,86 @@ app.get("/api/team-matches/:teamId", async (req, res) => {
   } catch (error) {
     console.error("MATCH ERROR:", error);
     res.status(500).json({ error: "Failed to fetch team matches" });
+  }
+});
+
+app.get("/api/prizepicks/r6", async (req, res) => {
+  try {
+    const url =
+      "https://api.prizepicks.com/projections" +
+      "?league_id=274" +
+      "&per_page=250" +
+      "&single_stat=true" +
+      "&in_game=true" +
+      "&state_code=CA" +
+      "&game_mode=prizepools";
+
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
+
+    const payload = await response.json();
+
+    const included = Array.isArray(payload.included) ? payload.included : [];
+    const projections = Array.isArray(payload.data) ? payload.data : [];
+
+    const includedMap = new Map();
+    for (const item of included) {
+      includedMap.set(`${item.type}:${item.id}`, item);
+    }
+
+    const flatProps = projections.map((projection) => {
+      const attrs = projection.attributes || {};
+      const rel = projection.relationships || {};
+
+      const playerId = rel.new_player?.data?.id || null;
+      const gameId = rel.game?.data?.id || null;
+      const statTypeId = rel.stat_type?.data?.id || null;
+      const durationId = rel.duration?.data?.id || null;
+
+      const player = playerId ? includedMap.get(`new_player:${playerId}`) : null;
+      const game = gameId ? includedMap.get(`game:${gameId}`) : null;
+      const statType = statTypeId ? includedMap.get(`stat_type:${statTypeId}`) : null;
+      const duration = durationId ? includedMap.get(`duration:${durationId}`) : null;
+
+      const playerAttrs = player?.attributes || {};
+      const gameAttrs = game?.attributes || {};
+      const gameMeta = gameAttrs.metadata || {};
+      const gameInfo = gameMeta.game_info || {};
+      const teams = gameInfo.teams || {};
+
+      return {
+        projectionId: projection.id,
+        playerId,
+        gameId,
+        playerName: playerAttrs.display_name || playerAttrs.name || "Unknown",
+        teamName: playerAttrs.team || playerAttrs.team_name || "Unknown Team",
+        playerImage: playerAttrs.image_url || "",
+        lineScore: attrs.line_score ?? null,
+        statType: attrs.stat_display_name || attrs.stat_type || statType?.attributes?.name || "Unknown Stat",
+        description: attrs.description || "",
+        startTime: attrs.start_time || gameAttrs.start_time || null,
+        boardTime: attrs.board_time || null,
+        status: attrs.status || gameAttrs.status || "unknown",
+        projectionType: attrs.projection_type || "Unknown",
+        durationName: duration?.attributes?.name || "",
+        gameLabel: gameAttrs.external_game_id || attrs.game_id || "",
+        homeTeam: teams.home?.abbreviation || "",
+        awayTeam: teams.away?.abbreviation || "",
+        rawGame: gameAttrs
+      };
+    });
+
+    res.json({
+      count: flatProps.length,
+      props: flatProps
+    });
+  } catch (error) {
+    console.error("PRIZEPICKS ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch PrizePicks R6 board" });
   }
 });
 
