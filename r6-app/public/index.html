@@ -154,6 +154,16 @@
       text-align: center;
     }
 
+    .notice {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
     .pill-row,
     .maps {
       display: flex;
@@ -322,6 +332,7 @@
         <button class="filter-chip" onclick="setStatFilter('MAP 1 Kills', this)">MAP 1 Kills</button>
       </div>
 
+      <div id="propMessage" class="notice" style="display:none;"></div>
       <div id="propsSection">
         <div class="empty">Loading props...</div>
       </div>
@@ -381,6 +392,7 @@
 
   <script>
     const propsSection = document.getElementById("propsSection");
+    const propMessage = document.getElementById("propMessage");
     const debugSection = document.getElementById("debugSection");
     const playerSearch = document.getElementById("playerSearch");
 
@@ -394,6 +406,7 @@
     const matchDetailsSection = document.getElementById("matchDetailsSection");
 
     let allProps = [];
+    let visibleProps = [];
     let activeStatFilter = "all";
 
     let currentTeam = null;
@@ -450,6 +463,11 @@
       const searchValue = normalizeName(playerSearch.value);
       let filtered = [...allProps];
 
+      if (currentTeam?.name) {
+        const normalizedCurrentTeam = normalizeName(currentTeam.name);
+        filtered = filtered.filter(prop => normalizeName(prop.teamName) === normalizedCurrentTeam);
+      }
+
       if (activeStatFilter !== "all") {
         filtered = filtered.filter(prop => prop.statType === activeStatFilter);
       }
@@ -463,6 +481,7 @@
         });
       }
 
+      visibleProps = filtered;
       renderAllProps(filtered);
     }
 
@@ -474,11 +493,11 @@
 
       propsSection.innerHTML = `
         <div class="props-grid">
-          ${props.map(prop => {
+          ${props.map((prop, index) => {
             const time = formatDate(prop.startTime);
             const matchup = getMatchupText(prop);
             return `
-              <div class="prop-card">
+              <div class="prop-card clickable" onclick="handlePropCardClick(${index})">
                 <div class="prop-top">
                   <div>
                     <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
@@ -503,6 +522,74 @@
           }).join("")}
         </div>
       `;
+    }
+
+    async function handlePropCardClick(visibleIndex) {
+      const prop = visibleProps[visibleIndex];
+      if (!prop) return;
+
+      if (!currentTeam) {
+        showPropMessage("Load a BO3 team first, then click a prop to open player analysis.");
+        return;
+      }
+
+      const matchingPlayer = findMatchingTeamPlayer(prop);
+      if (!matchingPlayer) {
+        showPropMessage(`No BO3 player match found for ${prop.playerName} on ${currentTeam.name}.`);
+        return;
+      }
+
+      hidePropMessage();
+      await selectPlayer(matchingPlayer.id);
+
+      const lineInput = document.getElementById("lineInput");
+      const statSelect = document.getElementById("statSelect");
+
+      if (!lineInput) {
+        showPropMessage("Could not open the player analysis panel.");
+        return;
+      }
+
+      lineInput.value = prop.lineScore ?? "";
+
+      if (statSelect && isKillsStat(prop.statType)) {
+        statSelect.value = "kills";
+      }
+
+      runAnalysis();
+    }
+
+    function findMatchingTeamPlayer(prop) {
+      if (!currentTeam?.name) return null;
+
+      const propTeam = normalizeName(prop.teamName);
+      const currentTeamName = normalizeName(currentTeam.name);
+      if (propTeam !== currentTeamName) return null;
+
+      const normalizedPropPlayer = normalizeName(prop.playerName);
+      const nicknameMatch = currentPlayers.find(player =>
+        normalizeName(player.nickname) === normalizedPropPlayer
+      );
+      if (nicknameMatch) return nicknameMatch;
+
+      return currentPlayers.find(player => {
+        const fullName = normalizeName(`${player.first_name || ""}${player.last_name || ""}`);
+        return fullName && fullName === normalizedPropPlayer;
+      }) || null;
+    }
+
+    function isKillsStat(statType) {
+      return String(statType || "").toLowerCase().includes("kill");
+    }
+
+    function showPropMessage(message) {
+      propMessage.style.display = "block";
+      propMessage.textContent = message;
+    }
+
+    function hidePropMessage() {
+      propMessage.style.display = "none";
+      propMessage.textContent = "";
     }
 
     function showDebug(data) {
@@ -584,9 +671,11 @@
         currentMatchDetails = null;
         selectedPlayer = null;
         selectedPlayerGameLog = [];
+        hidePropMessage();
 
         renderTeam(team);
         renderPlayers(currentPlayers);
+        applyPropFilters();
 
         const matches = await fetchTeamMatches(team.id);
         currentMatches = matches;
