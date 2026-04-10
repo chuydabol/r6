@@ -41,23 +41,44 @@ app.get("/api/team-matches/:teamId", async (req, res) => {
 
 app.get("/api/prizepicks/r6", async (req, res) => {
   try {
-    const url =
-      "https://api.prizepicks.com/projections" +
-      "?league_id=274" +
-      "&per_page=250" +
-      "&single_stat=true" +
-      "&in_game=true" +
-      "&state_code=CA" +
-      "&game_mode=prizepools";
+    const headers = {
+      "Accept": "application/json",
+      "User-Agent": "Mozilla/5.0"
+    };
 
-    const response = await fetch(url, {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
+    const queryVariants = [
+      // Original strict query (can legitimately return 0 when board/state filters are too narrow).
+      "?league_id=274&per_page=250&single_stat=true&in_game=true&state_code=CA&game_mode=prizepools",
+      // Relax mode restriction.
+      "?league_id=274&per_page=250&single_stat=true&in_game=true&state_code=CA",
+      // Relax in-game restriction.
+      "?league_id=274&per_page=250&single_stat=true&state_code=CA",
+      // Final fallback: league only.
+      "?league_id=274&per_page=250&single_stat=true"
+    ];
+
+    let payload = null;
+    let selectedQuery = null;
+
+    for (const query of queryVariants) {
+      const url = `https://api.prizepicks.com/projections${query}`;
+      const response = await fetch(url, { headers });
+      const candidate = await response.json();
+      const candidateData = Array.isArray(candidate?.data) ? candidate.data : [];
+
+      if (!payload || candidateData.length > 0) {
+        payload = candidate;
+        selectedQuery = query;
       }
-    });
 
-    const payload = await response.json();
+      if (candidateData.length > 0) {
+        break;
+      }
+    }
+
+    if (!payload) {
+      throw new Error("PrizePicks returned an empty response payload");
+    }
 
     const included = Array.isArray(payload.included) ? payload.included : [];
     const projections = Array.isArray(payload.data) ? payload.data : [];
@@ -111,6 +132,7 @@ app.get("/api/prizepicks/r6", async (req, res) => {
 
     res.json({
       count: flatProps.length,
+      queryUsed: selectedQuery,
       props: flatProps
     });
   } catch (error) {
