@@ -546,6 +546,12 @@
       return await res.json();
     }
 
+    async function fetchMatchPlayerStats(matchId) {
+      const res = await fetch(`/api/match-player-stats/${matchId}`);
+      if (!res.ok) throw new Error(`Player stats request failed: ${res.status}`);
+      return await res.json();
+    }
+
     function renderTeam(team) {
       const country = team.country?.name || "Unknown country";
       const acronym = team.acronym ? `(${team.acronym})` : "";
@@ -732,7 +738,7 @@
       `;
     }
 
-    function selectPlayer(playerId) {
+    async function selectPlayer(playerId) {
       const player = currentPlayers.find(p => p.id === playerId);
 
       if (!player) {
@@ -741,8 +747,58 @@
       }
 
       selectedPlayer = player;
-      selectedPlayerGameLog = generateMockGameLog(player);
-      renderPlayerAnalysis();
+      analysisSection.innerHTML = `<div class="empty">Loading player data...</div>`;
+
+      try {
+        selectedPlayerGameLog = await buildPlayerGameLog(player.id);
+        renderPlayerAnalysis();
+      } catch (err) {
+        console.error(err);
+        analysisSection.innerHTML = `<div class="empty">Failed to load player game log.</div>`;
+      }
+    }
+
+    async function buildPlayerGameLog(playerId) {
+      const finishedMatches = currentMatches
+        .filter(match => match.status === "finished")
+        .slice(0, 10);
+
+      const logs = [];
+
+      for (const match of finishedMatches) {
+        const statsData = await fetchMatchPlayerStats(match.id);
+        const games = Array.isArray(statsData) ? statsData : [];
+
+        for (const game of games) {
+          const playerRow = (game.r6siege_game_players || []).find(
+            p => p.player_id === playerId
+          );
+
+          if (!playerRow) continue;
+
+          const opponentName =
+            match.team1?.id === currentTeam.id
+              ? match.team2?.name || "Unknown"
+              : match.team1?.name || "Unknown";
+
+          logs.push({
+            matchId: match.id,
+            matchSlug: match.slug,
+            date: formatDate(match.start_date),
+            opponent: opponentName,
+            map: game.r6siege_map?.name?.trim() || "Unknown",
+            gameNumber: game.game_number,
+            kills: playerRow.kills ?? 0,
+            deaths: playerRow.death ?? 0,
+            firstKill: playerRow.first_kill ?? 0,
+            firstDeath: playerRow.first_death ?? 0,
+            kost: playerRow.kost ?? null,
+            headshotPercent: playerRow.headshots_percent ?? null
+          });
+        }
+      }
+
+      return logs;
     }
 
     function renderPlayerAnalysis() {
@@ -755,6 +811,7 @@
         <div>
           <h3 style="margin:0 0 6px 0;">${escapeHtml(selectedPlayer.nickname || "Unknown Player")}</h3>
           <div class="muted">${escapeHtml(currentTeam?.name || "Unknown Team")}</div>
+          <div class="muted" style="margin-top:6px;">Loaded games: ${selectedPlayerGameLog.length}</div>
 
           <div class="analysis-controls">
             <input id="lineInput" type="number" step="0.5" placeholder="Enter line (example 8.5)" />
@@ -776,6 +833,11 @@
 
       if (Number.isNaN(line)) {
         document.getElementById("analysisOutput").innerHTML = `<div class="empty">Enter a valid line first.</div>`;
+        return;
+      }
+
+      if (!selectedPlayerGameLog.length) {
+        document.getElementById("analysisOutput").innerHTML = `<div class="empty">No game log available for this player yet.</div>`;
         return;
       }
 
@@ -838,18 +900,6 @@
       if (!arr.length) return 0;
       const hits = arr.filter(value => value > line).length;
       return (hits / arr.length) * 100;
-    }
-
-    function generateMockGameLog() {
-      const maps = ["Bank", "Lair", "Clubhouse", "Chalet", "Kafe"];
-      const opponents = ["M80", "DarkZero", "Spacestation", "Cloud9", "Oxygen", "Wildcard", "ENVY", "FURIA", "FaZe", "Team Secret"];
-
-      return Array.from({ length: 10 }, (_, index) => ({
-        opponent: opponents[index % opponents.length],
-        date: new Date(Date.now() - index * 86400000 * 3).toLocaleDateString(),
-        kills: Math.floor(Math.random() * 9) + 4,
-        map: maps[index % maps.length]
-      }));
     }
 
     function formatDate(dateString) {
