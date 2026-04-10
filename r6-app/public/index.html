@@ -9,25 +9,43 @@
 
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0b1020;
-      color: #e5e7eb;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 700px at 25% -10%, rgba(98, 59, 255, 0.32), transparent 55%),
+        radial-gradient(900px 500px at 85% 0%, rgba(37, 99, 235, 0.24), transparent 50%),
+        linear-gradient(180deg, #04091f 0%, #070f2b 45%, #050b22 100%);
+      color: #e6ecff;
+      min-height: 100vh;
     }
 
     .app {
-      max-width: 1450px;
+      max-width: 1280px;
       margin: 0 auto;
-      padding: 24px;
+      padding: 20px;
     }
 
     h1, h2, h3 { margin-top: 0; }
 
+    h1 {
+      font-size: clamp(30px, 4vw, 40px);
+      letter-spacing: 0.02em;
+      margin-bottom: 18px;
+      color: #f3f6ff;
+      text-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+    }
+
+    h2 {
+      color: #d9e4ff;
+      letter-spacing: 0.01em;
+    }
+
     .card {
-      background: #111827;
-      border: 1px solid #1f2937;
-      border-radius: 16px;
+      background: linear-gradient(145deg, rgba(10, 20, 52, 0.95), rgba(6, 14, 39, 0.95));
+      border: 1px solid rgba(120, 149, 255, 0.22);
+      border-radius: 20px;
       padding: 18px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      box-shadow: 0 14px 36px rgba(2, 8, 24, 0.55), inset 0 0 0 1px rgba(22, 40, 94, 0.38);
+      backdrop-filter: blur(8px);
     }
 
     .section-spacing {
@@ -48,25 +66,34 @@
       flex: 1;
       min-width: 220px;
       padding: 12px 14px;
-      border-radius: 10px;
-      border: 1px solid #334155;
-      background: #111827;
-      color: white;
+      border-radius: 14px;
+      border: 1px solid rgba(125, 145, 224, 0.35);
+      background: rgba(12, 24, 61, 0.82);
+      color: #f8fbff;
       outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-box:focus,
+    select:focus,
+    input:focus {
+      border-color: rgba(87, 164, 255, 0.9);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
     }
 
     .btn {
       padding: 12px 16px;
-      border: none;
-      border-radius: 10px;
-      background: #2563eb;
+      border: 1px solid rgba(112, 190, 255, 0.5);
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2f65ff, #1f4fe0);
       color: white;
       cursor: pointer;
-      font-weight: bold;
+      font-weight: 700;
+      box-shadow: 0 10px 20px rgba(37, 99, 235, 0.35);
     }
 
     .btn:hover {
-      background: #1d4ed8;
+      background: linear-gradient(135deg, #3f74ff, #2758f0);
     }
 
     .toolbar {
@@ -77,18 +104,20 @@
     }
 
     .filter-chip {
-      padding: 10px 14px;
+      padding: 9px 15px;
       border-radius: 999px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #e5e7eb;
+      border: 1px solid rgba(115, 140, 226, 0.4);
+      background: rgba(18, 31, 72, 0.88);
+      color: #dce8ff;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
+      font-weight: 600;
     }
 
     .filter-chip.active {
-      background: #1d4ed8;
-      border-color: #3b82f6;
+      background: linear-gradient(135deg, #385ffe, #6638ff);
+      border-color: rgba(122, 196, 255, 0.95);
+      box-shadow: 0 10px 18px rgba(56, 95, 254, 0.4);
     }
 
     .props-grid {
@@ -104,15 +133,17 @@
     .log-row,
     .detail-box,
     .search-result-item {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(7, 19, 52, 0.96), rgba(4, 12, 35, 0.96));
+      border: 1px solid rgba(108, 133, 224, 0.24);
+      border-radius: 16px;
       padding: 12px;
     }
 
     .prop-card {
-      background: linear-gradient(180deg, #0f172a 0%, #0b1227 100%);
-      padding: 14px;
+      background:
+        radial-gradient(120% 120% at 90% 0%, rgba(53, 113, 255, 0.18), transparent 50%),
+        linear-gradient(180deg, rgba(8, 22, 58, 0.98), rgba(4, 12, 35, 0.98));
+      padding: 16px;
     }
 
     .prop-top,
@@ -126,23 +157,26 @@
     }
 
     .player-name {
-      font-size: 20px;
-      font-weight: bold;
+      font-size: 24px;
+      font-weight: 800;
+      color: #f0f5ff;
     }
 
     .line-badge {
-      min-width: 64px;
+      min-width: 68px;
       text-align: center;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: #172554;
-      color: #93c5fd;
-      font-size: 22px;
-      font-weight: bold;
+      padding: 11px 12px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(39, 75, 211, 0.9), rgba(95, 54, 246, 0.9));
+      border: 1px solid rgba(118, 206, 255, 0.65);
+      color: #dff6ff;
+      font-size: 23px;
+      font-weight: 800;
+      box-shadow: 0 10px 20px rgba(55, 95, 247, 0.4);
     }
 
     .muted {
-      color: #94a3b8;
+      color: #9fb0d9;
       font-size: 14px;
     }
 
@@ -175,11 +209,12 @@
     .pill,
     .map-tag,
     .status-pill {
-      background: #1e293b;
-      color: #cbd5e1;
+      background: rgba(26, 45, 98, 0.9);
+      color: #dbe7ff;
       padding: 6px 10px;
       border-radius: 999px;
       font-size: 12px;
+      border: 1px solid rgba(111, 143, 245, 0.33);
     }
 
     .clickable {
@@ -188,8 +223,9 @@
     }
 
     .clickable:hover {
-      border-color: #3b82f6;
+      border-color: rgba(115, 190, 255, 0.95);
       transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(20, 60, 183, 0.35);
     }
 
     .grid-two {
@@ -306,9 +342,9 @@
 
     .player-header-card {
       padding: 14px;
-      border-radius: 12px;
-      border: 1px solid #334155;
-      background: #0f172a;
+      border-radius: 16px;
+      border: 1px solid rgba(118, 147, 241, 0.35);
+      background: linear-gradient(180deg, rgba(10, 26, 69, 0.95), rgba(6, 17, 45, 0.95));
       margin-bottom: 14px;
     }
 
@@ -335,7 +371,7 @@
 </head>
 <body>
   <div class="app">
-    <h1>R6 Research Tool</h1>
+    <h1>R6 PickFinder</h1>
 
     <div id="manualPropsCard" class="card">
       <h2>Manual Props Board</h2>
