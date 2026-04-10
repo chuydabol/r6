@@ -102,7 +102,8 @@
     .match-item,
     .stat-box,
     .log-row,
-    .detail-box {
+    .detail-box,
+    .search-result-item {
       background: #0f172a;
       border: 1px solid #1e293b;
       border-radius: 12px;
@@ -199,13 +200,15 @@
       margin-bottom: 14px;
     }
 
-    .team-header img {
+    .team-header img,
+    .team-search-logo {
       width: 56px;
       height: 56px;
       object-fit: contain;
       background: #0f172a;
       border-radius: 12px;
       padding: 6px;
+      flex-shrink: 0;
     }
 
     .analysis-controls {
@@ -269,6 +272,18 @@
       word-break: break-word;
     }
 
+    .team-search-results {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
     @media (max-width: 900px) {
       .grid-two,
       .match-details-grid {
@@ -282,6 +297,10 @@
       .analysis-controls,
       .log-row {
         grid-template-columns: 1fr;
+      }
+
+      .search-result-item {
+        align-items: flex-start;
       }
     }
   </style>
@@ -315,16 +334,17 @@
 
       <div class="topbar">
         <input
-          id="teamSlug"
+          id="teamSearchInput"
           class="search-box"
-          placeholder="Enter team slug (example: shopify-rebellion-r6)"
-          value="shopify-rebellion-r6"
+          placeholder="Search team name (example: shopify, 100 thieves, m80)"
+          oninput="searchTeams()"
         />
-        <button class="btn" onclick="loadTeamBase()">Load Team</button>
       </div>
 
+      <div id="teamSearchResults" class="team-search-results"></div>
+
       <div id="teamSection" class="card" style="margin-bottom: 20px; background:#0f172a;">
-        <div class="empty">Load a team to begin.</div>
+        <div class="empty">Search and select a team.</div>
       </div>
 
       <div class="grid-two">
@@ -364,6 +384,9 @@
     const debugSection = document.getElementById("debugSection");
     const playerSearch = document.getElementById("playerSearch");
 
+    const teamSearchInput = document.getElementById("teamSearchInput");
+    const teamSearchResults = document.getElementById("teamSearchResults");
+
     const teamSection = document.getElementById("teamSection");
     const playersSection = document.getElementById("playersSection");
     const matchesSection = document.getElementById("matchesSection");
@@ -380,6 +403,8 @@
 
     let selectedPlayer = null;
     let selectedPlayerGameLog = [];
+
+    let teamSearchDebounce = null;
 
     window.addEventListener("DOMContentLoaded", () => {
       loadPropsBoard();
@@ -495,14 +520,56 @@
       return "Unknown matchup";
     }
 
-    async function loadTeamBase() {
-      const slug = document.getElementById("teamSlug").value.trim();
+    function searchTeams() {
+      clearTimeout(teamSearchDebounce);
 
-      if (!slug) {
-        alert("Enter a team slug first.");
-        return;
-      }
+      teamSearchDebounce = setTimeout(async () => {
+        const query = teamSearchInput.value.trim();
 
+        if (!query) {
+          teamSearchResults.innerHTML = "";
+          return;
+        }
+
+        teamSearchResults.innerHTML = `<div class="empty">Searching teams...</div>`;
+
+        try {
+          const res = await fetch(`/api/team-search?q=${encodeURIComponent(query)}`);
+          const data = await res.json();
+          const results = data.results || [];
+
+          if (!results.length) {
+            teamSearchResults.innerHTML = `<div class="empty">No teams found.</div>`;
+            return;
+          }
+
+          teamSearchResults.innerHTML = results.map(team => `
+            <div class="search-result-item clickable" onclick="loadTeamFromSearch('${escapeJs(team.slug || "")}')">
+              <img class="team-search-logo" src="${escapeHtml(team.image_url || "")}" alt="${escapeHtml(team.name || "Team")} logo" />
+              <div>
+                <strong>${escapeHtml(team.name || "Unknown Team")}</strong>
+                <div class="muted">Slug: ${escapeHtml(team.slug || "N/A")}</div>
+                <div class="muted">Team ID: ${team.id ?? "N/A"}</div>
+              </div>
+            </div>
+          `).join("");
+        } catch (err) {
+          console.error(err);
+          teamSearchResults.innerHTML = `<div class="empty">Failed to search teams.</div>`;
+        }
+      }, 250);
+    }
+
+    async function loadTeamFromSearch(slug) {
+      if (!slug) return;
+
+      teamSearchInput.value = "";
+      teamSearchResults.innerHTML = "";
+
+      await loadTeamBaseFromSlug(slug);
+    }
+
+    async function loadTeamBaseFromSlug(slug) {
       teamSection.innerHTML = `<div class="muted">Loading team...</div>`;
       playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
       matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
@@ -513,6 +580,11 @@
         const team = await fetchTeam(slug);
         currentTeam = team;
         currentPlayers = team.players || [];
+        currentMatches = [];
+        currentMatchDetails = null;
+        selectedPlayer = null;
+        selectedPlayerGameLog = [];
+
         renderTeam(team);
         renderPlayers(currentPlayers);
 
