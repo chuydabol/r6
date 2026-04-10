@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>R6 Props Board</title>
+  <title>R6 Research Tool</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -17,26 +15,38 @@
     }
 
     .app {
-      max-width: 1400px;
+      max-width: 1450px;
       margin: 0 auto;
       padding: 24px;
     }
 
-    h1, h2 {
-      margin-top: 0;
+    h1, h2, h3 { margin-top: 0; }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    .section-spacing {
+      margin-top: 24px;
     }
 
     .topbar {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       align-items: center;
     }
 
-    .search-box {
+    .search-box,
+    select,
+    input {
       flex: 1;
-      min-width: 240px;
+      min-width: 220px;
       padding: 12px 14px;
       border-radius: 10px;
       border: 1px solid #334155;
@@ -57,27 +67,6 @@
 
     .btn:hover {
       background: #1d4ed8;
-    }
-
-    .card {
-      background: #111827;
-      border: 1px solid #1f2937;
-      border-radius: 16px;
-      padding: 18px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-    }
-
-    .muted {
-      color: #94a3b8;
-      font-size: 14px;
-    }
-
-    .empty {
-      padding: 18px;
-      border: 1px dashed #334155;
-      border-radius: 12px;
-      color: #94a3b8;
-      text-align: center;
     }
 
     .toolbar {
@@ -108,25 +97,36 @@
       gap: 16px;
     }
 
+    .prop-card,
+    .player-item,
+    .match-item,
+    .stat-box,
+    .log-row,
+    .detail-box {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
     .prop-card {
       background: linear-gradient(180deg, #0f172a 0%, #0b1227 100%);
-      border: 1px solid #1e293b;
-      border-radius: 16px;
       padding: 14px;
     }
 
-    .prop-top {
+    .prop-top,
+    .match-top {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 12px;
+      gap: 10px;
       margin-bottom: 10px;
+      flex-wrap: wrap;
     }
 
     .player-name {
       font-size: 20px;
       font-weight: bold;
-      line-height: 1.2;
     }
 
     .line-badge {
@@ -140,26 +140,30 @@
       font-weight: bold;
     }
 
-    .stat-line {
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 6px;
+    .muted {
+      color: #94a3b8;
+      font-size: 14px;
     }
 
-    .meta {
-      display: grid;
-      gap: 6px;
-      margin-bottom: 10px;
+    .empty {
+      padding: 18px;
+      border: 1px dashed #334155;
+      border-radius: 12px;
+      color: #94a3b8;
+      text-align: center;
     }
 
-    .pill-row {
+    .pill-row,
+    .maps {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 10px;
     }
 
-    .pill {
+    .pill,
+    .map-tag,
+    .status-pill {
       background: #1e293b;
       color: #cbd5e1;
       padding: 6px 10px;
@@ -167,8 +171,14 @@
       font-size: 12px;
     }
 
-    .section-spacing {
-      margin-top: 24px;
+    .clickable {
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .clickable:hover {
+      border-color: #3b82f6;
+      transform: translateY(-1px);
     }
 
     .grid-two {
@@ -180,24 +190,6 @@
     .list {
       display: grid;
       gap: 10px;
-    }
-
-    .player-item,
-    .match-item {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      padding: 12px;
-    }
-
-    .player-item.clickable {
-      cursor: pointer;
-      transition: 0.2s ease;
-    }
-
-    .player-item.clickable:hover {
-      border-color: #3b82f6;
-      transform: translateY(-1px);
     }
 
     .team-header {
@@ -216,40 +208,11 @@
       padding: 6px;
     }
 
-    .status-pill {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: #1e293b;
-      text-transform: capitalize;
-    }
-
-    .maps {
-      margin-top: 8px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .map-tag {
-      background: #1e293b;
-      color: #cbd5e1;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-    }
-
-    .debug-box {
+    .analysis-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
       margin-top: 16px;
-      padding: 12px;
-      border-radius: 12px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      font-size: 13px;
-      color: #cbd5e1;
-      white-space: pre-wrap;
-      word-break: break-word;
     }
 
     .analysis-grid {
@@ -257,13 +220,6 @@
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 12px;
       margin-top: 16px;
-    }
-
-    .stat-box {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      padding: 12px;
     }
 
     .stat-label {
@@ -278,23 +234,6 @@
       color: #e5e7eb;
     }
 
-    .analysis-controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr auto;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
-    .analysis-controls input,
-    .analysis-controls select {
-      padding: 12px 14px;
-      border-radius: 10px;
-      border: 1px solid #334155;
-      background: #111827;
-      color: white;
-      outline: none;
-    }
-
     .game-log {
       display: grid;
       gap: 10px;
@@ -303,27 +242,36 @@
 
     .log-row {
       display: grid;
-      grid-template-columns: 1.5fr 1fr 1fr 1fr auto;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
       gap: 10px;
       align-items: center;
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
+    }
+
+    .hit { color: #4ade80; font-weight: bold; }
+    .miss { color: #f87171; font-weight: bold; }
+
+    .match-details-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .debug-box {
+      margin-top: 16px;
       padding: 12px;
-    }
-
-    .hit {
-      color: #4ade80;
-      font-weight: bold;
-    }
-
-    .miss {
-      color: #f87171;
-      font-weight: bold;
+      border-radius: 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      font-size: 13px;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     @media (max-width: 900px) {
-      .grid-two {
+      .grid-two,
+      .match-details-grid {
         grid-template-columns: 1fr;
       }
 
@@ -331,10 +279,7 @@
         grid-template-columns: 1fr;
       }
 
-      .analysis-controls {
-        grid-template-columns: 1fr;
-      }
-
+      .analysis-controls,
       .log-row {
         grid-template-columns: 1fr;
       }
@@ -343,21 +288,19 @@
 </head>
 <body>
   <div class="app">
-    <h1>R6 Props Board</h1>
+    <h1>R6 Research Tool</h1>
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card">
+      <h2>Manual Props Board</h2>
+
       <div class="topbar">
-        <input
-          id="playerSearch"
-          class="search-box"
-          placeholder="Search player or team..."
-        />
+        <input id="playerSearch" class="search-box" placeholder="Search player or team..." />
         <button class="btn" onclick="loadPropsBoard()">Refresh Props</button>
       </div>
 
       <div class="toolbar">
-        <button class="filter-chip active" data-filter="all" onclick="setStatFilter('all', this)">All</button>
-        <button class="filter-chip" data-filter="MAP 1 Kills" onclick="setStatFilter('MAP 1 Kills', this)">MAP 1 Kills</button>
+        <button class="filter-chip active" onclick="setStatFilter('all', this)">All</button>
+        <button class="filter-chip" onclick="setStatFilter('MAP 1 Kills', this)">MAP 1 Kills</button>
       </div>
 
       <div id="propsSection">
@@ -402,6 +345,13 @@
     </div>
 
     <div class="card section-spacing">
+      <h2>Match Details</h2>
+      <div id="matchDetailsSection">
+        <div class="empty">Click a match after loading a team.</div>
+      </div>
+    </div>
+
+    <div class="card section-spacing">
       <h2>Player Analysis</h2>
       <div id="analysisSection">
         <div class="empty">Select a player after loading a team.</div>
@@ -418,12 +368,16 @@
     const playersSection = document.getElementById("playersSection");
     const matchesSection = document.getElementById("matchesSection");
     const analysisSection = document.getElementById("analysisSection");
+    const matchDetailsSection = document.getElementById("matchDetailsSection");
 
     let allProps = [];
     let activeStatFilter = "all";
 
     let currentTeam = null;
     let currentPlayers = [];
+    let currentMatches = [];
+    let currentMatchDetails = null;
+
     let selectedPlayer = null;
     let selectedPlayerGameLog = [];
 
@@ -433,40 +387,42 @@
     });
 
     async function loadPropsBoard() {
-      propsSection.innerHTML = `<div class="empty">Loading PrizePicks props...</div>`;
+      propsSection.innerHTML = `<div class="empty">Loading manual PrizePicks props...</div>`;
       debugSection.style.display = "none";
       debugSection.textContent = "";
 
       try {
         const data = await fetchPrizePicksManual();
-        console.log("MANUAL PRIZEPICKS RESPONSE:", data);
-
-        showDebug(data);
-
         allProps = Array.isArray(data.props) ? data.props : [];
+        showDebug(data);
         applyPropFilters();
       } catch (err) {
-        console.error("PRIZEPICKS ERROR:", err);
-        propsSection.innerHTML = `<div class="empty">Could not load PrizePicks props.</div>`;
+        propsSection.innerHTML = `<div class="empty">Could not load props.</div>`;
         debugSection.style.display = "block";
-        debugSection.textContent = `Frontend error:\n${err.message}`;
+        debugSection.textContent = err.message;
       }
+    }
+
+    async function fetchPrizePicksManual() {
+      const res = await fetch("/api/prizepicks/manual");
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || `Manual PrizePicks request failed: ${res.status}`);
+      }
+
+      return data;
     }
 
     function setStatFilter(filterValue, button) {
       activeStatFilter = filterValue;
-
-      document.querySelectorAll(".filter-chip").forEach(chip => {
-        chip.classList.remove("active");
-      });
-
+      document.querySelectorAll(".filter-chip").forEach(chip => chip.classList.remove("active"));
       button.classList.add("active");
       applyPropFilters();
     }
 
     function applyPropFilters() {
       const searchValue = normalizeName(playerSearch.value);
-
       let filtered = [...allProps];
 
       if (activeStatFilter !== "all") {
@@ -485,17 +441,9 @@
       renderAllProps(filtered);
     }
 
-    async function fetchPrizePicksManual() {
-      const res = await fetch(`/api/prizepicks/manual`);
-      if (!res.ok) {
-        throw new Error(`Manual PrizePicks request failed: ${res.status}`);
-      }
-      return await res.json();
-    }
-
     function renderAllProps(props) {
       if (!props.length) {
-        propsSection.innerHTML = `<div class="empty">No PrizePicks props found.</div>`;
+        propsSection.innerHTML = `<div class="empty">No props found.</div>`;
         return;
       }
 
@@ -504,7 +452,6 @@
           ${props.map(prop => {
             const time = formatDate(prop.startTime);
             const matchup = getMatchupText(prop);
-
             return `
               <div class="prop-card">
                 <div class="prop-top">
@@ -515,13 +462,11 @@
                   <div class="line-badge">${prop.lineScore ?? "N/A"}</div>
                 </div>
 
-                <div class="stat-line">${escapeHtml(prop.statType || "Unknown Stat")}</div>
+                <div style="font-size:18px; font-weight:bold; margin-bottom:6px;">${escapeHtml(prop.statType || "Unknown Stat")}</div>
 
-                <div class="meta">
-                  <div class="muted">Matchup: ${escapeHtml(matchup)}</div>
-                  <div class="muted">Time: ${escapeHtml(time)}</div>
-                  <div class="muted">Description: ${escapeHtml(prop.description || "N/A")}</div>
-                </div>
+                <div class="muted">Matchup: ${escapeHtml(matchup)}</div>
+                <div class="muted">Time: ${escapeHtml(time)}</div>
+                <div class="muted">Description: ${escapeHtml(prop.description || "N/A")}</div>
 
                 <div class="pill-row">
                   <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
@@ -535,21 +480,19 @@
       `;
     }
 
+    function showDebug(data) {
+      debugSection.style.display = "block";
+      debugSection.textContent = JSON.stringify({
+        count: data.count,
+        firstProp: data.firstProp || null
+      }, null, 2);
+    }
+
     function getMatchupText(prop) {
       if (prop.homeTeam && prop.awayTeam) {
         return `${prop.homeTeam} vs ${prop.awayTeam}`;
       }
       return "Unknown matchup";
-    }
-
-    function showDebug(data) {
-      const summary = {
-        count: data.count,
-        firstProp: data.firstProp || null
-      };
-
-      debugSection.style.display = "block";
-      debugSection.textContent = JSON.stringify(summary, null, 2);
     }
 
     async function loadTeamBase() {
@@ -564,48 +507,43 @@
       playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
       matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
       analysisSection.innerHTML = `<div class="empty">Select a player after loading a team.</div>`;
-
-      let team = null;
+      matchDetailsSection.innerHTML = `<div class="empty">Click a match after loading a team.</div>`;
 
       try {
-        team = await fetchTeam(slug);
+        const team = await fetchTeam(slug);
         currentTeam = team;
         currentPlayers = team.players || [];
         renderTeam(team);
         renderPlayers(currentPlayers);
-      } catch (err) {
-        console.error("TEAM ERROR:", err);
-        teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
-        playersSection.innerHTML = `<div class="empty">Could not load roster.</div>`;
-        matchesSection.innerHTML = `<div class="empty">Matches not loaded.</div>`;
-        return;
-      }
 
-      try {
         const matches = await fetchTeamMatches(team.id);
+        currentMatches = matches;
         renderMatches(matches);
       } catch (err) {
-        console.error("MATCHES ERROR:", err);
+        console.error(err);
+        teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
+        playersSection.innerHTML = `<div class="empty">Could not load roster.</div>`;
         matchesSection.innerHTML = `<div class="empty">Could not load matches.</div>`;
       }
     }
 
     async function fetchTeam(slug) {
       const res = await fetch(`/api/team/${slug}`);
-      if (!res.ok) {
-        throw new Error(`Team request failed: ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Team request failed: ${res.status}`);
       return await res.json();
     }
 
     async function fetchTeamMatches(teamId) {
       const res = await fetch(`/api/team-matches/${teamId}`);
-      if (!res.ok) {
-        throw new Error(`Matches request failed: ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`Matches request failed: ${res.status}`);
       const data = await res.json();
       return data.results || data.data || [];
+    }
+
+    async function fetchMatchDetails(slug) {
+      const res = await fetch(`/api/match-details/${slug}`);
+      if (!res.ok) throw new Error(`Match details request failed: ${res.status}`);
+      return await res.json();
     }
 
     function renderTeam(team) {
@@ -657,7 +595,6 @@
         const team1 = match.team1?.name || "Team 1";
         const team2 = match.team2?.name || "Team 2";
         const date = formatDate(match.start_date);
-
         const maps = Array.isArray(match.r6siege_games)
           ? [...new Set(
               match.r6siege_games
@@ -668,7 +605,7 @@
 
         return `
           <div class="match-item">
-            <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+            <div class="match-top">
               <strong>${escapeHtml(team1)} vs ${escapeHtml(team2)}</strong>
               <span class="status-pill">${escapeHtml(match.status || "unknown")}</span>
             </div>
@@ -678,15 +615,121 @@
             <div class="muted">Score: ${match.team1_score ?? "-"} - ${match.team2_score ?? "-"}</div>
 
             <div class="maps">
-              ${
-                maps.length
-                  ? maps.map(map => `<span class="map-tag">${escapeHtml(map)}</span>`).join("")
-                  : `<span class="map-tag">No map data</span>`
-              }
+              ${maps.length
+                ? maps.map(map => `<span class="map-tag">${escapeHtml(map)}</span>`).join("")
+                : `<span class="map-tag">No map data</span>`}
+            </div>
+
+            <div style="margin-top:10px;">
+              <button class="btn" onclick="loadMatchDetails('${escapeJs(match.slug || "")}')">Open Match</button>
             </div>
           </div>
         `;
       }).join("");
+    }
+
+    async function loadMatchDetails(slug) {
+      if (!slug) return;
+
+      matchDetailsSection.innerHTML = `<div class="empty">Loading match details...</div>`;
+
+      try {
+        const data = await fetchMatchDetails(slug);
+        currentMatchDetails = data;
+        renderMatchDetails(data);
+      } catch (err) {
+        console.error(err);
+        matchDetailsSection.innerHTML = `<div class="empty">Could not load match details.</div>`;
+      }
+    }
+
+    function renderMatchDetails(match) {
+      const team1 = match.team1?.name || "Team 1";
+      const team2 = match.team2?.name || "Team 2";
+      const date = formatDate(match.start_date);
+      const winnerId = match.winner_team_id;
+
+      const mapList = Array.isArray(match.r6siege_games) ? match.r6siege_games : [];
+      const insights = Array.isArray(match.localized_match_insights) ? match.localized_match_insights : [];
+
+      matchDetailsSection.innerHTML = `
+        <div class="detail-box">
+          <div class="match-top">
+            <div>
+              <h3 style="margin:0;">${escapeHtml(team1)} vs ${escapeHtml(team2)}</h3>
+              <div class="muted">Slug: ${escapeHtml(match.slug || "N/A")}</div>
+            </div>
+            <span class="status-pill">${escapeHtml(match.status || "unknown")}</span>
+          </div>
+
+          <div class="muted">Date: ${escapeHtml(date)}</div>
+          <div class="muted">BO Type: ${match.bo_type ?? "N/A"}</div>
+          <div class="muted">Score: ${match.team1_score ?? "-"} - ${match.team2_score ?? "-"}</div>
+          <div class="muted">Winner: ${winnerId === match.team1?.id ? escapeHtml(team1) : winnerId === match.team2?.id ? escapeHtml(team2) : "Unknown"}</div>
+
+          <div class="match-details-grid">
+            <div class="detail-box">
+              <h3 style="margin-bottom:10px;">Maps</h3>
+              ${mapList.length ? mapList.map(game => `
+                <div style="margin-bottom:10px;">
+                  <div><strong>Map ${game.game_number ?? "?"}</strong>: ${escapeHtml(game.r6siege_map?.name?.trim() || "Unknown")}</div>
+                  <div class="muted">Score: ${game.winner_score ?? "-"} - ${game.loser_score ?? "-"}</div>
+                  <div class="muted">Status: ${escapeHtml(game.status || "unknown")}</div>
+                </div>
+              `).join("") : `<div class="muted">No map data.</div>`}
+            </div>
+
+            <div class="detail-box">
+              <h3 style="margin-bottom:10px;">Tournament</h3>
+              <div class="muted">Name: ${escapeHtml(match.tournament?.name || "Unknown")}</div>
+              <div class="muted">Stage: ${escapeHtml(match.stage?.title || "Unknown")}</div>
+              <div class="muted">Tier: ${escapeHtml(match.tournament?.tier || "Unknown")}</div>
+              <div class="muted">Event status: ${escapeHtml(match.tournament?.status || "Unknown")}</div>
+            </div>
+          </div>
+
+          <div class="match-details-grid" style="margin-top:16px;">
+            <div class="detail-box">
+              <h3 style="margin-bottom:10px;">${escapeHtml(team1)} Players</h3>
+              ${Array.isArray(match.team1?.players) && match.team1.players.length
+                ? match.team1.players.map(player => `<div class="muted">${escapeHtml(player.nickname || "Unknown")}</div>`).join("")
+                : `<div class="muted">No players found.</div>`}
+            </div>
+
+            <div class="detail-box">
+              <h3 style="margin-bottom:10px;">${escapeHtml(team2)} Players</h3>
+              ${Array.isArray(match.team2?.players) && match.team2.players.length
+                ? match.team2.players.map(player => `<div class="muted">${escapeHtml(player.nickname || "Unknown")}</div>`).join("")
+                : `<div class="muted">No players found.</div>`}
+            </div>
+          </div>
+
+          <div class="detail-box" style="margin-top:16px;">
+            <h3 style="margin-bottom:10px;">AI Prediction</h3>
+            <div class="muted">Predicted score: ${match.ai_predictions?.prediction_team1_score ?? "-"} - ${match.ai_predictions?.prediction_team2_score ?? "-"}</div>
+            <div class="muted">Predicted winner ID: ${match.ai_predictions?.prediction_winner_team_id ?? "N/A"}</div>
+          </div>
+
+          <div class="detail-box" style="margin-top:16px;">
+            <h3 style="margin-bottom:10px;">Insights</h3>
+            ${
+              insights.length
+                ? insights.map(item => {
+                    const body = item.body || {};
+                    return `
+                      <div style="margin-bottom:14px;">
+                        <div><strong>${escapeHtml(body.team_1?.name || "Team 1")}</strong></div>
+                        ${(body.team_1?.key_facts || []).map(f => `<div class="muted">• ${escapeHtml(f.fact || "")}</div>`).join("")}
+                        <div style="margin-top:10px;"><strong>${escapeHtml(body.team_2?.name || "Team 2")}</strong></div>
+                        ${(body.team_2?.key_facts || []).map(f => `<div class="muted">• ${escapeHtml(f.fact || "")}</div>`).join("")}
+                      </div>
+                    `;
+                  }).join("")
+                : `<div class="muted">No insights found.</div>`
+            }
+          </div>
+        </div>
+      `;
     }
 
     function selectPlayer(playerId) {
@@ -699,7 +742,6 @@
 
       selectedPlayer = player;
       selectedPlayerGameLog = generateMockGameLog(player);
-
       renderPlayerAnalysis();
     }
 
@@ -798,7 +840,7 @@
       return (hits / arr.length) * 100;
     }
 
-    function generateMockGameLog(player) {
+    function generateMockGameLog() {
       const maps = ["Bank", "Lair", "Clubhouse", "Chalet", "Kafe"];
       const opponents = ["M80", "DarkZero", "Spacestation", "Cloud9", "Oxygen", "Wildcard", "ENVY", "FURIA", "FaZe", "Team Secret"];
 
@@ -830,6 +872,10 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function escapeJs(value) {
+      return String(value).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
     }
   </script>
 </body>
