@@ -17,7 +17,7 @@
     }
 
     .app {
-      max-width: 1200px;
+      max-width: 1300px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -94,7 +94,8 @@
     }
 
     .player-item,
-    .match-item {
+    .match-item,
+    .prop-item {
       background: #0f172a;
       border: 1px solid #1e293b;
       border-radius: 12px;
@@ -106,7 +107,8 @@
       font-size: 14px;
     }
 
-    .match-top {
+    .match-top,
+    .prop-top {
       display: flex;
       justify-content: space-between;
       gap: 10px;
@@ -121,7 +123,8 @@
       gap: 8px;
     }
 
-    .map-tag {
+    .map-tag,
+    .pill {
       background: #1e293b;
       color: #cbd5e1;
       padding: 6px 10px;
@@ -138,12 +141,22 @@
       text-transform: capitalize;
     }
 
+    .line-box {
+      font-size: 18px;
+      font-weight: bold;
+      color: #93c5fd;
+    }
+
     .empty {
       padding: 18px;
       border: 1px dashed #334155;
       border-radius: 12px;
       color: #94a3b8;
       text-align: center;
+    }
+
+    .section-spacing {
+      margin-top: 20px;
     }
 
     @media (max-width: 900px) {
@@ -185,12 +198,20 @@
         </div>
       </div>
     </div>
+
+    <div class="card section-spacing">
+      <h2>PrizePicks Props</h2>
+      <div id="propsSection" class="list">
+        <div class="empty">No props loaded yet.</div>
+      </div>
+    </div>
   </div>
 
   <script>
     const teamSection = document.getElementById("teamSection");
     const playersSection = document.getElementById("playersSection");
     const matchesSection = document.getElementById("matchesSection");
+    const propsSection = document.getElementById("propsSection");
 
     async function loadTeamBase() {
       const slug = document.getElementById("teamSlug").value.trim();
@@ -203,12 +224,12 @@
       teamSection.innerHTML = `<div class="muted">Loading team...</div>`;
       playersSection.innerHTML = `<div class="muted">Loading roster...</div>`;
       matchesSection.innerHTML = `<div class="muted">Loading matches...</div>`;
+      propsSection.innerHTML = `<div class="muted">Loading PrizePicks props...</div>`;
 
       let team = null;
 
       try {
         team = await fetchTeam(slug);
-        console.log("TEAM DATA:", team);
         renderTeam(team);
         renderPlayers(team.players || []);
       } catch (err) {
@@ -216,16 +237,25 @@
         teamSection.innerHTML = `<div class="empty">Failed to load team data.</div>`;
         playersSection.innerHTML = `<div class="empty">Could not load roster.</div>`;
         matchesSection.innerHTML = `<div class="empty">Matches not loaded.</div>`;
+        propsSection.innerHTML = `<div class="empty">Props not loaded.</div>`;
         return;
       }
 
       try {
         const matches = await fetchTeamMatches(team.id);
-        console.log("MATCHES DATA:", matches);
         renderMatches(matches);
       } catch (err) {
         console.error("MATCHES ERROR:", err);
         matchesSection.innerHTML = `<div class="empty">Could not load matches.</div>`;
+      }
+
+      try {
+        const props = await fetchPrizePicksR6();
+        const teamProps = filterPropsForTeam(props, team);
+        renderProps(teamProps, team);
+      } catch (err) {
+        console.error("PRIZEPICKS ERROR:", err);
+        propsSection.innerHTML = `<div class="empty">Could not load PrizePicks props.</div>`;
       }
     }
 
@@ -245,6 +275,46 @@
 
       const data = await res.json();
       return data.results || data.data || [];
+    }
+
+    async function fetchPrizePicksR6() {
+      const res = await fetch(`/api/prizepicks/r6`);
+      if (!res.ok) {
+        throw new Error(`PrizePicks request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data.props || [];
+    }
+
+    function filterPropsForTeam(props, team) {
+      const teamNames = new Set([
+        normalizeName(team.name),
+        normalizeName(team.acronym),
+        normalizeName(team.slug)
+      ]);
+
+      return props.filter(prop => {
+        const propTeam = normalizeName(prop.teamName);
+        return teamNames.has(propTeam) || fuzzyTeamMatch(propTeam, team);
+      });
+    }
+
+    function fuzzyTeamMatch(propTeam, team) {
+      const teamName = normalizeName(team.name);
+      const teamSlug = normalizeName(team.slug).replace(/r6/g, "");
+
+      if (!propTeam) return false;
+      if (teamName && (propTeam.includes(teamName) || teamName.includes(propTeam))) return true;
+      if (teamSlug && propTeam.includes(teamSlug)) return true;
+
+      return false;
+    }
+
+    function normalizeName(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
     }
 
     function renderTeam(team) {
@@ -326,6 +396,57 @@
           </div>
         `;
       }).join("");
+    }
+
+    function renderProps(props, team) {
+      if (!props.length) {
+        propsSection.innerHTML = `<div class="empty">No active PrizePicks props found for ${escapeHtml(team.name || "this team")}.</div>`;
+        return;
+      }
+
+      propsSection.innerHTML = props.map(prop => {
+        const opponent = getOpponentText(prop, team);
+        const time = formatDate(prop.startTime);
+
+        return `
+          <div class="prop-item">
+            <div class="prop-top">
+              <strong>${escapeHtml(prop.playerName || "Unknown Player")}</strong>
+              <span class="line-box">${prop.lineScore ?? "N/A"}</span>
+            </div>
+
+            <div class="muted">${escapeHtml(prop.statType || "Unknown Stat")}</div>
+            <div class="muted">Team: ${escapeHtml(prop.teamName || "Unknown Team")}</div>
+            <div class="muted">Opponent: ${escapeHtml(opponent)}</div>
+            <div class="muted">Time: ${escapeHtml(time)}</div>
+
+            <div class="maps" style="margin-top:10px;">
+              <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
+              <span class="pill">${escapeHtml(prop.status || "unknown")}</span>
+              ${prop.durationName ? `<span class="pill">${escapeHtml(prop.durationName)}</span>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function getOpponentText(prop, team) {
+      const currentTeam = normalizeName(team.name);
+
+      const away = prop.awayTeam || "";
+      const home = prop.homeTeam || "";
+
+      if (!away && !home) return "Unknown";
+
+      if (normalizeName(away) === currentTeam) return home || "Unknown";
+      if (normalizeName(home) === currentTeam) return away || "Unknown";
+
+      if (normalizeName(prop.teamName) === currentTeam) {
+        if (away && normalizeName(away) !== currentTeam) return away;
+        if (home && normalizeName(home) !== currentTeam) return home;
+      }
+
+      return [home, away].filter(Boolean).join(" vs ") || "Unknown";
     }
 
     function formatDate(dateString) {
