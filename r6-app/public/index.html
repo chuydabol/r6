@@ -230,6 +230,18 @@
       font-size: 12px;
     }
 
+    .debug-box {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      font-size: 13px;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     @media (max-width: 900px) {
       .grid-two {
         grid-template-columns: 1fr;
@@ -263,6 +275,8 @@
       <div id="propsSection">
         <div class="empty">Loading props...</div>
       </div>
+
+      <div id="debugSection" class="debug-box" style="display:none;"></div>
     </div>
 
     <div class="card section-spacing">
@@ -302,6 +316,7 @@
 
   <script>
     const propsSection = document.getElementById("propsSection");
+    const debugSection = document.getElementById("debugSection");
     const playerSearch = document.getElementById("playerSearch");
 
     const teamSection = document.getElementById("teamSection");
@@ -318,15 +333,22 @@
 
     async function loadPropsBoard() {
       propsSection.innerHTML = `<div class="empty">Loading PrizePicks props...</div>`;
+      debugSection.style.display = "none";
+      debugSection.textContent = "";
 
       try {
-        const props = await fetchPrizePicksR6();
-        console.log("ALL PRIZEPICKS PROPS:", props);
-        allProps = props;
+        const data = await fetchPrizePicksR6();
+        console.log("PRIZEPICKS RESPONSE:", data);
+
+        showDebug(data);
+
+        allProps = Array.isArray(data.props) ? data.props : [];
         applyPropFilters();
       } catch (err) {
         console.error("PRIZEPICKS ERROR:", err);
         propsSection.innerHTML = `<div class="empty">Could not load PrizePicks props.</div>`;
+        debugSection.style.display = "block";
+        debugSection.textContent = `Frontend error:\n${err.message}`;
       }
     }
 
@@ -367,9 +389,7 @@
       if (!res.ok) {
         throw new Error(`PrizePicks request failed: ${res.status}`);
       }
-
-      const data = await res.json();
-      return data.props || [];
+      return await res.json();
     }
 
     function renderAllProps(props) {
@@ -419,6 +439,19 @@
         return `${prop.homeTeam} vs ${prop.awayTeam}`;
       }
       return "Unknown matchup";
+    }
+
+    function showDebug(data) {
+      const summary = {
+        status: data.status,
+        count: data.count,
+        firstProp: data.firstProp || null,
+        parseFailed: data.parseFailed || false,
+        rawPreview: data.rawPreview || null
+      };
+
+      debugSection.style.display = "block";
+      debugSection.textContent = JSON.stringify(summary, null, 2);
     }
 
     async function loadTeamBase() {
