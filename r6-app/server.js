@@ -7,6 +7,39 @@ const PORT = process.env.PORT || 10000;
 
 app.use(express.static("public"));
 
+app.get("/api/team-search", async (req, res) => {
+  try {
+    const query = (req.query.q || "").trim();
+
+    if (!query) {
+      return res.json({ results: [] });
+    }
+
+    const url =
+      `https://api.bo3.gg/api/v1/filters/teams` +
+      `?page[offset]=0` +
+      `&page[limit]=8` +
+      `&filter[teams.discipline_id][eq]=7` +
+      `&search_text=${encodeURIComponent(query)}`;
+
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("TEAM SEARCH ERROR:", error);
+    res.status(500).json({
+      error: "Failed to search teams",
+      message: error.message
+    });
+  }
+});
+
 app.get("/api/team/:slug", async (req, res) => {
   try {
     const response = await fetch(`https://api.bo3.gg/api/v1/teams/${req.params.slug}`, {
