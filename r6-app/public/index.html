@@ -143,43 +143,42 @@
       background:
         radial-gradient(120% 120% at 90% 0%, rgba(53, 113, 255, 0.18), transparent 50%),
         linear-gradient(180deg, rgba(8, 22, 58, 0.98), rgba(4, 12, 35, 0.98));
-      padding: 11px;
-      border-radius: 14px;
+      padding: 8px;
+      border-radius: 12px;
     }
 
     .prop-top,
     .match-top {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
     }
 
     .player-name {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 800;
       color: #f0f5ff;
       line-height: 1.1;
     }
 
     .line-badge {
-      min-width: 62px;
+      min-width: 52px;
       text-align: center;
-      padding: 9px 10px;
-      border-radius: 12px;
+      padding: 6px 8px;
+      border-radius: 10px;
       background: linear-gradient(135deg, rgba(39, 75, 211, 0.9), rgba(95, 54, 246, 0.9));
       border: 1px solid rgba(118, 206, 255, 0.65);
       color: #dff6ff;
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 800;
-      box-shadow: 0 10px 20px rgba(55, 95, 247, 0.4);
+      box-shadow: 0 8px 14px rgba(55, 95, 247, 0.32);
     }
 
     .muted {
       color: #9fb0d9;
-      font-size: 14px;
+      font-size: 12px;
     }
 
     .empty {
@@ -335,38 +334,88 @@
     .hidden-section { display: none; }
 
     .prop-line-text {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 700;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
 
     .summary-strip {
-      margin-top: 8px;
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .summary-box {
+      margin-top: 4px;
+      padding: 5px 7px;
       border: 1px solid rgba(95, 133, 233, 0.3);
       border-radius: 8px;
       background: rgba(9, 24, 61, 0.9);
-      padding: 6px;
-      text-align: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+      color: #cddbff;
     }
 
-    .summary-key {
-      color: #9bb0df;
-      font-size: 10px;
-      margin-bottom: 2px;
-      letter-spacing: 0.02em;
-    }
-
-    .summary-value {
-      color: #e7eeff;
-      font-size: 13px;
-      font-weight: 700;
+    .summary-entry {
       white-space: nowrap;
+    }
+
+    .summary-sep {
+      color: #6d81b8;
+    }
+
+    .summary-value-inline {
+      color: #e7eeff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .prop-player-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .player-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #325df0, #6e40ff);
+      border: 1px solid rgba(130, 180, 255, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #eef4ff;
+      flex-shrink: 0;
+    }
+
+    .player-meta {
+      min-width: 0;
+    }
+
+    .player-team {
+      font-size: 11px;
+      color: #9fb0d9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .inline-meta {
+      font-size: 11px;
+      color: #9fb0d9;
+      margin-bottom: 4px;
+    }
+
+    .pill-row {
+      margin-top: 5px;
+      gap: 6px;
+    }
+
+    .pill {
+      padding: 4px 8px;
+      font-size: 10px;
     }
 
     .player-detail-topbar {
@@ -620,31 +669,36 @@
             return `
               <div class="prop-card clickable" onclick="handlePropCardClick(${index})">
                 <div class="prop-top">
-                  <div>
-                    <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
-                    <div class="muted">${linkedTeamState}</div>
+                  <div class="prop-player-row">
+                    <div class="player-avatar">${escapeHtml(getInitials(prop.playerName))}</div>
+                    <div class="player-meta">
+                      <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                      <div class="player-team">${linkedTeamState}</div>
+                    </div>
                   </div>
                   <div class="line-badge">${prop.lineScore ?? "N/A"}</div>
                 </div>
 
                 <div class="prop-line-text">${escapeHtml(prop.statType || "Unknown Stat")}</div>
-
-                <div class="muted">Matchup: ${escapeHtml(matchup)}</div>
-                <div class="muted">Time: ${escapeHtml(time)}</div>
-                <div class="muted">${linkedPlayerState}</div>
+                <div class="inline-meta">${escapeHtml(matchup)} • ${escapeHtml(time)}</div>
 
                 <div class="summary-strip">
-                  ${renderSummaryBox("L5", formatSummaryPercent(prop.summary?.l5HitRate))}
-                  ${renderSummaryBox("L10", formatSummaryPercent(prop.summary?.l10HitRate))}
-                  ${renderSummaryBox("L15", prop.summary?.l15HitRate === null ? "—" : formatSummaryPercent(prop.summary?.l15HitRate))}
-                  ${renderSummaryBox("AVG", formatSummaryValue(prop.summary?.average))}
-                  ${renderSummaryBox("DIFF", formatDiffValue(prop.summary?.diffVsLine))}
+                  ${renderSummaryInline("L5", formatSummaryPercent(prop.summary?.l5HitRate))}
+                  <span class="summary-sep">|</span>
+                  ${renderSummaryInline("L10", formatSummaryPercent(prop.summary?.l10HitRate))}
+                  <span class="summary-sep">|</span>
+                  ${renderSummaryInline("L15", prop.summary?.l15HitRate === null ? "—" : formatSummaryPercent(prop.summary?.l15HitRate))}
+                  <span class="summary-sep">|</span>
+                  ${renderSummaryInline("AVG", formatSummaryValue(prop.summary?.average))}
+                  <span class="summary-sep">|</span>
+                  ${renderSummaryInline("DIFF", formatDiffValue(prop.summary?.diffVsLine))}
                 </div>
 
                 <div class="pill-row">
                   <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
                   <span class="pill">${escapeHtml(prop.status || "unknown")}</span>
                   ${prop.durationName ? `<span class="pill">${escapeHtml(prop.durationName)}</span>` : ""}
+                  ${linkedPlayerState !== "Player not matched" ? `<span class="pill">${linkedPlayerState}</span>` : ""}
                 </div>
               </div>
             `;
@@ -1291,13 +1345,18 @@
         .replace(/[^a-z0-9]/g, "");
     }
 
-    function renderSummaryBox(label, value) {
+    function renderSummaryInline(label, value) {
       return `
-        <div class="summary-box">
-          <div class="summary-key">${label}</div>
-          <div class="summary-value">${value}</div>
-        </div>
+        <span class="summary-entry">${label} <span class="summary-value-inline">${value}</span></span>
       `;
+    }
+
+    function getInitials(name) {
+      const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!words.length) return "??";
+      const first = words[0][0] || "";
+      const second = words.length > 1 ? words[words.length - 1][0] || "" : (words[0][1] || "");
+      return `${first}${second}`.toUpperCase();
     }
 
     function formatSummaryPercent(value) {
