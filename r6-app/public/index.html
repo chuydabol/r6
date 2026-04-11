@@ -26,14 +26,6 @@
 
     h1, h2, h3 { margin-top: 0; }
 
-    h1 {
-      font-size: clamp(30px, 4vw, 40px);
-      letter-spacing: 0.02em;
-      margin-bottom: 18px;
-      color: #f3f6ff;
-      text-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
-    }
-
     h2 {
       color: #d9e4ff;
       letter-spacing: 0.01em;
@@ -420,10 +412,10 @@
 
     .player-detail-topbar {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 8px;
+      margin-bottom: 6px;
     }
 
     .player-header-card {
@@ -436,7 +428,7 @@
 
     .detail-shell {
       display: grid;
-      gap: 10px;
+      gap: 8px;
     }
 
     .detail-headline {
@@ -444,11 +436,12 @@
       justify-content: space-between;
       align-items: center;
       gap: 10px;
+      margin-bottom: 2px;
     }
 
     .detail-title {
       margin: 0;
-      font-size: clamp(28px, 7vw, 38px);
+      font-size: clamp(24px, 5vw, 32px);
       line-height: 1;
       letter-spacing: 0.01em;
       color: #f4f7ff;
@@ -456,14 +449,14 @@
 
     .detail-subtitle {
       color: #9eb1de;
-      font-size: 12px;
-      margin-top: 4px;
+      font-size: 11px;
+      margin-top: 2px;
     }
 
     .control-row {
       display: flex;
-      gap: 8px;
-      align-items: stretch;
+      gap: 6px;
+      align-items: center;
       flex-wrap: wrap;
     }
 
@@ -482,12 +475,12 @@
       display: flex;
       align-items: center;
       overflow: hidden;
-      min-width: 170px;
-      flex: 1 1 170px;
+      min-width: 156px;
+      flex: 1 1 156px;
     }
 
     .line-btn {
-      width: 44px;
+      width: 38px;
       border: 0;
       background: rgba(43, 77, 187, 0.55);
       color: #eff5ff;
@@ -499,14 +492,14 @@
     .line-value {
       flex: 1;
       text-align: center;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       color: #f2f7ff;
     }
 
     .odds-box {
-      padding: 10px 12px;
-      min-width: 92px;
+      padding: 7px 10px;
+      min-width: 86px;
       display: grid;
       align-content: center;
       justify-items: center;
@@ -525,25 +518,25 @@
     }
 
     .favorite-box {
-      width: 44px;
+      width: 38px;
       display: grid;
       place-items: center;
       cursor: pointer;
-      font-size: 18px;
+      font-size: 16px;
       color: #ffcf60;
       user-select: none;
     }
 
     .filters-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
     }
 
     .filter-pill {
-      padding: 0 10px;
-      min-width: 112px;
-      flex: 1 1 112px;
+      padding: 0 8px;
+      min-width: 104px;
+      flex: 1 1 104px;
     }
 
     .filter-pill select {
@@ -552,17 +545,17 @@
       flex: initial;
       border: 0;
       background: transparent;
-      padding: 10px 0;
-      font-size: 12px;
+      padding: 8px 0;
+      font-size: 11px;
     }
 
     .filter-icon-btn {
-      min-width: 44px;
+      min-width: 38px;
       border: 1px solid rgba(119, 142, 223, 0.35);
       background: linear-gradient(180deg, rgba(8, 21, 55, 0.96), rgba(5, 15, 40, 0.96));
-      border-radius: 12px;
+      border-radius: 10px;
       color: #dbe7ff;
-      font-size: 18px;
+      font-size: 14px;
       cursor: pointer;
     }
 
@@ -574,7 +567,7 @@
     }
 
     .summary-cell {
-      padding: 9px 8px;
+      padding: 7px 7px;
       border-right: 1px solid rgba(119, 142, 223, 0.28);
       min-width: 0;
     }
@@ -584,25 +577,25 @@
     }
 
     .summary-title {
-      font-size: 11px;
+      font-size: 10px;
       color: #9ab0e0;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .summary-main {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: #f0f6ff;
     }
 
     .summary-sub {
-      font-size: 11px;
+      font-size: 10px;
       color: #b8c8ef;
-      margin-top: 2px;
+      margin-top: 1px;
     }
 
     .chart-shell {
-      padding: 10px 10px 6px;
+      padding: 6px 6px 4px;
     }
 
     .bars-wrap {
@@ -610,18 +603,18 @@
       height: 260px;
       border-radius: 10px;
       background: rgba(5, 13, 35, 0.7);
-      padding: 10px 8px 24px;
+      padding: 8px 6px 20px;
       display: flex;
       align-items: flex-end;
-      gap: 4px;
+      gap: 3px;
       overflow-x: auto;
     }
 
     .line-marker {
       position: absolute;
-      left: 8px;
-      right: 8px;
-      border-top: 1px dashed rgba(255, 255, 255, 0.55);
+      left: 6px;
+      right: 6px;
+      border-top: 2px dashed rgba(186, 225, 255, 0.95);
       pointer-events: none;
     }
 
@@ -633,8 +626,8 @@
       flex: 0 0 14px;
     }
 
-    .chart-bar.over { background: linear-gradient(180deg, #29d17e, #15995b); }
-    .chart-bar.under { background: linear-gradient(180deg, #f46f7c, #be3a4d); }
+    .chart-bar.over { background: linear-gradient(180deg, #37f58f, #149f60); }
+    .chart-bar.under { background: linear-gradient(180deg, #ff6578, #b6203e); }
 
     .chart-label {
       position: absolute;
@@ -646,16 +639,40 @@
     }
 
     .mini-log {
-      margin-top: 8px;
+      margin-top: 6px;
       display: grid;
-      gap: 6px;
+      gap: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 2px;
     }
 
     .mini-log .log-row {
-      grid-template-columns: 1fr auto auto;
-      padding: 8px 10px;
-      font-size: 12px;
+      grid-template-columns: minmax(0, 1.4fr) minmax(78px, auto) auto auto;
+      padding: 6px 8px;
+      font-size: 11px;
       gap: 8px;
+      border-radius: 10px;
+      align-items: center;
+    }
+
+    .log-opponent {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #d9e6ff;
+    }
+
+    .log-date {
+      color: #8fa4d8;
+      font-size: 10px;
+      text-align: right;
+    }
+
+    .log-value {
+      font-weight: 700;
+      color: #f2f7ff;
     }
 
     @media (max-width: 900px) {
@@ -687,7 +704,6 @@
 </head>
 <body>
   <div class="app">
-    <h1>R6 PickFinder</h1>
 
     <div id="manualPropsCard" class="card">
       <h2>Manual Props Board</h2>
@@ -753,7 +769,6 @@
     </div>
 
     <div id="playerDetailCard" class="card section-spacing">
-      <h2>Prop Detail</h2>
       <div id="analysisSection">
         <div class="empty">Select a player after loading a team.</div>
       </div>
@@ -1426,7 +1441,6 @@
         <div class="detail-shell">
           <div class="player-detail-topbar">
             <button class="btn" onclick="closePlayerDetail()">Back</button>
-            <div class="muted">Detail</div>
           </div>
 
           <div class="detail-headline">
@@ -1454,7 +1468,6 @@
             <div class="filter-pill"><select id="opponentFilter" onchange="updateDetailFilter('opponent', this.value)"></select></div>
             <div class="filter-pill"><select id="eventFilter" onchange="updateDetailFilter('event', this.value)"></select></div>
             <div class="filter-pill"><select id="teamFilter" onchange="updateDetailFilter('team', this.value)"></select></div>
-            <button class="filter-icon-btn" title="Filters">⚙</button>
           </div>
 
           <div id="analysisOutput" class="summary-panel"></div>
@@ -1528,7 +1541,7 @@
 
       chartSection.innerHTML = `
         <div class="bars-wrap">
-          ${linePercent !== null ? `<div class="line-marker" style="bottom: calc(${linePercent}% + 24px);"></div>` : ""}
+          ${linePercent !== null ? `<div class="line-marker" style="bottom: calc(${linePercent}% + 20px);"></div>` : ""}
           ${logData.slice(0, 20).map((game, idx) => {
             const kills = Number(game.kills) || 0;
             const pct = Math.max(3, (kills / maxValue) * 100);
@@ -1545,9 +1558,10 @@
         const hit = hasLine ? game.kills > line : false;
         return `
           <div class="log-row">
-            <div>${escapeHtml(game.opponent)} • ${escapeHtml(game.map)}</div>
-            <div><strong>${game.kills}</strong></div>
-            <div class="${hasLine ? (hit ? "hit" : "miss") : "muted"}">${hasLine ? (hit ? "OVER" : "UNDER") : "No line"}</div>
+            <div class="log-opponent">${escapeHtml(game.opponent)} • ${escapeHtml(game.map)}</div>
+            <div class="log-date">${escapeHtml(game.date)}</div>
+            <div class="log-value">${game.kills}</div>
+            <div class="${hasLine ? (hit ? "hit" : "miss") : "muted"}">${hasLine ? (hit ? "OVER" : "UNDER") : "—"}</div>
           </div>
         `;
       }).join("");
