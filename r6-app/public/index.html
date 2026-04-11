@@ -122,8 +122,8 @@
 
     .props-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
+      grid-template-columns: 1fr;
+      gap: 10px;
     }
 
     .prop-card,
@@ -143,7 +143,8 @@
       background:
         radial-gradient(120% 120% at 90% 0%, rgba(53, 113, 255, 0.18), transparent 50%),
         linear-gradient(180deg, rgba(8, 22, 58, 0.98), rgba(4, 12, 35, 0.98));
-      padding: 16px;
+      padding: 11px;
+      border-radius: 14px;
     }
 
     .prop-top,
@@ -157,20 +158,21 @@
     }
 
     .player-name {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 800;
       color: #f0f5ff;
+      line-height: 1.1;
     }
 
     .line-badge {
-      min-width: 68px;
+      min-width: 62px;
       text-align: center;
-      padding: 11px 12px;
-      border-radius: 14px;
+      padding: 9px 10px;
+      border-radius: 12px;
       background: linear-gradient(135deg, rgba(39, 75, 211, 0.9), rgba(95, 54, 246, 0.9));
       border: 1px solid rgba(118, 206, 255, 0.65);
       color: #dff6ff;
-      font-size: 23px;
+      font-size: 20px;
       font-weight: 800;
       box-shadow: 0 10px 20px rgba(55, 95, 247, 0.4);
     }
@@ -332,6 +334,41 @@
 
     .hidden-section { display: none; }
 
+    .prop-line-text {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .summary-strip {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .summary-box {
+      border: 1px solid rgba(95, 133, 233, 0.3);
+      border-radius: 8px;
+      background: rgba(9, 24, 61, 0.9);
+      padding: 6px;
+      text-align: center;
+    }
+
+    .summary-key {
+      color: #9bb0df;
+      font-size: 10px;
+      margin-bottom: 2px;
+      letter-spacing: 0.02em;
+    }
+
+    .summary-value {
+      color: #e7eeff;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
     .player-detail-topbar {
       display: flex;
       justify-content: space-between;
@@ -365,6 +402,12 @@
 
       .search-result-item {
         align-items: flex-start;
+      }
+    }
+
+    @media (min-width: 901px) {
+      .props-grid {
+        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       }
     }
   </style>
@@ -476,6 +519,23 @@
     let lastAnalyzedLine = null;
 
     let teamSearchDebounce = null;
+    const bo3TeamCache = new Map();
+    const playerAnalysisCache = new Map();
+    const normalizedTeamAliasMap = {};
+    const PP_TO_BO3_TEAM_MAP = {
+      "Team Liquid": "team-liquid-1",
+      "Imperial": "imperial-esports-r6",
+      "FaZe": "faze-clan-1",
+      "Black Dragons": "black-dragons-e-sports",
+      "Fluxo W7M": "fluxo-w7m-r6",
+      "INTZ": "intz",
+      "FURIA": "furia-esports-1",
+      "LOUD": "loud-r6"
+    };
+
+    Object.entries(PP_TO_BO3_TEAM_MAP).forEach(([ppName, slug]) => {
+      normalizedTeamAliasMap[normalizeName(ppName)] = slug;
+    });
 
     window.addEventListener("DOMContentLoaded", () => {
       loadPropsBoard();
@@ -489,7 +549,8 @@
 
       try {
         const data = await fetchPrizePicksManual();
-        allProps = Array.isArray(data.props) ? data.props : [];
+        const rawProps = Array.isArray(data.props) ? data.props : [];
+        allProps = await enrichPropsWithBo3(rawProps);
         showDebug(data);
         applyPropFilters();
       } catch (err) {
@@ -523,7 +584,7 @@
 
       if (currentTeam?.name) {
         const normalizedCurrentTeam = normalizeName(currentTeam.name);
-        filtered = filtered.filter(prop => normalizeName(prop.teamName) === normalizedCurrentTeam);
+        filtered = filtered.filter(prop => normalizeName(prop.linkedTeamName || prop.teamName) === normalizedCurrentTeam);
       }
 
       if (activeStatFilter !== "all") {
@@ -554,21 +615,31 @@
           ${props.map((prop, index) => {
             const time = formatDate(prop.startTime);
             const matchup = getMatchupText(prop);
+            const linkedTeamState = prop.bo3TeamSlug ? escapeHtml(prop.linkedTeamName || prop.teamName || "Linked team") : "Team not linked";
+            const linkedPlayerState = prop.bo3Player ? escapeHtml(prop.bo3Player.nickname || prop.playerName || "Matched player") : "Player not matched";
             return `
               <div class="prop-card clickable" onclick="handlePropCardClick(${index})">
                 <div class="prop-top">
                   <div>
                     <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
-                    <div class="muted">${escapeHtml(prop.teamName || "Unknown Team")}</div>
+                    <div class="muted">${linkedTeamState}</div>
                   </div>
                   <div class="line-badge">${prop.lineScore ?? "N/A"}</div>
                 </div>
 
-                <div style="font-size:18px; font-weight:bold; margin-bottom:6px;">${escapeHtml(prop.statType || "Unknown Stat")}</div>
+                <div class="prop-line-text">${escapeHtml(prop.statType || "Unknown Stat")}</div>
 
                 <div class="muted">Matchup: ${escapeHtml(matchup)}</div>
                 <div class="muted">Time: ${escapeHtml(time)}</div>
-                <div class="muted">Description: ${escapeHtml(prop.description || "N/A")}</div>
+                <div class="muted">${linkedPlayerState}</div>
+
+                <div class="summary-strip">
+                  ${renderSummaryBox("L5", formatSummaryPercent(prop.summary?.l5HitRate))}
+                  ${renderSummaryBox("L10", formatSummaryPercent(prop.summary?.l10HitRate))}
+                  ${renderSummaryBox("L15", prop.summary?.l15HitRate === null ? "—" : formatSummaryPercent(prop.summary?.l15HitRate))}
+                  ${renderSummaryBox("AVG", formatSummaryValue(prop.summary?.average))}
+                  ${renderSummaryBox("DIFF", formatDiffValue(prop.summary?.diffVsLine))}
+                </div>
 
                 <div class="pill-row">
                   <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
@@ -586,19 +657,20 @@
       const prop = visibleProps[visibleIndex];
       if (!prop) return;
 
-      if (!currentTeam) {
-        showPropMessage("Load a BO3 team first, then click a prop to open player analysis.");
+      if (!prop.bo3TeamData) {
+        showPropMessage(`Team not linked for ${prop.playerName}.`);
         return;
       }
 
-      const matchingPlayer = findMatchingTeamPlayer(prop);
-      if (!matchingPlayer) {
-        showPropMessage(`No BO3 player match found for ${prop.playerName} on ${currentTeam.name}.`);
+      if (!prop.bo3Player) {
+        showPropMessage(`Player not matched for ${prop.playerName}.`);
         return;
       }
 
       hidePropMessage();
-      await selectPlayer(matchingPlayer.id);
+      currentTeam = prop.bo3TeamData;
+      currentPlayers = prop.bo3TeamData.players || [];
+      await selectPlayer(prop.bo3Player.id);
 
       const lineInput = document.getElementById("lineInput");
       const statSelect = document.getElementById("statSelect");
@@ -615,25 +687,6 @@
       }
 
       runAnalysis();
-    }
-
-    function findMatchingTeamPlayer(prop) {
-      if (!currentTeam?.name) return null;
-
-      const propTeam = normalizeName(prop.teamName);
-      const currentTeamName = normalizeName(currentTeam.name);
-      if (propTeam !== currentTeamName) return null;
-
-      const normalizedPropPlayer = normalizeName(prop.playerName);
-      const nicknameMatch = currentPlayers.find(player =>
-        normalizeName(player.nickname) === normalizedPropPlayer
-      );
-      if (nicknameMatch) return nicknameMatch;
-
-      return currentPlayers.find(player => {
-        const fullName = normalizeName(`${player.first_name || ""}${player.last_name || ""}`);
-        return fullName && fullName === normalizedPropPlayer;
-      }) || null;
     }
 
     function isKillsStat(statType) {
@@ -662,6 +715,7 @@
       if (prop.homeTeam && prop.awayTeam) {
         return `${prop.homeTeam} vs ${prop.awayTeam}`;
       }
+      if (prop.matchupText) return prop.matchupText;
       return "Unknown matchup";
     }
 
@@ -1001,6 +1055,10 @@
     }
 
     async function buildPlayerGameLog(playerId) {
+      if (playerAnalysisCache.has(playerId)) {
+        return playerAnalysisCache.get(playerId);
+      }
+
       const playerMatches = await fetchPlayerMatches(playerId);
       const sortedMatches = [...playerMatches].sort((a, b) => {
         const aTime = new Date(a.start_date || 0).getTime();
@@ -1059,12 +1117,14 @@
         }
       }
 
-      return logs.sort((a, b) => {
+      const sortedLogs = logs.sort((a, b) => {
         const aTime = new Date(a.matchStartDate || 0).getTime();
         const bTime = new Date(b.matchStartDate || 0).getTime();
         if (bTime !== aTime) return bTime - aTime;
         return (a.gameNumber ?? 0) - (b.gameNumber ?? 0);
       });
+      playerAnalysisCache.set(playerId, sortedLogs);
+      return sortedLogs;
     }
 
     function renderPlayerAnalysis() {
@@ -1226,8 +1286,143 @@
 
     function normalizeName(value) {
       return String(value || "")
+        .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
+    }
+
+    function renderSummaryBox(label, value) {
+      return `
+        <div class="summary-box">
+          <div class="summary-key">${label}</div>
+          <div class="summary-value">${value}</div>
+        </div>
+      `;
+    }
+
+    function formatSummaryPercent(value) {
+      if (typeof value !== "number") return "—";
+      return `${value.toFixed(0)}%`;
+    }
+
+    function formatSummaryValue(value) {
+      if (typeof value !== "number") return "—";
+      return value.toFixed(2);
+    }
+
+    function formatDiffValue(value) {
+      if (typeof value !== "number") return "—";
+      const prefix = value > 0 ? "+" : "";
+      return `${prefix}${value.toFixed(2)}`;
+    }
+
+    function resolveBo3TeamSlug(prop) {
+      const directSlug = normalizedTeamAliasMap[normalizeName(prop.teamName)];
+      if (directSlug) return directSlug;
+
+      const candidateTexts = [
+        prop.teamName,
+        prop.homeTeam,
+        prop.awayTeam,
+        prop.gameId,
+        prop.gameExternalId,
+        prop.gameMetaId,
+        prop.description,
+        prop.matchupText,
+        getMatchupText(prop)
+      ];
+
+      const normalizedCandidates = candidateTexts.map(normalizeName).filter(Boolean);
+      for (const [alias, slug] of Object.entries(normalizedTeamAliasMap)) {
+        if (normalizedCandidates.some(text => text.includes(alias))) {
+          return slug;
+        }
+      }
+
+      return null;
+    }
+
+    function matchBo3Player(propPlayerName, players) {
+      const normalizedPropPlayer = normalizeName(propPlayerName);
+      if (!normalizedPropPlayer || !Array.isArray(players)) return null;
+
+      const nicknameMatch = players.find(player => normalizeName(player.nickname) === normalizedPropPlayer);
+      if (nicknameMatch) return nicknameMatch;
+
+      return players.find(player => {
+        const fullName = normalizeName(`${player.first_name || ""} ${player.last_name || ""}`);
+        return fullName && fullName === normalizedPropPlayer;
+      }) || null;
+    }
+
+    async function getTeamBySlugCached(slug) {
+      if (!slug) return null;
+      if (bo3TeamCache.has(slug)) return bo3TeamCache.get(slug);
+      const team = await fetchTeam(slug);
+      bo3TeamCache.set(slug, team);
+      return team;
+    }
+
+    function buildSummaryFromLog(log, line) {
+      const values = (Array.isArray(log) ? log : []).map(game => game.kills);
+      if (!values.length || typeof line !== "number") {
+        return {
+          l5HitRate: null,
+          l10HitRate: null,
+          l15HitRate: null,
+          average: null,
+          diffVsLine: null
+        };
+      }
+
+      const l5 = values.slice(0, 5);
+      const l10 = values.slice(0, 10);
+      const l15 = values.slice(0, 15);
+      const average = calcAverage(values);
+
+      return {
+        l5HitRate: l5.length ? calcHitRate(l5, line) : null,
+        l10HitRate: l10.length ? calcHitRate(l10, line) : null,
+        l15HitRate: l15.length >= 15 ? calcHitRate(l15, line) : null,
+        average,
+        diffVsLine: average - line
+      };
+    }
+
+    async function enrichPropsWithBo3(props) {
+      const enriched = await Promise.all(props.map(async prop => {
+        const nextProp = { ...prop, summary: null, bo3TeamSlug: null, bo3TeamData: null, bo3Player: null, linkedTeamName: null };
+        try {
+          const bo3TeamSlug = resolveBo3TeamSlug(prop);
+          nextProp.bo3TeamSlug = bo3TeamSlug;
+          if (!bo3TeamSlug) {
+            nextProp.summary = buildSummaryFromLog([], Number.NaN);
+            return nextProp;
+          }
+
+          const team = await getTeamBySlugCached(bo3TeamSlug);
+          nextProp.bo3TeamData = team;
+          nextProp.linkedTeamName = team?.name || null;
+          const player = matchBo3Player(prop.playerName, team?.players || []);
+          nextProp.bo3Player = player;
+
+          if (!player) {
+            nextProp.summary = buildSummaryFromLog([], Number.NaN);
+            return nextProp;
+          }
+
+          const line = Number(prop.lineScore);
+          const gameLog = await buildPlayerGameLog(player.id);
+          nextProp.summary = buildSummaryFromLog(gameLog, line);
+          return nextProp;
+        } catch (err) {
+          console.error("Prop enrichment failed", prop.playerName, err);
+          nextProp.summary = buildSummaryFromLog([], Number.NaN);
+          return nextProp;
+        }
+      }));
+
+      return enriched;
     }
 
     function escapeHtml(value) {
