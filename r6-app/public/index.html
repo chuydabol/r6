@@ -95,6 +95,37 @@
       margin-bottom: 16px;
     }
 
+    .sort-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .sort-field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .sort-label {
+      font-size: 11px;
+      color: #9fb0d9;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .sort-select {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(108, 133, 224, 0.45);
+      background: rgba(10, 23, 58, 0.94);
+      color: #eaf2ff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
     .filter-chip {
       padding: 9px 15px;
       border-radius: 999px;
@@ -712,7 +743,8 @@
       }
 
       .analysis-controls,
-      .log-row {
+      .log-row,
+      .sort-row {
         grid-template-columns: 1fr;
       }
 
@@ -742,6 +774,31 @@
       <div class="toolbar">
         <button class="filter-chip active" onclick="setStatFilter('all', this)">All</button>
         <button class="filter-chip" onclick="setStatFilter('MAP 1 Kills', this)">MAP 1 Kills</button>
+      </div>
+
+      <div class="sort-row">
+        <div class="sort-field">
+          <label class="sort-label" for="sortBySelect">Sort by</label>
+          <select id="sortBySelect" class="sort-select" onchange="setPropSortBy(this.value)">
+            <option value="default">Default</option>
+            <option value="l5HitRate">L5 HR</option>
+            <option value="l10HitRate">L10 HR</option>
+            <option value="l15HitRate">L15 HR</option>
+            <option value="average">AVG</option>
+            <option value="diffVsLine">DIFF</option>
+            <option value="overProbability">Over %</option>
+            <option value="underProbability">Under %</option>
+            <option value="fairOverOdds">Fair Over Odds</option>
+            <option value="fairUnderOdds">Fair Under Odds</option>
+          </select>
+        </div>
+        <div class="sort-field">
+          <label class="sort-label" for="sortOrderSelect">Order</label>
+          <select id="sortOrderSelect" class="sort-select" onchange="setPropSortOrder(this.value)">
+            <option value="desc">Highest first</option>
+            <option value="asc">Lowest first</option>
+          </select>
+        </div>
       </div>
 
       <div id="propMessage" class="notice" style="display:none;"></div>
@@ -823,6 +880,8 @@
     let allProps = [];
     let visibleProps = [];
     let activeStatFilter = "all";
+    let propSortBy = "default";
+    let propSortOrder = "desc";
 
     let currentTeam = null;
     let currentPlayers = [];
@@ -868,7 +927,8 @@
       try {
         const data = await fetchPrizePicksManual();
         const rawProps = Array.isArray(data.props) ? data.props : [];
-        allProps = await enrichPropsWithBo3(rawProps);
+        const enrichedProps = await enrichPropsWithBo3(rawProps);
+        allProps = enrichedProps.map((prop, index) => ({ ...prop, originalOrder: index }));
         showDebug(data);
         applyPropFilters();
       } catch (err) {
@@ -896,6 +956,16 @@
       applyPropFilters();
     }
 
+    function setPropSortBy(nextSortBy) {
+      propSortBy = nextSortBy || "default";
+      applyPropFilters();
+    }
+
+    function setPropSortOrder(nextSortOrder) {
+      propSortOrder = nextSortOrder === "asc" ? "asc" : "desc";
+      applyPropFilters();
+    }
+
     function applyPropFilters() {
       const searchValue = normalizeName(playerSearch.value);
       let filtered = [...allProps];
@@ -918,8 +988,61 @@
         });
       }
 
-      visibleProps = filtered;
-      renderAllProps(filtered);
+      const sorted = sortProps(filtered);
+      visibleProps = sorted;
+      renderAllProps(sorted);
+    }
+
+    function sortProps(props) {
+      if (propSortBy === "default") {
+        return [...props].sort((a, b) => safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder));
+      }
+
+      const direction = propSortOrder === "asc" ? 1 : -1;
+      return [...props].sort((a, b) => {
+        const aValue = getPropSortValue(a, propSortBy);
+        const bValue = getPropSortValue(b, propSortBy);
+        const aMissing = !Number.isFinite(aValue);
+        const bMissing = !Number.isFinite(bValue);
+        if (aMissing && bMissing) {
+          return safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder);
+        }
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        if (aValue === bValue) {
+          return safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder);
+        }
+        return (aValue - bValue) * direction;
+      });
+    }
+
+    function getPropSortValue(prop, sortBy) {
+      const summary = prop?.summary || {};
+      const model = prop?.model || {};
+      const map = {
+        l5HitRate: safeNumeric(summary.l5HitRate),
+        l10HitRate: safeNumeric(summary.l10HitRate),
+        l15HitRate: safeNumeric(summary.l15HitRate),
+        average: safeNumeric(summary.average),
+        diffVsLine: safeNumeric(summary.diffVsLine),
+        overProbability: safeNumeric(model.overProbability),
+        underProbability: safeNumeric(model.underProbability),
+        fairOverOdds: americanOddsToImpliedProbability(model.fairOverOdds),
+        fairUnderOdds: americanOddsToImpliedProbability(model.fairUnderOdds)
+      };
+      return map[sortBy];
+    }
+
+    function safeNumeric(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : Number.NaN;
+    }
+
+    function americanOddsToImpliedProbability(odds) {
+      const normalized = safeNumeric(odds);
+      if (!Number.isFinite(normalized) || normalized === 0) return Number.NaN;
+      if (normalized > 0) return 100 / (normalized + 100);
+      return Math.abs(normalized) / (Math.abs(normalized) + 100);
     }
 
     function renderAllProps(props) {
