@@ -355,6 +355,48 @@
     }
 
     .hidden-section { display: none; }
+    .loading-overlay {
+      margin-bottom: 12px;
+      border: 1px solid rgba(108, 133, 224, 0.35);
+      border-radius: 12px;
+      background: rgba(8, 20, 50, 0.94);
+      padding: 14px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      gap: 8px;
+    }
+
+    .spinner {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 3px solid rgba(138, 163, 255, 0.25);
+      border-top-color: rgba(131, 207, 255, 0.95);
+      animation: spin 0.85s linear infinite;
+    }
+
+    .loading-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e8f0ff;
+    }
+
+    .loading-progress {
+      font-size: 16px;
+      font-weight: 800;
+      color: #9ce3ff;
+    }
+
+    .loading-sub {
+      font-size: 12px;
+      color: #a6b9e6;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
     .prop-line-text {
       font-size: 13px;
@@ -802,6 +844,7 @@
       </div>
 
       <div id="propMessage" class="notice" style="display:none;"></div>
+      <div id="feedLoading" class="loading-overlay" style="display:none;"></div>
       <div id="propsSection">
         <div class="empty">Loading props...</div>
       </div>
@@ -861,6 +904,7 @@
   <script>
     const propsSection = document.getElementById("propsSection");
     const propMessage = document.getElementById("propMessage");
+    const feedLoading = document.getElementById("feedLoading");
     const debugSection = document.getElementById("debugSection");
     const playerSearch = document.getElementById("playerSearch");
 
@@ -896,8 +940,13 @@
     let detailFilters = { opponent: "all", event: "all", team: "all" };
 
     let teamSearchDebounce = null;
+    let isFeedLoading = false;
+    let feedLoadingPercent = 0;
+    let feedLoadingMessage = "Loading props...";
+    let currentFeedLoadToken = 0;
     const bo3TeamCache = new Map();
     const playerAnalysisCache = new Map();
+    const builtPropModelCache = new Map();
     const normalizedTeamAliasMap = {};
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
@@ -920,6 +969,8 @@
     });
 
     async function loadPropsBoard() {
+      const loadToken = ++currentFeedLoadToken;
+      startFeedLoading("Loading props...", 0);
       propsSection.innerHTML = `<div class="empty">Loading manual PrizePicks props...</div>`;
       debugSection.style.display = "none";
       debugSection.textContent = "";
@@ -927,12 +978,30 @@
       try {
         const data = await fetchPrizePicksManual();
         const rawProps = Array.isArray(data.props) ? data.props : [];
-        const enrichedProps = await enrichPropsWithBo3(rawProps);
-        allProps = enrichedProps.map((prop, index) => ({ ...prop, originalOrder: index }));
-        showDebug(data);
+        if (loadToken !== currentFeedLoadToken) return;
+
+        allProps = rawProps.map((prop, index) => ({
+          ...prop,
+          originalOrder: index,
+          enrichmentStatus: "loading",
+          model: null,
+          summary: buildSummaryFromLog([], Number.NaN),
+          errorMessage: null,
+          bo3TeamSlug: null,
+          bo3TeamData: null,
+          bo3Player: null,
+          linkedTeamName: null
+        }));
         applyPropFilters();
+
+        await enrichPropsWithBo3(rawProps, loadToken);
+        if (loadToken !== currentFeedLoadToken) return;
+        finishFeedLoading("Finalizing feed...");
+        showDebug(data);
       } catch (err) {
+        if (loadToken !== currentFeedLoadToken) return;
         propsSection.innerHTML = `<div class="empty">Could not load props.</div>`;
+        stopFeedLoading();
         debugSection.style.display = "block";
         debugSection.textContent = err.message;
       }
@@ -1047,7 +1116,8 @@
 
     function renderAllProps(props) {
       if (!props.length) {
-        propsSection.innerHTML = `<div class="empty">No props found.</div>`;
+        const emptyText = allProps.length ? "No props found." : "Loading props...";
+        propsSection.innerHTML = `<div class="empty">${emptyText}</div>`;
         return;
       }
 
@@ -1086,7 +1156,7 @@
                   ${renderSummaryInline("DIFF", formatDiffValue(prop.summary?.diffVsLine))}
                 </div>
 
-                ${renderPropModelStrip(prop.model)}
+                ${renderPropModelStrip(prop)}
 
                 <div class="pill-row">
                   <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
@@ -1944,24 +2014,193 @@
     }
 
     function renderPropModelStrip(model) {
-      if (!model) return `<div class="model-strip"><span class="model-chip low-confidence"><strong>Model unavailable</strong></span></div>`;
-      const overPct = Math.round(model.overProbability * 100);
-      const underPct = Math.round(model.underProbability * 100);
-      const leanClass = model.overProbability >= model.underProbability ? "over-lean" : "under-lean";
-      const confidenceClass = model.uncertainty?.confidenceLabel === "high" ? "" : "low-confidence";
+      if (model?.enrichmentStatus === "loading") {
+        return `<div class="model-strip"><span class="model-chip"><strong>Loading model...</strong></span></div>`;
+      }
+      if (model?.enrichmentStatus === "unavailable" || !model?.model) {
+        return `<div class="model-strip"><span class="model-chip low-confidence"><strong>Model unavailable</strong></span></div>`;
+      }
+      const propModel = model.model;
+      const overPct = Math.round(propModel.overProbability * 100);
+      const underPct = Math.round(propModel.underProbability * 100);
+      const leanClass = propModel.overProbability >= propModel.underProbability ? "over-lean" : "under-lean";
+      const confidenceClass = propModel.uncertainty?.confidenceLabel === "high" ? "" : "low-confidence";
       return `
         <div class="model-strip">
           <span class="model-chip ${leanClass}">O <strong>${overPct}%</strong></span>
           <span class="summary-sep">|</span>
           <span class="model-chip ${leanClass === "over-lean" ? "under-lean" : "over-lean"}">U <strong>${underPct}%</strong></span>
           <span class="summary-sep">|</span>
-          <span class="model-chip">Fair O <strong>${formatAmericanOdds(model.fairOverOdds)}</strong></span>
+          <span class="model-chip">Fair O <strong>${formatAmericanOdds(propModel.fairOverOdds)}</strong></span>
           <span class="summary-sep">|</span>
-          <span class="model-chip">Fair U <strong>${formatAmericanOdds(model.fairUnderOdds)}</strong></span>
+          <span class="model-chip">Fair U <strong>${formatAmericanOdds(propModel.fairUnderOdds)}</strong></span>
           <span class="summary-sep">|</span>
-          <span class="model-chip ${confidenceClass}">Conf <strong>${escapeHtml(model.uncertainty?.confidenceLabel || "low")}</strong></span>
+          <span class="model-chip ${confidenceClass}">Conf <strong>${escapeHtml(propModel.uncertainty?.confidenceLabel || "low")}</strong></span>
         </div>
       `;
+    }
+
+    function startFeedLoading(message, percent) {
+      isFeedLoading = true;
+      feedLoadingMessage = message;
+      feedLoadingPercent = clamp(Math.round(percent || 0), 0, 100);
+      renderFeedLoading();
+    }
+
+    function updateFeedLoading(message, percent) {
+      if (!isFeedLoading) return;
+      feedLoadingMessage = message;
+      feedLoadingPercent = clamp(Math.round(percent || 0), 0, 100);
+      renderFeedLoading();
+    }
+
+    function finishFeedLoading(message) {
+      updateFeedLoading(message || "Finalizing feed...", 100);
+      setTimeout(() => {
+        if (feedLoadingPercent >= 100) stopFeedLoading();
+      }, 120);
+    }
+
+    function stopFeedLoading() {
+      isFeedLoading = false;
+      feedLoading.style.display = "none";
+    }
+
+    function renderFeedLoading() {
+      if (!isFeedLoading) {
+        feedLoading.style.display = "none";
+        return;
+      }
+      feedLoading.style.display = "grid";
+      feedLoading.innerHTML = `
+        <div class="spinner"></div>
+        <div class="loading-title">Building props research...</div>
+        <div class="loading-progress">${feedLoadingPercent}%</div>
+        <div class="loading-sub">${escapeHtml(feedLoadingMessage)}</div>
+      `;
+    }
+
+    function getProgressMessage(index, total, stage) {
+      if (stage === "team") return `Matching BO3 teams... (${index}/${total})`;
+      if (stage === "player") return `Matching players... (${index}/${total})`;
+      if (stage === "model") return `Building models... (${index}/${total})`;
+      return `Loading props... (${index}/${total})`;
+    }
+
+    function getModelCacheKey(playerId, statType, line) {
+      return `${playerId}::${normalizeName(statType)}::${Number(line)}`;
+    }
+
+    async function buildPropEnrichment(prop, onStage) {
+      const nextProp = {
+        ...prop,
+        summary: buildSummaryFromLog([], Number.NaN),
+        model: null,
+        enrichmentStatus: "loading",
+        errorMessage: null,
+        bo3TeamSlug: null,
+        bo3TeamData: null,
+        bo3Player: null,
+        linkedTeamName: null
+      };
+      const bo3TeamSlug = resolveBo3TeamSlug(prop);
+      onStage?.("team");
+      nextProp.bo3TeamSlug = bo3TeamSlug;
+      if (!bo3TeamSlug) {
+        nextProp.enrichmentStatus = "unavailable";
+        nextProp.errorMessage = "Team not linked";
+        return nextProp;
+      }
+
+      const team = await getTeamBySlugCached(bo3TeamSlug);
+      nextProp.bo3TeamData = team;
+      nextProp.linkedTeamName = team?.name || null;
+      onStage?.("player");
+      const player = matchBo3Player(prop.playerName, team?.players || []);
+      nextProp.bo3Player = player;
+      if (!player?.id) {
+        nextProp.enrichmentStatus = "unavailable";
+        nextProp.errorMessage = "Player not matched";
+        return nextProp;
+      }
+
+      const line = Number(prop.lineScore);
+      const cacheKey = getModelCacheKey(player.id, prop.statType, line);
+      const cachedModel = builtPropModelCache.get(cacheKey);
+      if (cachedModel?.model && cachedModel?.summary) {
+        nextProp.summary = cachedModel.summary;
+        nextProp.model = cachedModel.model;
+        nextProp.enrichmentStatus = "ready";
+        return nextProp;
+      }
+
+      onStage?.("model");
+      const gameLog = await buildPlayerGameLog(player.id);
+      const summary = buildSummaryFromLog(gameLog, line);
+      const model = buildPropModel(nextProp, gameLog);
+      if (!model) {
+        nextProp.enrichmentStatus = "unavailable";
+        nextProp.errorMessage = "Model unavailable";
+        return nextProp;
+      }
+
+      nextProp.summary = summary;
+      nextProp.model = model;
+      nextProp.enrichmentStatus = "ready";
+      builtPropModelCache.set(cacheKey, { summary, model });
+      return nextProp;
+    }
+
+    async function enrichPropsWithBo3(props, loadToken) {
+      const total = props.length;
+      if (!total) {
+        finishFeedLoading("Finalizing feed...");
+        return [];
+      }
+
+      const results = [];
+      let completed = 0;
+      for (let index = 0; index < total; index++) {
+        if (loadToken !== currentFeedLoadToken) return results;
+        const prop = props[index];
+        const baseProgress = Math.round((completed / total) * 100);
+        updateFeedLoading(getProgressMessage(completed + 1, total, "team"), baseProgress);
+
+        let enrichedProp = null;
+        try {
+          enrichedProp = await buildPropEnrichment(prop, (stage) => {
+            updateFeedLoading(getProgressMessage(completed + 1, total, stage), baseProgress);
+          });
+        } catch (err) {
+          console.error("Prop enrichment failed", prop.playerName, err);
+          const fallback = allProps[index];
+          if (fallback?.model) {
+            enrichedProp = { ...fallback, enrichmentStatus: "ready", errorMessage: null };
+          } else {
+            enrichedProp = {
+              ...prop,
+              originalOrder: index,
+              enrichmentStatus: "unavailable",
+              summary: buildSummaryFromLog([], Number.NaN),
+              model: null,
+              errorMessage: err?.message || "Enrichment failed",
+              bo3TeamSlug: fallback?.bo3TeamSlug || null,
+              bo3TeamData: fallback?.bo3TeamData || null,
+              bo3Player: fallback?.bo3Player || null,
+              linkedTeamName: fallback?.linkedTeamName || null
+            };
+          }
+        }
+
+        results.push(enrichedProp);
+        if (loadToken !== currentFeedLoadToken) return results;
+        allProps[index] = { ...enrichedProp, originalOrder: index };
+        completed += 1;
+        const progress = Math.round((completed / total) * 100);
+        updateFeedLoading(getProgressMessage(completed, total, completed === total ? "final" : "model"), progress);
+        applyPropFilters();
+      }
+      return results;
     }
 
     function renderDetailModelSummary(model) {
@@ -2116,43 +2355,6 @@
         average,
         diffVsLine: average - line
       };
-    }
-
-    async function enrichPropsWithBo3(props) {
-      const enriched = await Promise.all(props.map(async prop => {
-        const nextProp = { ...prop, summary: null, model: null, bo3TeamSlug: null, bo3TeamData: null, bo3Player: null, linkedTeamName: null };
-        try {
-          const bo3TeamSlug = resolveBo3TeamSlug(prop);
-          nextProp.bo3TeamSlug = bo3TeamSlug;
-          if (!bo3TeamSlug) {
-            nextProp.summary = buildSummaryFromLog([], Number.NaN);
-            return nextProp;
-          }
-
-          const team = await getTeamBySlugCached(bo3TeamSlug);
-          nextProp.bo3TeamData = team;
-          nextProp.linkedTeamName = team?.name || null;
-          const player = matchBo3Player(prop.playerName, team?.players || []);
-          nextProp.bo3Player = player;
-
-          if (!player) {
-            nextProp.summary = buildSummaryFromLog([], Number.NaN);
-            return nextProp;
-          }
-
-          const line = Number(prop.lineScore);
-          const gameLog = await buildPlayerGameLog(player.id);
-          nextProp.summary = buildSummaryFromLog(gameLog, line);
-          nextProp.model = buildPropModel(nextProp, gameLog);
-          return nextProp;
-        } catch (err) {
-          console.error("Prop enrichment failed", prop.playerName, err);
-          nextProp.summary = buildSummaryFromLog([], Number.NaN);
-          return nextProp;
-        }
-      }));
-
-      return enriched;
     }
 
     function escapeHtml(value) {
