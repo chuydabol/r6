@@ -228,8 +228,11 @@ app.get("/api/prizepicks/manual", (req, res) => {
         status: attrs.status || gameAttrs.status || "unknown",
         projectionType: attrs.projection_type || "Unknown",
         durationName: duration?.attributes?.name || "",
+        gameExternalId: gameAttrs.external_game_id || "",
+        gameMetaId: gameMeta.game_id || "",
         homeTeam: teams.home?.abbreviation || "",
-        awayTeam: teams.away?.abbreviation || ""
+        awayTeam: teams.away?.abbreviation || "",
+        matchupText: `${teams.home?.abbreviation || ""} vs ${teams.away?.abbreviation || ""}`.trim()
       };
     });
 
