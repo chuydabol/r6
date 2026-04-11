@@ -345,6 +345,32 @@
       color: #cddbff;
     }
 
+    .model-strip {
+      margin-top: 6px;
+      padding: 5px 7px;
+      border: 1px solid rgba(105, 138, 231, 0.35);
+      border-radius: 8px;
+      background: rgba(8, 22, 57, 0.88);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .model-chip {
+      color: #c9d8ff;
+      white-space: nowrap;
+    }
+
+    .model-chip strong {
+      color: #eef4ff;
+    }
+
+    .model-chip.over-lean strong { color: #52e69b; }
+    .model-chip.under-lean strong { color: #ff7f8f; }
+    .model-chip.low-confidence strong { color: #b5bfd9; }
+
     .summary-entry {
       white-space: nowrap;
     }
@@ -937,6 +963,8 @@
                   ${renderSummaryInline("DIFF", formatDiffValue(prop.summary?.diffVsLine))}
                 </div>
 
+                ${renderPropModelStrip(prop.model)}
+
                 <div class="pill-row">
                   <span class="pill">${escapeHtml(prop.projectionType || "Projection")}</span>
                   <span class="pill">${escapeHtml(prop.status || "unknown")}</span>
@@ -1471,6 +1499,7 @@
           </div>
 
           <div id="analysisOutput" class="summary-panel"></div>
+          <div id="modelSummary" class="model-strip"></div>
 
           <div class="chart-shell">
             <div id="analysisChart"></div>
@@ -1495,11 +1524,13 @@
 
       if (Number.isNaN(line)) {
         document.getElementById("analysisOutput").innerHTML = `<div class="summary-cell"><div class="summary-main">Enter valid line</div></div>`;
+        document.getElementById("modelSummary").innerHTML = `<span class="model-chip low-confidence"><strong>Model unavailable</strong></span>`;
         return;
       }
 
       if (!filteredLog.length) {
         document.getElementById("analysisOutput").innerHTML = `<div class="summary-cell"><div class="summary-main">No games</div></div>`;
+        document.getElementById("modelSummary").innerHTML = `<span class="model-chip low-confidence"><strong>Model unavailable</strong></span>`;
         document.getElementById("analysisChart").innerHTML = `<div class="empty">No chart data for this filter selection.</div>`;
         document.getElementById("analysisGameLog").innerHTML = "";
         return;
@@ -1519,6 +1550,11 @@
         ${renderSummaryCell("L15", l15, line)}
         ${renderSummaryCell("H2H", h2hGames, line, true)}
       `;
+      const model = buildPropModel(
+        { ...selectedPropContext, lineScore: line },
+        filteredLog
+      );
+      document.getElementById("modelSummary").innerHTML = renderDetailModelSummary(model);
 
       syncLineDisplay(line);
       renderGameLog(line, filteredLog);
@@ -1654,6 +1690,183 @@
       return odds ?? "N/A";
     }
 
+    function mean(values) {
+      const nums = (Array.isArray(values) ? values : []).filter(Number.isFinite);
+      if (!nums.length) return null;
+      return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+    }
+
+    function stdDev(values) {
+      const nums = (Array.isArray(values) ? values : []).filter(Number.isFinite);
+      if (nums.length < 2) return null;
+      const avg = mean(nums);
+      const variance = nums.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / nums.length;
+      return Math.sqrt(variance);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function probabilityToAmerican(prob) {
+      const p = clamp(Number(prob) || 0, 0.001, 0.999);
+      if (p >= 0.5) return -Math.round((p / (1 - p)) * 100);
+      return Math.round(((1 - p) / p) * 100);
+    }
+
+    function proportionStandardError(p, n) {
+      if (!Number.isFinite(p) || !Number.isFinite(n) || n <= 0) return null;
+      return Math.sqrt((p * (1 - p)) / n);
+    }
+
+    function confidenceInterval95(p, n) {
+      const se = proportionStandardError(p, n);
+      if (!Number.isFinite(se)) return { se: null, ciLow: null, ciHigh: null };
+      const margin = 1.96 * se;
+      return {
+        se,
+        ciLow: clamp(p - margin, 0, 1),
+        ciHigh: clamp(p + margin, 0, 1)
+      };
+    }
+
+    function normalCDF(x) {
+      if (!Number.isFinite(x)) return 0.5;
+      const t = 1 / (1 + 0.2316419 * Math.abs(x));
+      const d = 0.3989423 * Math.exp(-x * x / 2);
+      let prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+      prob = 1 - prob;
+      return x >= 0 ? prob : 1 - prob;
+    }
+
+    function getRecentDistributionAdjustment(values, line) {
+      const recent = (Array.isArray(values) ? values : []).slice(0, 10).filter(Number.isFinite);
+      if (!recent.length || !Number.isFinite(line)) return 0;
+      const aboveCount = recent.filter(v => v > line).length;
+      const belowCount = recent.filter(v => v < line).length;
+      const overEdge = (aboveCount - belowCount) / recent.length;
+      const nearLine = recent.filter(v => Math.abs(v - line) <= 1).length;
+      const clusteredAway = 1 - (nearLine / recent.length);
+      const adjustment = overEdge * 0.06 * clamp(clusteredAway, 0.2, 1);
+      return clamp(adjustment, -0.06, 0.06);
+    }
+
+    function getConfidenceLabel(sampleSize, variationRatio) {
+      let label = "high";
+      if (sampleSize < 5) label = "very low";
+      else if (sampleSize < 10) label = "low";
+      else if (sampleSize < 20) label = "medium";
+      if (variationRatio > 2) label = "very low";
+      else if (variationRatio > 1.5 && label !== "very low") label = "low";
+      else if (variationRatio > 1.2 && label === "high") label = "medium";
+      return label;
+    }
+
+    function buildPropModel(prop, playerGameLog) {
+      const values = (Array.isArray(playerGameLog) ? playerGameLog : []).map(g => Number(g.kills)).filter(Number.isFinite);
+      const line = Number(prop?.lineScore);
+      if (!values.length || !Number.isFinite(line)) return null;
+
+      const l5 = values.slice(0, 5);
+      const l10 = values.slice(0, 10);
+      const l15 = values.slice(0, 15);
+      const components = [
+        { weight: 0.4, avg: mean(l5) },
+        { weight: 0.35, avg: mean(l10) },
+        { weight: 0.25, avg: mean(l15) }
+      ].filter(item => Number.isFinite(item.avg));
+      if (!components.length) return null;
+      const totalWeight = components.reduce((sum, item) => sum + item.weight, 0);
+      let projection = components.reduce((sum, item) => sum + (item.avg * (item.weight / totalWeight)), 0);
+
+      if (Number.isFinite(mean(l10))) {
+        projection += ((mean(l5) || projection) - mean(l10)) * 0.15;
+      }
+
+      let sigma = stdDev(values);
+      sigma = Number.isFinite(sigma) ? Math.max(sigma, 1) : 1;
+
+      let overProbability = 1 - normalCDF((line - projection) / sigma);
+      overProbability += getRecentDistributionAdjustment(values, line);
+
+      const favoriteTeamId = prop?.bo3Matchup?.favoriteTeamId;
+      const playerTeamId = prop?.bo3Player?.current_team_id || prop?.bo3Player?.team_id;
+      const blowoutRisk = Number(prop?.bo3Matchup?.blowoutRisk || 0);
+      if (blowoutRisk > 0.7 && favoriteTeamId && playerTeamId && favoriteTeamId !== playerTeamId) {
+        overProbability -= 0.03;
+      } else if (blowoutRisk > 0.7) {
+        overProbability -= 0.01;
+      }
+
+      overProbability = clamp(overProbability, 0.05, 0.95);
+      const underProbability = clamp(1 - overProbability, 0.05, 0.95);
+
+      const ci = confidenceInterval95(overProbability, values.length);
+      const variationRatio = sigma / Math.max(Math.abs(line), 1);
+      return {
+        sampleSize: values.length,
+        projection: Number(projection.toFixed(2)),
+        stdDev: Number(sigma.toFixed(2)),
+        overProbability: Number(overProbability.toFixed(4)),
+        underProbability: Number(underProbability.toFixed(4)),
+        fairOverOdds: probabilityToAmerican(overProbability),
+        fairUnderOdds: probabilityToAmerican(underProbability),
+        uncertainty: {
+          se: ci.se === null ? null : Number(ci.se.toFixed(4)),
+          ciLow: ci.ciLow === null ? null : Number(ci.ciLow.toFixed(4)),
+          ciHigh: ci.ciHigh === null ? null : Number(ci.ciHigh.toFixed(4)),
+          confidenceLabel: getConfidenceLabel(values.length, variationRatio)
+        }
+      };
+    }
+
+    function renderPropModelStrip(model) {
+      if (!model) return `<div class="model-strip"><span class="model-chip low-confidence"><strong>Model unavailable</strong></span></div>`;
+      const overPct = Math.round(model.overProbability * 100);
+      const underPct = Math.round(model.underProbability * 100);
+      const leanClass = model.overProbability >= model.underProbability ? "over-lean" : "under-lean";
+      const confidenceClass = model.uncertainty?.confidenceLabel === "high" ? "" : "low-confidence";
+      return `
+        <div class="model-strip">
+          <span class="model-chip ${leanClass}">O <strong>${overPct}%</strong></span>
+          <span class="summary-sep">|</span>
+          <span class="model-chip ${leanClass === "over-lean" ? "under-lean" : "over-lean"}">U <strong>${underPct}%</strong></span>
+          <span class="summary-sep">|</span>
+          <span class="model-chip">Fair O <strong>${formatAmericanOdds(model.fairOverOdds)}</strong></span>
+          <span class="summary-sep">|</span>
+          <span class="model-chip">Fair U <strong>${formatAmericanOdds(model.fairUnderOdds)}</strong></span>
+          <span class="summary-sep">|</span>
+          <span class="model-chip ${confidenceClass}">Conf <strong>${escapeHtml(model.uncertainty?.confidenceLabel || "low")}</strong></span>
+        </div>
+      `;
+    }
+
+    function renderDetailModelSummary(model) {
+      if (!model) {
+        return `<span class="model-chip low-confidence"><strong>Model unavailable</strong></span>`;
+      }
+      return `
+        <span class="model-chip">Proj <strong>${model.projection}</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip ${model.overProbability >= model.underProbability ? "over-lean" : ""}">O% <strong>${Math.round(model.overProbability * 100)}%</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip ${model.underProbability > model.overProbability ? "under-lean" : ""}">U% <strong>${Math.round(model.underProbability * 100)}%</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip">Fair O <strong>${formatAmericanOdds(model.fairOverOdds)}</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip">Fair U <strong>${formatAmericanOdds(model.fairUnderOdds)}</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip ${model.uncertainty?.confidenceLabel === "high" ? "" : "low-confidence"}">Conf <strong>${escapeHtml(model.uncertainty?.confidenceLabel || "low")}</strong></span>
+        <span class="summary-sep">|</span>
+        <span class="model-chip">N <strong>${model.sampleSize}</strong></span>
+      `;
+    }
+
+    function formatAmericanOdds(value) {
+      if (!Number.isFinite(value)) return "N/A";
+      return value > 0 ? `+${value}` : `${value}`;
+    }
+
     function calcAverage(arr) {
       if (!arr.length) return 0;
       return arr.reduce((sum, value) => sum + value, 0) / arr.length;
@@ -1784,7 +1997,7 @@
 
     async function enrichPropsWithBo3(props) {
       const enriched = await Promise.all(props.map(async prop => {
-        const nextProp = { ...prop, summary: null, bo3TeamSlug: null, bo3TeamData: null, bo3Player: null, linkedTeamName: null };
+        const nextProp = { ...prop, summary: null, model: null, bo3TeamSlug: null, bo3TeamData: null, bo3Player: null, linkedTeamName: null };
         try {
           const bo3TeamSlug = resolveBo3TeamSlug(prop);
           nextProp.bo3TeamSlug = bo3TeamSlug;
@@ -1807,6 +2020,7 @@
           const line = Number(prop.lineScore);
           const gameLog = await buildPlayerGameLog(player.id);
           nextProp.summary = buildSummaryFromLog(gameLog, line);
+          nextProp.model = buildPropModel(nextProp, gameLog);
           return nextProp;
         } catch (err) {
           console.error("Prop enrichment failed", prop.playerName, err);
