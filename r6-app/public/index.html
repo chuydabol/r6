@@ -195,7 +195,7 @@
 
     .odds-controls {
       display: grid;
-      grid-template-columns: 1fr 1fr auto;
+      grid-template-columns: 1fr 1fr 1fr auto;
       gap: 8px;
       margin-bottom: 12px;
     }
@@ -970,7 +970,15 @@
           <option value="player_points_rebounds_assists">player_points_rebounds_assists</option>
           <option value="player_fantasy_points">player_fantasy_points</option>
         </select>
+        <select id="oddsViewModeSelect" onchange="setOddsViewMode(this.value)">
+          <option value="consensus">Consensus View</option>
+          <option value="book">Book View</option>
+        </select>
         <button class="btn" onclick="loadOddsComparison()">Load</button>
+      </div>
+
+      <div id="oddsSummary" class="muted" style="margin-bottom:10px;">
+        Events loaded: 0 • Raw book props: 0 • Consensus props: 0 • Unique books: 0
       </div>
 
       <div class="sort-row">
@@ -978,11 +986,6 @@
           <label class="sort-label" for="oddsSortBySelect">Sort by</label>
           <select id="oddsSortBySelect" class="sort-select" onchange="setOddsSortBy(this.value)">
             <option value="default">Default</option>
-            <option value="fairOverProbability">Fair Over %</option>
-            <option value="fairUnderProbability">Fair Under %</option>
-            <option value="line">Line</option>
-            <option value="playerName">Player Name</option>
-            <option value="bookmakerTitle">Bookmaker</option>
           </select>
         </div>
         <div class="sort-field">
@@ -1027,8 +1030,10 @@
     const viewBtnOdds = document.getElementById("viewBtnOdds");
     const oddsSportSelect = document.getElementById("oddsSportSelect");
     const oddsMarketSelect = document.getElementById("oddsMarketSelect");
+    const oddsViewModeSelect = document.getElementById("oddsViewModeSelect");
     const oddsSortBySelect = document.getElementById("oddsSortBySelect");
     const oddsSortOrderSelect = document.getElementById("oddsSortOrderSelect");
+    const oddsSummary = document.getElementById("oddsSummary");
     const oddsResultsSection = document.getElementById("oddsResultsSection");
     const oddsLoading = document.getElementById("oddsLoading");
     const oddsMessage = document.getElementById("oddsMessage");
@@ -1061,11 +1066,34 @@
     const builtPropModelCache = new Map();
     const normalizedTeamAliasMap = {};
     let appView = "r6Props";
-    let oddsProps = [];
+    let oddsBookProps = [];
+    let oddsConsensusProps = [];
     let oddsVisibleProps = [];
+    let oddsViewMode = "consensus";
     let oddsSortBy = "default";
     let oddsSortOrder = "desc";
     let isOddsLoading = false;
+    let oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [] };
+    const ODDS_SORT_OPTIONS = {
+      consensus: [
+        { value: "default", label: "Default" },
+        { value: "booksCount", label: "Books Count" },
+        { value: "consensusOverProbability", label: "Consensus Fair Over %" },
+        { value: "consensusUnderProbability", label: "Consensus Fair Under %" },
+        { value: "line", label: "Line" },
+        { value: "playerName", label: "Player Name" },
+        { value: "bestOverPrice", label: "Best Over Price" },
+        { value: "bestUnderPrice", label: "Best Under Price" }
+      ],
+      book: [
+        { value: "default", label: "Default" },
+        { value: "bookmakerTitle", label: "Bookmaker" },
+        { value: "fairOverProbability", label: "Fair Over %" },
+        { value: "fairUnderProbability", label: "Fair Under %" },
+        { value: "line", label: "Line" },
+        { value: "playerName", label: "Player Name" }
+      ]
+    };
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
       "Imperial": "imperial-esports-r6",
@@ -1086,8 +1114,10 @@
       playerSearch.addEventListener("input", applyPropFilters);
       oddsSportSelect.value = "basketball_nba";
       oddsMarketSelect.value = "player_points";
+      oddsViewModeSelect.value = "consensus";
       oddsSortBySelect.value = "default";
       oddsSortOrderSelect.value = "desc";
+      syncOddsSortOptions();
       renderCurrentView();
     });
 
@@ -1319,15 +1349,30 @@
         if (!res.ok) {
           throw new Error(data.message || data.error || "Failed to load sportsbook props");
         }
-        updateOddsLoading("Grouping props...");
-        oddsProps = Array.isArray(data.props) ? data.props.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
+        updateOddsLoading("Loading event props...");
+        updateOddsLoading("Building book props...");
+        oddsBookProps = Array.isArray(data.bookProps) ? data.bookProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
+        updateOddsLoading("Building consensus comparison...");
+        oddsConsensusProps = Array.isArray(data.consensusProps) ? data.consensusProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
+        oddsSummaryData = {
+          eventCount: Number(data.eventCount) || 0,
+          rawOutcomeCount: Number(data.rawOutcomeCount) || 0,
+          bookPropsCount: Number(data.bookPropsCount) || 0,
+          consensusCount: Number(data.consensusCount) || 0,
+          uniqueBooks: Array.isArray(data.uniqueBooks) ? data.uniqueBooks : []
+        };
+        renderOddsSummary();
+        updateOddsLoading("Finalizing results...");
         applyOddsSorting();
-        if (!oddsProps.length) {
+        if (!oddsBookProps.length && !oddsConsensusProps.length) {
           oddsResultsSection.innerHTML = `<div class="empty">No props found.</div>`;
         }
       } catch (error) {
-        oddsProps = [];
+        oddsBookProps = [];
+        oddsConsensusProps = [];
         oddsVisibleProps = [];
+        oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [] };
+        renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
         oddsMessage.style.display = "block";
         oddsMessage.textContent = error.message || "Failed to load sportsbook props";
@@ -1341,13 +1386,40 @@
       applyOddsSorting();
     }
 
+    function setOddsViewMode(value) {
+      oddsViewMode = value === "book" ? "book" : "consensus";
+      syncOddsSortOptions();
+      applyOddsSorting();
+    }
+
+    function syncOddsSortOptions() {
+      const options = ODDS_SORT_OPTIONS[oddsViewMode] || ODDS_SORT_OPTIONS.consensus;
+      const allowedValues = new Set(options.map(option => option.value));
+      oddsSortBySelect.innerHTML = options
+        .map(option => `<option value="${option.value}">${option.label}</option>`)
+        .join("");
+      if (!allowedValues.has(oddsSortBy)) {
+        oddsSortBy = "default";
+      }
+      oddsSortBySelect.value = oddsSortBy;
+    }
+
+    function renderOddsSummary() {
+      const books = oddsSummaryData.uniqueBooks || [];
+      const booksText = books.length
+        ? `${books.length} (${books.slice(0, 5).join(", ")}${books.length > 5 ? ", ..." : ""})`
+        : "0";
+      oddsSummary.textContent = `Events loaded: ${oddsSummaryData.eventCount} • Raw book props: ${oddsSummaryData.bookPropsCount} • Consensus props: ${oddsSummaryData.consensusCount} • Unique books: ${booksText}`;
+    }
+
     function setOddsSortOrder(value) {
       oddsSortOrder = value === "asc" ? "asc" : "desc";
       applyOddsSorting();
     }
 
     function applyOddsSorting() {
-      oddsVisibleProps = sortOddsProps(oddsProps);
+      const sourceRows = oddsViewMode === "book" ? oddsBookProps : oddsConsensusProps;
+      oddsVisibleProps = sortOddsProps(sourceRows);
       renderOddsProps(oddsVisibleProps);
     }
 
@@ -1383,6 +1455,11 @@
       const map = {
         fairOverProbability: safeNumeric(prop.fairOverProbability),
         fairUnderProbability: safeNumeric(prop.fairUnderProbability),
+        consensusOverProbability: safeNumeric(prop.consensus?.overProbability),
+        consensusUnderProbability: safeNumeric(prop.consensus?.underProbability),
+        booksCount: safeNumeric(prop.booksCount),
+        bestOverPrice: safeNumeric(prop.bestOverBook?.price),
+        bestUnderPrice: safeNumeric(prop.bestUnderBook?.price),
         line: safeNumeric(prop.line)
       };
       return map[sortBy];
@@ -1391,6 +1468,28 @@
     function renderOddsProps(rows) {
       if (!rows.length) {
         oddsResultsSection.innerHTML = `<div class="empty">No props found.</div>`;
+        return;
+      }
+      if (oddsViewMode === "book") {
+        oddsResultsSection.innerHTML = `
+          <div class="props-grid">
+            ${rows.map(prop => `
+              <div class="odds-card">
+                <div class="prop-top">
+                  <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                  <div class="line-badge">${Number.isFinite(prop.line) ? prop.line : "N/A"}</div>
+                </div>
+                <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+                <div class="odds-meta">${escapeHtml(prop.bookmakerTitle || "Unknown Bookmaker")} • ${escapeHtml(formatDate(prop.commenceTime))}</div>
+                <div class="odds-lines">
+                  <div>O ${escapeHtml(formatAmericanOdds(prop.overOdds))} • U ${escapeHtml(formatAmericanOdds(prop.underOdds))}</div>
+                  <div>Fair O ${formatProbabilityPercent(prop.fairOverProbability)} • Fair U ${formatProbabilityPercent(prop.fairUnderProbability)}</div>
+                  <div>Fair O odds ${escapeHtml(formatAmericanOdds(prop.fairOverOdds))} • Fair U odds ${escapeHtml(formatAmericanOdds(prop.fairUnderOdds))}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
         return;
       }
       oddsResultsSection.innerHTML = `
@@ -1402,11 +1501,13 @@
                 <div class="line-badge">${Number.isFinite(prop.line) ? prop.line : "N/A"}</div>
               </div>
               <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
-              <div class="odds-meta">${escapeHtml(prop.bookmakerTitle || "Unknown Bookmaker")} • ${escapeHtml(formatDate(prop.commenceTime))}</div>
+              <div class="odds-meta">${escapeHtml(formatDate(prop.commenceTime))}</div>
               <div class="odds-lines">
-                <div>O ${escapeHtml(formatAmericanOdds(prop.overOdds))} • U ${escapeHtml(formatAmericanOdds(prop.underOdds))}</div>
-                <div>Fair O ${formatProbabilityPercent(prop.fairOverProbability)} • Fair U ${formatProbabilityPercent(prop.fairUnderProbability)}</div>
-                <div>Fair O odds ${escapeHtml(formatAmericanOdds(prop.fairOverOdds))} • Fair U odds ${escapeHtml(formatAmericanOdds(prop.fairUnderOdds))}</div>
+                <div>Books: ${safeNumeric(prop.booksCount) || 0}${prop.books?.length ? ` (${escapeHtml(prop.books.map(book => book.bookmakerTitle).slice(0, 4).join(", "))}${prop.books.length > 4 ? ", ..." : ""})` : ""}</div>
+                <div>Consensus O ${formatProbabilityPercent(prop.consensus?.overProbability)} • U ${formatProbabilityPercent(prop.consensus?.underProbability)}</div>
+                <div>Consensus Fair O ${escapeHtml(formatAmericanOdds(prop.consensus?.fairOverOdds))} • Fair U ${escapeHtml(formatAmericanOdds(prop.consensus?.fairUnderOdds))}</div>
+                <div>Best Over: ${escapeHtml(prop.bestOverBook?.bookmakerTitle || "N/A")} ${escapeHtml(formatAmericanOdds(prop.bestOverBook?.price))}</div>
+                <div>Best Under: ${escapeHtml(prop.bestUnderBook?.bookmakerTitle || "N/A")} ${escapeHtml(formatAmericanOdds(prop.bestUnderBook?.price))}</div>
               </div>
             </div>
           `).join("")}

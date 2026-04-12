@@ -314,13 +314,13 @@ function normalizeOddsOutcomes(sport, event, eventOddsData) {
   return rows;
 }
 
-function groupOddsOutcomes(normalizedRows) {
+function buildBookLevelProps(normalizedRows) {
   const grouped = new Map();
   normalizedRows.forEach(row => {
     const key = [
       row.sport,
       row.eventId,
-      row.bookmakerTitle,
+      row.bookmakerKey,
       row.marketKey,
       row.playerName,
       row.line
@@ -347,9 +347,15 @@ function groupOddsOutcomes(normalizedRows) {
   });
 
   return Array.from(grouped.values()).map(entry => {
+    if (!Number.isFinite(entry.overOdds) || !Number.isFinite(entry.underOdds)) {
+      return null;
+    }
     const impliedOverProbability = americanOddsToImpliedProbability(entry.overOdds);
     const impliedUnderProbability = americanOddsToImpliedProbability(entry.underOdds);
     const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
+    if (!Number.isFinite(fair.fairOver) || !Number.isFinite(fair.fairUnder)) {
+      return null;
+    }
     return {
       ...entry,
       impliedOverProbability,
@@ -358,6 +364,99 @@ function groupOddsOutcomes(normalizedRows) {
       fairUnderProbability: fair.fairUnder,
       fairOverOdds: probabilityToAmericanOdds(fair.fairOver),
       fairUnderOdds: probabilityToAmericanOdds(fair.fairUnder)
+    };
+  }).filter(Boolean);
+}
+
+function buildConsensusProps(bookProps) {
+  const grouped = new Map();
+
+  bookProps.forEach(prop => {
+    const key = [
+      prop.sport,
+      prop.eventId,
+      prop.marketKey,
+      prop.playerName,
+      prop.line
+    ].join("|");
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        sport: prop.sport,
+        eventId: prop.eventId,
+        commenceTime: prop.commenceTime,
+        homeTeam: prop.homeTeam,
+        awayTeam: prop.awayTeam,
+        marketKey: prop.marketKey,
+        playerName: prop.playerName,
+        line: prop.line,
+        books: []
+      });
+    }
+    const group = grouped.get(key);
+    group.books.push({
+      bookmakerKey: prop.bookmakerKey,
+      bookmakerTitle: prop.bookmakerTitle,
+      overOdds: prop.overOdds,
+      underOdds: prop.underOdds,
+      fairOverProbability: prop.fairOverProbability,
+      fairUnderProbability: prop.fairUnderProbability,
+      fairOverOdds: prop.fairOverOdds,
+      fairUnderOdds: prop.fairUnderOdds
+    });
+  });
+
+  return Array.from(grouped.values()).map(group => {
+    const validBooks = group.books.filter(book =>
+      Number.isFinite(book?.overOdds) &&
+      Number.isFinite(book?.underOdds) &&
+      Number.isFinite(book?.fairOverProbability) &&
+      Number.isFinite(book?.fairUnderProbability)
+    );
+
+    const overProbability =
+      validBooks.reduce((sum, book) => sum + book.fairOverProbability, 0) / (validBooks.length || 1);
+    const underProbability =
+      validBooks.reduce((sum, book) => sum + book.fairUnderProbability, 0) / (validBooks.length || 1);
+    const consensusOver = validBooks.length ? overProbability : null;
+    const consensusUnder = validBooks.length ? underProbability : null;
+
+    const bestOverBook = validBooks.reduce((best, book) => {
+      if (!best) return book;
+      return book.overOdds > best.overOdds ? book : best;
+    }, null);
+
+    const bestUnderBook = validBooks.reduce((best, book) => {
+      if (!best) return book;
+      return book.underOdds > best.underOdds ? book : best;
+    }, null);
+
+    return {
+      sport: group.sport,
+      eventId: group.eventId,
+      commenceTime: group.commenceTime,
+      homeTeam: group.homeTeam,
+      awayTeam: group.awayTeam,
+      marketKey: group.marketKey,
+      playerName: group.playerName,
+      line: group.line,
+      books: validBooks,
+      booksCount: validBooks.length,
+      consensus: {
+        overProbability: consensusOver,
+        underProbability: consensusUnder,
+        fairOverOdds: probabilityToAmericanOdds(consensusOver),
+        fairUnderOdds: probabilityToAmericanOdds(consensusUnder)
+      },
+      bestOverBook: bestOverBook ? {
+        bookmakerKey: bestOverBook.bookmakerKey,
+        bookmakerTitle: bestOverBook.bookmakerTitle,
+        price: bestOverBook.overOdds
+      } : null,
+      bestUnderBook: bestUnderBook ? {
+        bookmakerKey: bestUnderBook.bookmakerKey,
+        bookmakerTitle: bestUnderBook.bookmakerTitle,
+        price: bestUnderBook.underOdds
+      } : null
     };
   });
 }
@@ -409,14 +508,23 @@ app.get("/api/odds-comparison", async (req, res) => {
       }
     }
 
-    const groupedProps = groupOddsOutcomes(allRows);
+    const bookProps = buildBookLevelProps(allRows);
+    const consensusProps = buildConsensusProps(bookProps);
+    const uniqueBookTitles = Array.from(
+      new Set(bookProps.map(prop => prop.bookmakerTitle).filter(Boolean))
+    );
+
     res.json({
       sport,
       markets,
       eventCount: safeEvents.length,
-      normalizedCount: allRows.length,
-      groupedCount: groupedProps.length,
-      props: groupedProps
+      rawOutcomeCount: allRows.length,
+      bookPropsCount: bookProps.length,
+      consensusCount: consensusProps.length,
+      uniqueBooksCount: uniqueBookTitles.length,
+      uniqueBooks: uniqueBookTitles,
+      bookProps,
+      consensusProps
     });
   } catch (error) {
     console.error("ODDS COMPARISON ERROR:", error);
