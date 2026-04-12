@@ -1974,6 +1974,8 @@
       for (const match of dedupedFinishedMatches) {
         const statsData = await fetchMatchPlayerStats(match.id);
         const games = Array.isArray(statsData) ? statsData : [];
+        const playerGames = [];
+        let matchOpponentName = "Unknown";
 
         for (const game of games) {
           const playerRow = (game.r6siege_game_players || []).find(
@@ -1991,23 +1993,49 @@
                   ? match.team1?.name || "Unknown"
                   : "Unknown";
           }
+          matchOpponentName = opponentName;
 
-          logs.push({
-            matchId: match.id,
-            matchSlug: match.slug,
-            matchStartDate: match.start_date || null,
-            date: formatDate(match.start_date),
-            opponent: opponentName,
+          playerGames.push({
             map: game.r6siege_map?.name?.trim() || "Unknown",
-            gameNumber: game.game_number,
-            kills: playerRow.kills ?? 0,
-            deaths: playerRow.death ?? 0,
-            firstKill: playerRow.first_kill ?? 0,
-            firstDeath: playerRow.first_death ?? 0,
-            kost: playerRow.kost ?? null,
-            headshotPercent: playerRow.headshots_percent ?? null
+            gameNumber: Number(game.game_number) || 0,
+            kills: Number(playerRow.kills) || 0,
+            deaths: Number(playerRow.death) || 0,
+            firstKill: Number(playerRow.first_kill) || 0,
+            firstDeath: Number(playerRow.first_death) || 0,
+            kost: Number.isFinite(Number(playerRow.kost)) ? Number(playerRow.kost) : null,
+            headshotPercent: Number.isFinite(Number(playerRow.headshots_percent)) ? Number(playerRow.headshots_percent) : null
           });
         }
+
+        if (!playerGames.length) continue;
+
+        const firstTwoGames = [...playerGames]
+          .sort((a, b) => (a.gameNumber || 0) - (b.gameNumber || 0))
+          .slice(0, 2);
+
+        const mapLabel =
+          firstTwoGames.length >= 2
+            ? `Map 1-2 (${firstTwoGames.map(g => g.map).join(" + ")})`
+            : `Map 1 (${firstTwoGames[0]?.map || "Unknown"})`;
+
+        const kostValues = firstTwoGames.map(game => game.kost).filter(Number.isFinite);
+        const hsValues = firstTwoGames.map(game => game.headshotPercent).filter(Number.isFinite);
+
+        logs.push({
+          matchId: match.id,
+          matchSlug: match.slug,
+          matchStartDate: match.start_date || null,
+          date: formatDate(match.start_date),
+          opponent: matchOpponentName,
+          map: mapLabel,
+          gameNumber: firstTwoGames[0]?.gameNumber || 1,
+          kills: firstTwoGames.reduce((sum, game) => sum + game.kills, 0),
+          deaths: firstTwoGames.reduce((sum, game) => sum + game.deaths, 0),
+          firstKill: firstTwoGames.reduce((sum, game) => sum + game.firstKill, 0),
+          firstDeath: firstTwoGames.reduce((sum, game) => sum + game.firstDeath, 0),
+          kost: kostValues.length ? kostValues.reduce((sum, v) => sum + v, 0) / kostValues.length : null,
+          headshotPercent: hsValues.length ? hsValues.reduce((sum, v) => sum + v, 0) / hsValues.length : null
+        });
       }
 
       const sortedLogs = logs.sort((a, b) => {
