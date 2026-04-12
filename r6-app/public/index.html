@@ -2013,10 +2013,9 @@
           .sort((a, b) => (a.gameNumber || 0) - (b.gameNumber || 0))
           .slice(0, 2);
 
-        const mapLabel =
-          firstTwoGames.length >= 2
-            ? `Map 1-2 (${firstTwoGames.map(g => g.map).join(" + ")})`
-            : `Map 1 (${firstTwoGames[0]?.map || "Unknown"})`;
+        if (firstTwoGames.length < 2) continue;
+
+        const mapLabel = `Map 1-2 (${firstTwoGames.map(g => g.map).join(" + ")})`;
 
         const kostValues = firstTwoGames.map(game => game.kost).filter(Number.isFinite);
         const hsValues = firstTwoGames.map(game => game.headshotPercent).filter(Number.isFinite);
