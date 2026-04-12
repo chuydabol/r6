@@ -4,6 +4,8 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+const ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4";
+const ODDS_API_KEY = process.env.ODDS_API_KEY;
 
 app.use(express.static("public"));
 
@@ -245,6 +247,181 @@ app.get("/api/prizepicks/manual", (req, res) => {
     console.error("MANUAL PRIZEPICKS ERROR:", error);
     res.status(500).json({
       error: "Failed to read manual PrizePicks data",
+      message: error.message
+    });
+  }
+});
+
+function americanOddsToImpliedProbability(odds) {
+  const parsed = Number(odds);
+  if (!Number.isFinite(parsed) || parsed === 0) return null;
+  if (parsed < 0) return Math.abs(parsed) / (Math.abs(parsed) + 100);
+  return 100 / (parsed + 100);
+}
+
+function removeVigFromTwoWayMarket(impliedOver, impliedUnder) {
+  if (!Number.isFinite(impliedOver) || !Number.isFinite(impliedUnder)) {
+    return { fairOver: null, fairUnder: null };
+  }
+  const total = impliedOver + impliedUnder;
+  if (!Number.isFinite(total) || total <= 0) {
+    return { fairOver: null, fairUnder: null };
+  }
+  return {
+    fairOver: impliedOver / total,
+    fairUnder: impliedUnder / total
+  };
+}
+
+function probabilityToAmericanOdds(probability) {
+  const parsed = Number(probability);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed >= 1) return null;
+  if (parsed >= 0.5) return -Math.round((parsed / (1 - parsed)) * 100);
+  return Math.round(((1 - parsed) / parsed) * 100);
+}
+
+function normalizeOddsOutcomes(sport, event, eventOddsData) {
+  const bookmakers = Array.isArray(eventOddsData?.bookmakers) ? eventOddsData.bookmakers : [];
+  const rows = [];
+  bookmakers.forEach(bookmaker => {
+    const markets = Array.isArray(bookmaker?.markets) ? bookmaker.markets : [];
+    markets.forEach(market => {
+      const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
+      outcomes.forEach(outcome => {
+        const playerName = String(outcome?.description || outcome?.name || "").trim();
+        const side = String(outcome?.name || "").trim();
+        const line = Number(outcome?.point);
+        const odds = Number(outcome?.price);
+        if (!playerName || (side !== "Over" && side !== "Under")) return;
+        if (!Number.isFinite(line) || !Number.isFinite(odds)) return;
+        rows.push({
+          sport,
+          eventId: event.id,
+          commenceTime: event.commence_time || null,
+          homeTeam: event.home_team || "",
+          awayTeam: event.away_team || "",
+          bookmakerKey: bookmaker?.key || "",
+          bookmakerTitle: bookmaker?.title || "Unknown Bookmaker",
+          marketKey: market?.key || "",
+          playerName,
+          side,
+          line,
+          odds
+        });
+      });
+    });
+  });
+  return rows;
+}
+
+function groupOddsOutcomes(normalizedRows) {
+  const grouped = new Map();
+  normalizedRows.forEach(row => {
+    const key = [
+      row.sport,
+      row.eventId,
+      row.bookmakerTitle,
+      row.marketKey,
+      row.playerName,
+      row.line
+    ].join("|");
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        sport: row.sport,
+        eventId: row.eventId,
+        commenceTime: row.commenceTime,
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        bookmakerKey: row.bookmakerKey,
+        bookmakerTitle: row.bookmakerTitle,
+        marketKey: row.marketKey,
+        playerName: row.playerName,
+        line: row.line,
+        overOdds: null,
+        underOdds: null
+      });
+    }
+    const entry = grouped.get(key);
+    if (row.side === "Over") entry.overOdds = row.odds;
+    if (row.side === "Under") entry.underOdds = row.odds;
+  });
+
+  return Array.from(grouped.values()).map(entry => {
+    const impliedOverProbability = americanOddsToImpliedProbability(entry.overOdds);
+    const impliedUnderProbability = americanOddsToImpliedProbability(entry.underOdds);
+    const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
+    return {
+      ...entry,
+      impliedOverProbability,
+      impliedUnderProbability,
+      fairOverProbability: fair.fairOver,
+      fairUnderProbability: fair.fairUnder,
+      fairOverOdds: probabilityToAmericanOdds(fair.fairOver),
+      fairUnderOdds: probabilityToAmericanOdds(fair.fairUnder)
+    };
+  });
+}
+
+app.get("/api/odds-comparison", async (req, res) => {
+  const sport = String(req.query.sport || "basketball_nba");
+  const markets = String(req.query.markets || "player_points");
+
+  if (!ODDS_API_KEY) {
+    return res.status(500).json({ error: "ODDS_API_KEY is not configured on the server." });
+  }
+
+  try {
+    const eventsUrl = new URL(`${ODDS_API_BASE_URL}/sports/${encodeURIComponent(sport)}/odds`);
+    eventsUrl.searchParams.set("apiKey", ODDS_API_KEY);
+    eventsUrl.searchParams.set("regions", "us");
+    eventsUrl.searchParams.set("oddsFormat", "american");
+
+    const eventsResponse = await fetch(eventsUrl.toString());
+    if (!eventsResponse.ok) {
+      const errorText = await eventsResponse.text();
+      return res.status(eventsResponse.status).json({
+        error: "Failed to load events from Odds API",
+        message: errorText
+      });
+    }
+    const events = await eventsResponse.json();
+    const safeEvents = Array.isArray(events) ? events : [];
+
+    const allRows = [];
+    for (const event of safeEvents) {
+      if (!event?.id) continue;
+      const eventUrl = new URL(`${ODDS_API_BASE_URL}/sports/${encodeURIComponent(sport)}/events/${encodeURIComponent(event.id)}/odds`);
+      eventUrl.searchParams.set("apiKey", ODDS_API_KEY);
+      eventUrl.searchParams.set("regions", "us");
+      eventUrl.searchParams.set("oddsFormat", "american");
+      eventUrl.searchParams.set("markets", markets);
+
+      try {
+        const eventResponse = await fetch(eventUrl.toString());
+        if (!eventResponse.ok) {
+          continue;
+        }
+        const eventOddsData = await eventResponse.json();
+        const normalizedRows = normalizeOddsOutcomes(sport, event, eventOddsData);
+        allRows.push(...normalizedRows);
+      } catch (eventError) {
+        console.error("ODDS EVENT ERROR:", event?.id, eventError?.message || eventError);
+      }
+    }
+
+    const groupedProps = groupOddsOutcomes(allRows);
+    res.json({
+      sport,
+      markets,
+      eventCount: safeEvents.length,
+      normalizedCount: allRows.length,
+      groupedCount: groupedProps.length,
+      props: groupedProps
+    });
+  } catch (error) {
+    console.error("ODDS COMPARISON ERROR:", error);
+    res.status(500).json({
+      error: "Failed to load sportsbook props",
       message: error.message
     });
   }
