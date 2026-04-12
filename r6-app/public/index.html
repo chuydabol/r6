@@ -52,6 +52,28 @@
       align-items: center;
     }
 
+    .view-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .view-btn {
+      border: 1px solid rgba(115, 140, 226, 0.4);
+      background: rgba(18, 31, 72, 0.88);
+      color: #dce8ff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .view-btn.active {
+      background: linear-gradient(135deg, #385ffe, #6638ff);
+      border-color: rgba(122, 196, 255, 0.95);
+    }
+
     .search-box,
     select,
     input {
@@ -150,6 +172,7 @@
     }
 
     .prop-card,
+    .odds-card,
     .player-item,
     .match-item,
     .stat-box,
@@ -168,6 +191,31 @@
         linear-gradient(180deg, rgba(8, 22, 58, 0.98), rgba(4, 12, 35, 0.98));
       padding: 8px;
       border-radius: 12px;
+    }
+
+    .odds-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .odds-card {
+      padding: 10px;
+      border-radius: 12px;
+    }
+
+    .odds-meta {
+      font-size: 12px;
+      color: #a7b9e6;
+      margin-top: 4px;
+    }
+
+    .odds-lines {
+      margin-top: 8px;
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
     }
 
     .prop-top,
@@ -785,6 +833,7 @@
       }
 
       .analysis-controls,
+      .odds-controls,
       .log-row,
       .sort-row {
         grid-template-columns: 1fr;
@@ -804,7 +853,12 @@
 </head>
 <body>
   <div class="app">
+    <div class="view-nav">
+      <button id="viewBtnR6" class="view-btn active" onclick="setAppView('r6Props')">R6 Props</button>
+      <button id="viewBtnOdds" class="view-btn" onclick="setAppView('oddsComparison')">Odds Comparison</button>
+    </div>
 
+    <div id="r6View">
     <div id="manualPropsCard" class="card">
       <h2>Manual Props Board</h2>
 
@@ -899,6 +953,53 @@
         <div class="empty">Select a player after loading a team.</div>
       </div>
     </div>
+    </div>
+
+    <div id="oddsComparisonView" class="card hidden-section">
+      <h2>Odds Comparison</h2>
+      <div class="odds-controls">
+        <select id="oddsSportSelect">
+          <option value="basketball_nba">NBA</option>
+          <option value="basketball_wnba">WNBA</option>
+          <option value="basketball_ncaab">NCAAB</option>
+        </select>
+        <select id="oddsMarketSelect">
+          <option value="player_points">player_points</option>
+          <option value="player_rebounds">player_rebounds</option>
+          <option value="player_assists">player_assists</option>
+          <option value="player_points_rebounds_assists">player_points_rebounds_assists</option>
+          <option value="player_fantasy_points">player_fantasy_points</option>
+        </select>
+        <button class="btn" onclick="loadOddsComparison()">Load</button>
+      </div>
+
+      <div class="sort-row">
+        <div class="sort-field">
+          <label class="sort-label" for="oddsSortBySelect">Sort by</label>
+          <select id="oddsSortBySelect" class="sort-select" onchange="setOddsSortBy(this.value)">
+            <option value="default">Default</option>
+            <option value="fairOverProbability">Fair Over %</option>
+            <option value="fairUnderProbability">Fair Under %</option>
+            <option value="line">Line</option>
+            <option value="playerName">Player Name</option>
+            <option value="bookmakerTitle">Bookmaker</option>
+          </select>
+        </div>
+        <div class="sort-field">
+          <label class="sort-label" for="oddsSortOrderSelect">Order</label>
+          <select id="oddsSortOrderSelect" class="sort-select" onchange="setOddsSortOrder(this.value)">
+            <option value="desc">Highest first</option>
+            <option value="asc">Lowest first</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="oddsMessage" class="notice" style="display:none;"></div>
+      <div id="oddsLoading" class="loading-overlay" style="display:none;"></div>
+      <div id="oddsResultsSection">
+        <div class="empty">Load sportsbook props to begin.</div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -920,6 +1021,17 @@
     const teamResearchCard = document.getElementById("teamResearchCard");
     const matchDetailsCard = document.getElementById("matchDetailsCard");
     const playerDetailCard = document.getElementById("playerDetailCard");
+    const r6View = document.getElementById("r6View");
+    const oddsComparisonView = document.getElementById("oddsComparisonView");
+    const viewBtnR6 = document.getElementById("viewBtnR6");
+    const viewBtnOdds = document.getElementById("viewBtnOdds");
+    const oddsSportSelect = document.getElementById("oddsSportSelect");
+    const oddsMarketSelect = document.getElementById("oddsMarketSelect");
+    const oddsSortBySelect = document.getElementById("oddsSortBySelect");
+    const oddsSortOrderSelect = document.getElementById("oddsSortOrderSelect");
+    const oddsResultsSection = document.getElementById("oddsResultsSection");
+    const oddsLoading = document.getElementById("oddsLoading");
+    const oddsMessage = document.getElementById("oddsMessage");
 
     let allProps = [];
     let visibleProps = [];
@@ -948,6 +1060,12 @@
     const playerAnalysisCache = new Map();
     const builtPropModelCache = new Map();
     const normalizedTeamAliasMap = {};
+    let appView = "r6Props";
+    let oddsProps = [];
+    let oddsVisibleProps = [];
+    let oddsSortBy = "default";
+    let oddsSortOrder = "desc";
+    let isOddsLoading = false;
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
       "Imperial": "imperial-esports-r6",
@@ -966,7 +1084,25 @@
     window.addEventListener("DOMContentLoaded", () => {
       loadPropsBoard();
       playerSearch.addEventListener("input", applyPropFilters);
+      oddsSportSelect.value = "basketball_nba";
+      oddsMarketSelect.value = "player_points";
+      oddsSortBySelect.value = "default";
+      oddsSortOrderSelect.value = "desc";
+      renderCurrentView();
     });
+
+    function setAppView(nextView) {
+      appView = nextView === "oddsComparison" ? "oddsComparison" : "r6Props";
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      const isOddsView = appView === "oddsComparison";
+      r6View.classList.toggle("hidden-section", isOddsView);
+      oddsComparisonView.classList.toggle("hidden-section", !isOddsView);
+      viewBtnR6.classList.toggle("active", !isOddsView);
+      viewBtnOdds.classList.toggle("active", isOddsView);
+    }
 
     async function loadPropsBoard() {
       const loadToken = ++currentFeedLoadToken;
@@ -1169,6 +1305,137 @@
           }).join("")}
         </div>
       `;
+    }
+
+    async function loadOddsComparison() {
+      const sport = oddsSportSelect.value || "basketball_nba";
+      const markets = oddsMarketSelect.value || "player_points";
+      startOddsLoading("Loading events...");
+      oddsMessage.style.display = "none";
+
+      try {
+        const res = await fetch(`/api/odds-comparison?sport=${encodeURIComponent(sport)}&markets=${encodeURIComponent(markets)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || data.error || "Failed to load sportsbook props");
+        }
+        updateOddsLoading("Grouping props...");
+        oddsProps = Array.isArray(data.props) ? data.props.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
+        applyOddsSorting();
+        if (!oddsProps.length) {
+          oddsResultsSection.innerHTML = `<div class="empty">No props found.</div>`;
+        }
+      } catch (error) {
+        oddsProps = [];
+        oddsVisibleProps = [];
+        oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
+        oddsMessage.style.display = "block";
+        oddsMessage.textContent = error.message || "Failed to load sportsbook props";
+      } finally {
+        stopOddsLoading();
+      }
+    }
+
+    function setOddsSortBy(value) {
+      oddsSortBy = value || "default";
+      applyOddsSorting();
+    }
+
+    function setOddsSortOrder(value) {
+      oddsSortOrder = value === "asc" ? "asc" : "desc";
+      applyOddsSorting();
+    }
+
+    function applyOddsSorting() {
+      oddsVisibleProps = sortOddsProps(oddsProps);
+      renderOddsProps(oddsVisibleProps);
+    }
+
+    function sortOddsProps(rows) {
+      if (oddsSortBy === "default") {
+        return [...rows].sort((a, b) => safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder));
+      }
+      const direction = oddsSortOrder === "asc" ? 1 : -1;
+      return [...rows].sort((a, b) => {
+        const aValue = getOddsSortValue(a, oddsSortBy);
+        const bValue = getOddsSortValue(b, oddsSortBy);
+        const isTextSort = oddsSortBy === "playerName" || oddsSortBy === "bookmakerTitle";
+
+        if (isTextSort) {
+          const compared = String(aValue).localeCompare(String(bValue));
+          if (compared === 0) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
+          return compared * direction;
+        }
+
+        const aMissing = !Number.isFinite(aValue);
+        const bMissing = !Number.isFinite(bValue);
+        if (aMissing && bMissing) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        if (aValue === bValue) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
+        return (aValue - bValue) * direction;
+      });
+    }
+
+    function getOddsSortValue(prop, sortBy) {
+      if (sortBy === "playerName") return normalizeName(prop.playerName || "");
+      if (sortBy === "bookmakerTitle") return normalizeName(prop.bookmakerTitle || "");
+      const map = {
+        fairOverProbability: safeNumeric(prop.fairOverProbability),
+        fairUnderProbability: safeNumeric(prop.fairUnderProbability),
+        line: safeNumeric(prop.line)
+      };
+      return map[sortBy];
+    }
+
+    function renderOddsProps(rows) {
+      if (!rows.length) {
+        oddsResultsSection.innerHTML = `<div class="empty">No props found.</div>`;
+        return;
+      }
+      oddsResultsSection.innerHTML = `
+        <div class="props-grid">
+          ${rows.map(prop => `
+            <div class="odds-card">
+              <div class="prop-top">
+                <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                <div class="line-badge">${Number.isFinite(prop.line) ? prop.line : "N/A"}</div>
+              </div>
+              <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+              <div class="odds-meta">${escapeHtml(prop.bookmakerTitle || "Unknown Bookmaker")} • ${escapeHtml(formatDate(prop.commenceTime))}</div>
+              <div class="odds-lines">
+                <div>O ${escapeHtml(formatAmericanOdds(prop.overOdds))} • U ${escapeHtml(formatAmericanOdds(prop.underOdds))}</div>
+                <div>Fair O ${formatProbabilityPercent(prop.fairOverProbability)} • Fair U ${formatProbabilityPercent(prop.fairUnderProbability)}</div>
+                <div>Fair O odds ${escapeHtml(formatAmericanOdds(prop.fairOverOdds))} • Fair U odds ${escapeHtml(formatAmericanOdds(prop.fairUnderOdds))}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function startOddsLoading(message) {
+      isOddsLoading = true;
+      oddsLoading.style.display = "grid";
+      oddsLoading.innerHTML = `
+        <div class="spinner"></div>
+        <div class="loading-title">Loading sportsbook props...</div>
+        <div class="loading-sub">${escapeHtml(message || "Loading...")}</div>
+      `;
+    }
+
+    function updateOddsLoading(message) {
+      if (!isOddsLoading) return;
+      oddsLoading.innerHTML = `
+        <div class="spinner"></div>
+        <div class="loading-title">Loading sportsbook props...</div>
+        <div class="loading-sub">${escapeHtml(message || "Loading...")}</div>
+      `;
+    }
+
+    function stopOddsLoading() {
+      isOddsLoading = false;
+      oddsLoading.style.display = "none";
     }
 
     async function handlePropCardClick(visibleIndex) {
@@ -2282,6 +2549,12 @@
       if (typeof value !== "number") return "—";
       const prefix = value > 0 ? "+" : "";
       return `${prefix}${value.toFixed(2)}`;
+    }
+
+    function formatProbabilityPercent(value) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return `${Math.round(numeric * 100)}%`;
     }
 
     function resolveBo3TeamSlug(prop) {
