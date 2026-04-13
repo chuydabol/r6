@@ -195,14 +195,62 @@
 
     .odds-controls {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr auto;
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
+    }
+
+    .odds-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .odds-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .timestamp-pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(115, 140, 226, 0.35);
+      background: rgba(10, 23, 58, 0.75);
+      color: #cddbff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .switch-wrap {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      color: #a7b9e6;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .switch-wrap input {
+      min-width: 0;
+      width: 16px;
+      height: 16px;
+      padding: 0;
     }
 
     .odds-card {
       padding: 9px 10px;
       border-radius: 12px;
+    }
+
+    .board-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 10px;
     }
 
     .odds-meta {
@@ -216,6 +264,18 @@
       display: grid;
       gap: 3px;
       font-size: 12px;
+    }
+
+    .confidence-pill {
+      margin-top: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(114, 173, 255, 0.4);
+      color: #dce8ff;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      background: rgba(17, 35, 80, 0.85);
     }
 
     .odds-row {
@@ -1051,7 +1111,17 @@
     </div>
 
     <div id="oddsComparisonView" class="card hidden-section">
-      <h2>Odds Comparison</h2>
+      <h2>PrizePicks Prop Comparison Board</h2>
+      <div class="odds-topbar">
+        <div id="oddsLastUpdated" class="timestamp-pill">Last updated: Never</div>
+        <div class="odds-actions">
+          <button class="btn" onclick="loadOddsComparison()">Refresh Board</button>
+          <label class="switch-wrap" title="Reserved for future rollout">
+            <input type="checkbox" id="oddsAutoRefreshToggle" disabled />
+            Auto-refresh (off)
+          </label>
+        </div>
+      </div>
       <div class="odds-controls">
         <select id="oddsLeagueSelect">
           <option value="NBA">NBA</option>
@@ -1079,7 +1149,6 @@
         <select id="oddsBookmakerFilterSelect" onchange="setOddsBookmakerFilter(this.value)">
           <option value="all">All Bookmakers</option>
         </select>
-        <button class="btn" onclick="loadOddsComparison()">Load</button>
       </div>
 
       <div id="oddsSummary" class="muted" style="margin-bottom:10px;">
@@ -1144,6 +1213,7 @@
     const oddsResultsSection = document.getElementById("oddsResultsSection");
     const oddsLoading = document.getElementById("oddsLoading");
     const oddsMessage = document.getElementById("oddsMessage");
+    const oddsLastUpdated = document.getElementById("oddsLastUpdated");
 
     let allProps = [];
     let visibleProps = [];
@@ -1182,6 +1252,7 @@
     let oddsBookmakerFilter = "all";
     let oddsSortBy = "biggestEdge";
     let oddsSortOrder = "desc";
+    let oddsLastUpdatedAt = null;
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
     let oddsFilterDebug = { selectedMarket: "all", groupedBeforeFilter: 0, groupedAfterFilter: 0 };
@@ -1250,6 +1321,7 @@
       oddsBookmakerFilterSelect.value = "all";
       oddsSortBySelect.value = "biggestEdge";
       oddsSortOrderSelect.value = "desc";
+      oddsLastUpdated.textContent = "Last updated: Never";
       syncOddsSortOptions();
       syncOddsBookmakerFilterOptions();
       renderCurrentView();
@@ -1508,6 +1580,7 @@
           sentParams: data?.debug?.sentParams || null,
           eventsReturned: Number(data?.debug?.eventsReturned) || 0
         };
+        oddsLastUpdatedAt = Date.now();
 
         syncOddsBookmakerFilterOptions();
         renderOddsSummary();
@@ -1523,6 +1596,7 @@
         oddsAlternateGroups = [];
         oddsVisibleProps = [];
         oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode, sentParams: null, eventsReturned: 0 };
+        oddsLastUpdatedAt = Date.now();
         syncOddsBookmakerFilterOptions();
         renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
@@ -1615,6 +1689,7 @@
         : "0";
       const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
       oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Consensus props: ${oddsFilterDebug.groupedAfterFilter} • Unique bookmakers: ${booksText}`;
+      oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
     function setOddsSortOrder(value) {
@@ -1711,24 +1786,12 @@
       }
 
       oddsResultsSection.innerHTML = `
-        <div class="props-grid">
+        <div class="board-grid">
           ${rows.map(prop => {
             const lineGap = computeLineGap(prop);
             const leanInfo = getLeanInfo(lineGap);
+            const confidence = getConfidenceLabel(lineGap);
             const marketLabel = prop.displayMarketLabel || getStatTypeLabel(prop.statID, prop.marketKey);
-            if (prop.prizepicksDebug) {
-              console.debug("[odds-debug]", prop.playerName, {
-                ppSupported: prop.ppSupported,
-                ppRaw: prop.ppRaw,
-                ppPaired: prop.ppPaired,
-                ppGrouped: prop.ppGrouped,
-                parsedStatID: prop.parsedStatID,
-                parsedPeriodID: prop.parsedPeriodID,
-                marketKey: prop.marketKey,
-                statID: prop.statID,
-                details: prop.prizepicksDebug
-              });
-            }
             return `
             <div class="odds-card">
               <div class="prop-top">
@@ -1741,11 +1804,12 @@
                 <div class="odds-row"><span class="odds-row-key">Market</span><span class="odds-row-value">${escapeHtml(marketLabel)}</span></div>
                 <div class="odds-row"><span class="odds-row-key">Matchup</span><span class="odds-row-value">${escapeHtml(prop.matchup || getMatchupText(prop))}</span></div>
                 <div class="odds-row"><span class="odds-row-key">PrizePicks</span><span class="odds-row-value">${Number.isFinite(prop.prizepicks?.line) ? Number(prop.prizepicks.line).toFixed(1) : "N/A"}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Consensus</span><span class="odds-row-value">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Market Line</span><span class="odds-row-value">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</span></div>
                 <div class="odds-row"><span class="odds-row-key">Gap</span><span class="odds-row-value">${Number.isFinite(lineGap) ? lineGap.toFixed(1) : "N/A"}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Books</span><span class="odds-row-value">${renderBookmakerLineSummary(prop.books || [])}</span></div>
               </div>
               <div class="lean-badge ${leanInfo.className}">Lean: ${leanInfo.label}</div>
-              <div class="alt-opportunity">Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
+              <div class="confidence-pill">Confidence: ${confidence}</div>
             </div>
           `;
           }).join("")}
@@ -1811,7 +1875,7 @@
       oddsLoading.style.display = "grid";
       oddsLoading.innerHTML = `
         <div class="spinner"></div>
-        <div class="loading-title">Loading sportsbook props...</div>
+        <div class="loading-title">Loading prop board...</div>
         <div class="loading-sub">${escapeHtml(message || "Loading events...")}</div>
       `;
     }
@@ -1820,9 +1884,39 @@
       if (!isOddsLoading) return;
       oddsLoading.innerHTML = `
         <div class="spinner"></div>
-        <div class="loading-title">Loading sportsbook props...</div>
+        <div class="loading-title">Loading prop board...</div>
         <div class="loading-sub">${escapeHtml(message || "Loading events...")}</div>
       `;
+    }
+
+    function renderBookmakerLineSummary(books) {
+      if (!Array.isArray(books) || !books.length) return "N/A";
+      const normalized = books
+        .map(book => ({
+          id: String(book?.bookmakerID || "").trim().toLowerCase(),
+          title: String(book?.bookmakerTitle || book?.bookmakerID || "Book")
+        }))
+        .filter(book => book.id)
+        .sort((a, b) => a.title.localeCompare(b.title));
+      const uniqueTitles = [...new Set(normalized.map(book => book.title))];
+      if (!uniqueTitles.length) return "N/A";
+      if (uniqueTitles.length <= 2) return uniqueTitles.join(", ");
+      return `${uniqueTitles.slice(0, 2).join(", ")} +${uniqueTitles.length - 2}`;
+    }
+
+    function getConfidenceLabel(lineGap) {
+      const gap = Math.abs(safeNumeric(lineGap));
+      if (!Number.isFinite(gap)) return "Low";
+      if (gap >= 1.5) return "High";
+      if (gap >= 0.75) return "Medium";
+      return "Low";
+    }
+
+    function formatLastUpdated(value) {
+      if (!value) return "Never";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Never";
+      return date.toLocaleString();
     }
 
     function stopOddsLoading() {
