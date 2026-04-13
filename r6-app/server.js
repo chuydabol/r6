@@ -280,6 +280,21 @@ function probabilityToAmericanOdds(probability) {
   return Math.round(((1 - parsed) / parsed) * 100);
 }
 
+const ALTERNATE_PROP_MARKETS = new Set([
+  "player_points_alternate",
+  "player_rebounds_alternate",
+  "player_assists_alternate",
+  "player_blocks_alternate",
+  "player_steals_alternate",
+  "player_turnovers_alternate",
+  "player_threes_alternate",
+  "player_points_assists_alternate",
+  "player_points_rebounds_alternate",
+  "player_rebounds_assists_alternate",
+  "player_points_rebounds_assists_alternate",
+  "player_fantasy_points_alternate"
+]);
+
 function normalizeOddsOutcomes(sport, event, eventOddsData) {
   const bookmakers = Array.isArray(eventOddsData?.bookmakers) ? eventOddsData.bookmakers : [];
   const rows = [];
@@ -461,9 +476,130 @@ function buildConsensusProps(bookProps) {
   });
 }
 
+function buildAlternateBookProps(normalizedRows) {
+  const grouped = new Map();
+  normalizedRows.forEach(row => {
+    const key = [
+      row.sport,
+      row.eventId,
+      row.marketKey,
+      row.playerName,
+      row.bookmakerKey
+    ].join("|");
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        sport: row.sport,
+        eventId: row.eventId,
+        commenceTime: row.commenceTime,
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        marketKey: row.marketKey,
+        playerName: row.playerName,
+        bookmakerKey: row.bookmakerKey,
+        bookmakerTitle: row.bookmakerTitle,
+        linesMap: new Map()
+      });
+    }
+    const group = grouped.get(key);
+    if (!group.linesMap.has(row.line)) {
+      group.linesMap.set(row.line, { line: row.line, overOdds: null, underOdds: null });
+    }
+    const lineEntry = group.linesMap.get(row.line);
+    if (row.side === "Over") lineEntry.overOdds = row.odds;
+    if (row.side === "Under") lineEntry.underOdds = row.odds;
+  });
+
+  return Array.from(grouped.values()).map(group => {
+    const lines = Array.from(group.linesMap.values())
+      .sort((a, b) => a.line - b.line)
+      .map(line => {
+        const impliedOverProbability = americanOddsToImpliedProbability(line.overOdds);
+        const impliedUnderProbability = americanOddsToImpliedProbability(line.underOdds);
+        const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
+        const fairOverProbability = Number.isFinite(fair.fairOver) ? fair.fairOver : null;
+        const fairUnderProbability = Number.isFinite(fair.fairUnder) ? fair.fairUnder : null;
+        return {
+          line: line.line,
+          overOdds: Number.isFinite(line.overOdds) ? line.overOdds : null,
+          underOdds: Number.isFinite(line.underOdds) ? line.underOdds : null,
+          impliedOverProbability,
+          impliedUnderProbability,
+          fairOverProbability,
+          fairUnderProbability,
+          fairOverOdds: probabilityToAmericanOdds(fairOverProbability),
+          fairUnderOdds: probabilityToAmericanOdds(fairUnderProbability)
+        };
+      });
+
+    return {
+      sport: group.sport,
+      eventId: group.eventId,
+      commenceTime: group.commenceTime,
+      homeTeam: group.homeTeam,
+      awayTeam: group.awayTeam,
+      marketKey: group.marketKey,
+      playerName: group.playerName,
+      bookmakerKey: group.bookmakerKey,
+      bookmakerTitle: group.bookmakerTitle,
+      lines,
+      lineCount: lines.length
+    };
+  });
+}
+
+function buildAlternateConsensusProps(alternateBookProps) {
+  const grouped = new Map();
+  alternateBookProps.forEach(prop => {
+    const key = [prop.sport, prop.eventId, prop.marketKey, prop.playerName].join("|");
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        sport: prop.sport,
+        eventId: prop.eventId,
+        commenceTime: prop.commenceTime,
+        homeTeam: prop.homeTeam,
+        awayTeam: prop.awayTeam,
+        marketKey: prop.marketKey,
+        playerName: prop.playerName,
+        books: []
+      });
+    }
+    grouped.get(key).books.push({
+      bookmakerKey: prop.bookmakerKey,
+      bookmakerTitle: prop.bookmakerTitle,
+      lines: prop.lines
+    });
+  });
+
+  return Array.from(grouped.values()).map(group => {
+    const availableLines = new Set();
+    group.books.forEach(book => {
+      (book.lines || []).forEach(line => {
+        if (Number.isFinite(line?.line)) availableLines.add(line.line);
+      });
+    });
+    const sortedAvailableLines = Array.from(availableLines).sort((a, b) => a - b);
+    return {
+      ...group,
+      booksCount: group.books.length,
+      availableLines: sortedAvailableLines,
+      lineCount: sortedAvailableLines.length,
+      prizePicksReady: {
+        comparableLines: sortedAvailableLines
+      }
+    };
+  });
+}
+
 app.get("/api/odds-comparison", async (req, res) => {
   const sport = String(req.query.sport || "basketball_nba");
   const markets = String(req.query.markets || "player_points");
+  const mode = String(req.query.mode || "standard") === "alternate" ? "alternate" : "standard";
+  const isAlternateMode = mode === "alternate";
+  const marketList = markets
+    .split(",")
+    .map(market => market.trim())
+    .filter(Boolean);
+  const shouldUseAlternateBuilders = isAlternateMode || marketList.some(market => ALTERNATE_PROP_MARKETS.has(market));
 
   if (!ODDS_API_KEY) {
     return res.status(500).json({ error: "ODDS_API_KEY is not configured on the server." });
@@ -508,14 +644,15 @@ app.get("/api/odds-comparison", async (req, res) => {
       }
     }
 
-    const bookProps = buildBookLevelProps(allRows);
-    const consensusProps = buildConsensusProps(bookProps);
+    const bookProps = shouldUseAlternateBuilders ? buildAlternateBookProps(allRows) : buildBookLevelProps(allRows);
+    const consensusProps = shouldUseAlternateBuilders ? buildAlternateConsensusProps(bookProps) : buildConsensusProps(bookProps);
     const uniqueBookTitles = Array.from(
       new Set(bookProps.map(prop => prop.bookmakerTitle).filter(Boolean))
     );
 
     res.json({
       sport,
+      mode: shouldUseAlternateBuilders ? "alternate" : "standard",
       markets,
       eventCount: safeEvents.length,
       rawOutcomeCount: allRows.length,
