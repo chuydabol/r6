@@ -282,10 +282,25 @@ function probabilityToAmericanOdds(probability) {
 
 const NON_PLAYER_ENTITIES = new Set(["all", "home", "away"]);
 const PLAYER_SIDE_MAP = { over: "over", under: "under" };
+const SUPPORTED_LEAGUE_IDS = new Set([
+  "NBA",
+  "NFL",
+  "MLB",
+  "NHL",
+  "EPL",
+  "UEFA_CHAMPIONS_LEAGUE",
+  "NCAAB",
+  "NCAAF"
+]);
 const LEAGUE_ALIAS_MAP = {
   NBA: ["NBA"],
-  WNBA: ["WNBA"],
-  NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"]
+  NFL: ["NFL"],
+  MLB: ["MLB"],
+  NHL: ["NHL"],
+  EPL: ["EPL"],
+  UEFA_CHAMPIONS_LEAGUE: ["UEFA_CHAMPIONS_LEAGUE"],
+  NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"],
+  NCAAF: ["NCAAF", "NCAA_FOOTBALL"]
 };
 const STAT_ALIAS_MAP = {
   points: ["points", "pts", "player_points"],
@@ -298,9 +313,9 @@ const STAT_ALIAS_MAP = {
 function normalizeLeagueID(value) {
   const target = String(value || "NBA").trim().toUpperCase();
   if (target === "BASKETBALL_NBA") return "NBA";
-  if (target === "BASKETBALL_WNBA") return "WNBA";
   if (target === "BASKETBALL_NCAAB") return "NCAAB";
-  return ["NBA", "WNBA", "NCAAB"].includes(target) ? target : "NBA";
+  if (!target) return "NBA";
+  return SUPPORTED_LEAGUE_IDS.has(target) ? target : null;
 }
 
 function matchesLeague(eventLeague, selectedLeague) {
@@ -664,6 +679,9 @@ function normalizeSportsGameOddsResponse(events, options) {
 
 app.get("/api/odds-comparison", async (req, res) => {
   const leagueID = normalizeLeagueID(req.query.leagueID || "NBA");
+  if (!leagueID) {
+    return res.status(400).json({ error: "Unsupported league for current SportsGameOdds setup" });
+  }
   const marketMode = String(req.query.marketMode || "standard") === "alternate" ? "alternate" : "standard";
   const statIDs = String(req.query.statIDs || "");
   const includeAltLines = String(req.query.includeAltLines || "true") !== "false";
