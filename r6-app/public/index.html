@@ -1587,14 +1587,17 @@
                 <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
                 <div class="line-badge">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</div>
               </div>
-              <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+              <div class="odds-meta">${escapeHtml(getStatTypeLabel(prop.statID, prop.marketKey))} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
               <div class="odds-meta">Range: ${Number.isFinite(prop.minLine) ? prop.minLine : "N/A"} - ${Number.isFinite(prop.maxLine) ? prop.maxLine : "N/A"} • Books: ${safeNumeric(prop.booksCount) || 0}</div>
               <div class="odds-lines">
+                <div>Consensus line: ${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(2) : "N/A"}</div>
                 <div>Consensus fair O ${formatProbabilityPercent(prop.consensusFairOverProbability)} • U ${formatProbabilityPercent(prop.consensusFairUnderProbability)}</div>
                 <div>Consensus fair odds O ${escapeHtml(formatAmericanOdds(prop.consensusFairOverOdds))} • U ${escapeHtml(formatAmericanOdds(prop.consensusFairUnderOdds))}</div>
                 <div>Best Over: ${escapeHtml(prop.bestOver?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestOver?.line) ? prop.bestOver.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestOver?.odds))}</div>
                 <div>Best Under: ${escapeHtml(prop.bestUnder?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestUnder?.line) ? prop.bestUnder.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestUnder?.odds))}</div>
-                <div>PrizePicks: ${prop.prizepicks ? `${escapeHtml(prop.prizepicks.bookmakerTitle || "PrizePicks")} ${Number.isFinite(prop.prizepicks.line) ? prop.prizepicks.line : "N/A"}` : "Not available"}</div>
+                <div>PrizePicks Line: ${Number.isFinite(prop.prizepicks?.line) ? prop.prizepicks.line : "Not available"}</div>
+                ${prop.prizepicksEdge ? `<div>PrizePicks vs Market: ${escapeHtml(prop.prizepicksEdge)}</div>` : ""}
+                <div>Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
                 <div>${(prop.outliers || []).length ? `Outliers: ${(prop.outliers || []).slice(0, 2).map(item => `${item.bookmakerTitle} ${item.line} (${item.direction})`).join(" • ")}` : "Outliers: none"}</div>
               </div>
             </div>
@@ -1630,7 +1633,7 @@
                   <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
                   <div class="line-badge">${safeNumeric(prop.booksCount) || 0}</div>
                 </div>
-                <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+                <div class="odds-meta">${escapeHtml(getStatTypeLabel(prop.statID, prop.marketKey))} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
                 <div class="odds-lines">
                   <div>Books: ${safeNumeric(prop.booksCount) || 0}</div>
                   <div>Line ladder summary: ${Number.isFinite(prop.lowestLine) ? prop.lowestLine : "N/A"} to ${Number.isFinite(prop.highestLine) ? prop.highestLine : "N/A"}</div>
@@ -1743,10 +1746,26 @@
 
     function getMatchupText(prop) {
       if (prop.homeTeam && prop.awayTeam) {
-        return `${prop.homeTeam} vs ${prop.awayTeam}`;
+        return `${prop.awayTeam} @ ${prop.homeTeam}`;
       }
       if (prop.matchupText) return prop.matchupText;
       return "Unknown matchup";
+    }
+
+    function getStatTypeLabel(statID, fallback) {
+      const key = String(statID || "").toLowerCase();
+      const statLabels = {
+        points: "Points",
+        rebounds: "Rebounds",
+        assists: "Assists",
+        pra: "PRA",
+        points_rebounds_assists: "PRA",
+        player_points: "Points",
+        player_rebounds: "Rebounds",
+        player_assists: "Assists",
+        player_points_rebounds_assists: "PRA"
+      };
+      return statLabels[key] || String(fallback || statID || "Stat");
     }
 
     function searchTeams() {
