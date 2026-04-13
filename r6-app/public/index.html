@@ -986,8 +986,13 @@
       <div class="odds-controls">
         <select id="oddsLeagueSelect">
           <option value="NBA">NBA</option>
-          <option value="WNBA">WNBA</option>
+          <option value="NFL">NFL</option>
+          <option value="MLB">MLB</option>
+          <option value="NHL">NHL</option>
+          <option value="EPL">EPL</option>
+          <option value="UEFA_CHAMPIONS_LEAGUE">UEFA Champions League</option>
           <option value="NCAAB">NCAAB</option>
+          <option value="NCAAF">NCAAF</option>
         </select>
         <select id="oddsStatSelect">
           <option value="all">all</option>
@@ -1125,6 +1130,16 @@
       ]
     };
     const expandedAlternateCards = new Set();
+    const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
+      "NBA",
+      "NFL",
+      "MLB",
+      "NHL",
+      "EPL",
+      "UEFA_CHAMPIONS_LEAGUE",
+      "NCAAB",
+      "NCAAF"
+    ]);
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
       "Imperial": "imperial-esports-r6",
@@ -1375,6 +1390,12 @@
 
     async function loadOddsComparison() {
       const leagueID = oddsLeagueSelect.value || "NBA";
+      if (!SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
+        oddsMessage.style.display = "block";
+        oddsMessage.textContent = "Unsupported league for current SportsGameOdds setup";
+        oddsResultsSection.innerHTML = `<div class="empty">Unsupported league for current SportsGameOdds setup</div>`;
+        return;
+      }
       const statIDs = oddsStatSelect.value || "all";
       const marketMode = oddsMarketMode;
       startOddsLoading("Loading events...");
