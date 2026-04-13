@@ -201,7 +201,7 @@
     }
 
     .odds-card {
-      padding: 10px;
+      padding: 9px 10px;
       border-radius: 12px;
     }
 
@@ -212,10 +212,60 @@
     }
 
     .odds-lines {
-      margin-top: 8px;
+      margin-top: 6px;
       display: grid;
-      gap: 4px;
+      gap: 3px;
       font-size: 12px;
+    }
+
+    .odds-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .odds-row-key {
+      color: #9fb0d9;
+      font-size: 11px;
+    }
+
+    .odds-row-value {
+      color: #f0f5ff;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .lean-badge {
+      margin-top: 6px;
+      padding: 5px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      border: 1px solid rgba(115, 140, 226, 0.4);
+      background: rgba(19, 34, 76, 0.88);
+    }
+
+    .lean-badge.lean-over {
+      color: #72f0af;
+      border-color: rgba(65, 214, 141, 0.55);
+    }
+
+    .lean-badge.lean-under {
+      color: #ff9cab;
+      border-color: rgba(255, 122, 145, 0.55);
+    }
+
+    .lean-badge.lean-inline {
+      color: #d7e3ff;
+      border-color: rgba(146, 167, 233, 0.55);
+    }
+
+    .alt-opportunity {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #cdd9fa;
     }
 
     .odds-expand {
@@ -868,6 +918,25 @@
       .search-result-item {
         align-items: flex-start;
       }
+
+      .prop-card,
+      .odds-card {
+        padding: 8px;
+      }
+
+      .player-name {
+        font-size: 16px;
+      }
+
+      .line-badge {
+        min-width: 48px;
+        padding: 5px 7px;
+        font-size: 15px;
+      }
+
+      .lean-badge {
+        font-size: 14px;
+      }
     }
 
     @media (min-width: 901px) {
@@ -1021,6 +1090,7 @@
         <div class="sort-field">
           <label class="sort-label" for="oddsSortBySelect">Sort by</label>
           <select id="oddsSortBySelect" class="sort-select" onchange="setOddsSortBy(this.value)">
+            <option value="biggestEdge">Biggest Edge</option>
             <option value="default">Default</option>
           </select>
         </div>
@@ -1110,7 +1180,7 @@
     let oddsMarketMode = "standard";
     let oddsSelectedMarket = "all";
     let oddsBookmakerFilter = "all";
-    let oddsSortBy = "default";
+    let oddsSortBy = "biggestEdge";
     let oddsSortOrder = "desc";
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
@@ -1125,6 +1195,7 @@
     };
     const ODDS_SORT_OPTIONS = {
       standard: [
+        { value: "biggestEdge", label: "Biggest Edge" },
         { value: "default", label: "Default" },
         { value: "consensusLineMean", label: "Consensus Line" },
         { value: "booksCount", label: "Books Count" },
@@ -1177,7 +1248,7 @@
       oddsSelectedMarket = "all";
       oddsMarketModeSelect.value = "standard";
       oddsBookmakerFilterSelect.value = "all";
-      oddsSortBySelect.value = "default";
+      oddsSortBySelect.value = "biggestEdge";
       oddsSortOrderSelect.value = "desc";
       syncOddsSortOptions();
       syncOddsBookmakerFilterOptions();
@@ -1515,7 +1586,7 @@
         .map(option => `<option value="${option.value}">${option.label}</option>`)
         .join("");
       if (!allowedValues.has(oddsSortBy)) {
-        oddsSortBy = "default";
+        oddsSortBy = oddsMarketMode === "standard" ? "biggestEdge" : "default";
       }
       oddsSortBySelect.value = oddsSortBy;
     }
@@ -1543,8 +1614,7 @@
         ? `${bookTitles.length} (${bookTitles.slice(0, 5).join(", ")}${bookTitles.length > 5 ? ", ..." : ""})`
         : "0";
       const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
-      const debugParamsText = oddsSummaryData.sentParams ? JSON.stringify(oddsSummaryData.sentParams) : "{}";
-      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw player prop records: ${oddsSummaryData.rawPlayerPropRecords} • Paired book props: ${oddsSummaryData.pairedBookProps} • Grouped props: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText} • selectedMarket: ${oddsFilterDebug.selectedMarket} • groupedBeforeFilter: ${oddsFilterDebug.groupedBeforeFilter} • groupedAfterFilter: ${oddsFilterDebug.groupedAfterFilter} • Debug sentParams: ${debugParamsText} • Debug eventsReturned: ${oddsSummaryData.eventsReturned}`;
+      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Consensus props: ${oddsFilterDebug.groupedAfterFilter} • Unique bookmakers: ${booksText}`;
     }
 
     function setOddsSortOrder(value) {
@@ -1601,6 +1671,7 @@
 
     function getOddsSortValue(prop, sortBy) {
       if (sortBy === "playerName") return normalizeName(prop.playerName || "");
+      if (sortBy === "biggestEdge") return Math.abs(computeLineGap(prop));
       const map = {
         consensusLineMean: safeNumeric(prop.consensusLineMean),
         booksCount: safeNumeric(prop.booksCount),
@@ -1610,6 +1681,23 @@
         highestLine: safeNumeric(prop.highestLine)
       };
       return map[sortBy];
+    }
+
+    function computeLineGap(prop) {
+      const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
+      const consensusLine = safeNumeric(prop?.consensusLineMean);
+      if (!Number.isFinite(prizePicksLine) || !Number.isFinite(consensusLine)) return Number.NaN;
+      return prizePicksLine - consensusLine;
+    }
+
+    function getLeanInfo(lineGap) {
+      if (!Number.isFinite(lineGap) || Math.abs(lineGap) < 0.5) {
+        return { label: "In Line", className: "lean-inline" };
+      }
+      if (lineGap <= -1.5) return { label: "Strong Over Lean", className: "lean-over" };
+      if (lineGap < -0.5) return { label: "Mild Over Lean", className: "lean-over" };
+      if (lineGap >= 1.5) return { label: "Strong Under Lean", className: "lean-under" };
+      return { label: "Mild Under Lean", className: "lean-under" };
     }
 
     function renderOddsProps(rows) {
@@ -1624,35 +1712,43 @@
 
       oddsResultsSection.innerHTML = `
         <div class="props-grid">
-          ${rows.map(prop => `
+          ${rows.map(prop => {
+            const lineGap = computeLineGap(prop);
+            const leanInfo = getLeanInfo(lineGap);
+            const marketLabel = prop.displayMarketLabel || getStatTypeLabel(prop.statID, prop.marketKey);
+            if (prop.prizepicksDebug) {
+              console.debug("[odds-debug]", prop.playerName, {
+                ppSupported: prop.ppSupported,
+                ppRaw: prop.ppRaw,
+                ppPaired: prop.ppPaired,
+                ppGrouped: prop.ppGrouped,
+                parsedStatID: prop.parsedStatID,
+                parsedPeriodID: prop.parsedPeriodID,
+                marketKey: prop.marketKey,
+                statID: prop.statID,
+                details: prop.prizepicksDebug
+              });
+            }
+            return `
             <div class="odds-card">
               <div class="prop-top">
                 <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
                 <div class="line-badge">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</div>
               </div>
-              <div class="odds-meta">${escapeHtml(getStatTypeLabel(prop.statID, prop.marketKey))} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
-              <div class="odds-meta">Range: ${Number.isFinite(prop.minLine) ? prop.minLine : "N/A"} - ${Number.isFinite(prop.maxLine) ? prop.maxLine : "N/A"} • Books: ${safeNumeric(prop.booksCount) || 0}</div>
+              <div class="odds-meta">${escapeHtml(marketLabel)} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
               <div class="odds-lines">
-                <div>Consensus line: ${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(2) : "N/A"}</div>
-                <div>Consensus fair O ${formatProbabilityPercent(prop.consensusFairOverProbability)} • U ${formatProbabilityPercent(prop.consensusFairUnderProbability)}</div>
-                <div>Consensus fair odds O ${escapeHtml(formatAmericanOdds(prop.consensusFairOverOdds))} • U ${escapeHtml(formatAmericanOdds(prop.consensusFairUnderOdds))}</div>
-                <div>Best Over: ${escapeHtml(prop.bestOver?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestOver?.line) ? prop.bestOver.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestOver?.odds))}</div>
-                <div>Best Under: ${escapeHtml(prop.bestUnder?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestUnder?.line) ? prop.bestUnder.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestUnder?.odds))}</div>
-                ${Number.isFinite(prop.prizepicks?.line)
-                  ? `<div>PrizePicks Line: ${prop.prizepicks.line}</div>`
-                  : prop.prizepicksStatus === "unsupported_market"
-                    ? `<div>PrizePicks: unsupported market</div>`
-                    : `<div>PrizePicks: not returned by API</div>`
-                }
-                <div>PP supported: ${escapeHtml(prop.ppSupported || "no")} • PP raw: ${escapeHtml(prop.ppRaw || "no")} • PP paired: ${escapeHtml(prop.ppPaired || "no")} • PP grouped: ${escapeHtml(prop.ppGrouped || "no")}</div>
-                <div>PP parsed statID: ${escapeHtml(prop.parsedStatID || "n/a")} • PP parsed periodID: ${escapeHtml(prop.parsedPeriodID || "n/a")}</div>
-                <div>Debug statID: ${escapeHtml(prop.statID || "n/a")} • periodID: ${escapeHtml(prop.periodID || "n/a")} • marketKey: ${escapeHtml(prop.marketKey || "n/a")}</div>
-                ${prop.prizepicksEdge ? `<div>PrizePicks vs Market: ${escapeHtml(prop.prizepicksEdge)}</div>` : ""}
-                <div>Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
-                <div>${(prop.outliers || []).length ? `Outliers: ${(prop.outliers || []).slice(0, 2).map(item => `${item.bookmakerTitle} ${item.line} (${item.direction})`).join(" • ")}` : "Outliers: none"}</div>
+                <div class="odds-row"><span class="odds-row-key">Player</span><span class="odds-row-value">${escapeHtml(prop.playerName || "Unknown Player")}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Market</span><span class="odds-row-value">${escapeHtml(marketLabel)}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Matchup</span><span class="odds-row-value">${escapeHtml(prop.matchup || getMatchupText(prop))}</span></div>
+                <div class="odds-row"><span class="odds-row-key">PrizePicks</span><span class="odds-row-value">${Number.isFinite(prop.prizepicks?.line) ? Number(prop.prizepicks.line).toFixed(1) : "N/A"}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Consensus</span><span class="odds-row-value">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</span></div>
+                <div class="odds-row"><span class="odds-row-key">Gap</span><span class="odds-row-value">${Number.isFinite(lineGap) ? lineGap.toFixed(1) : "N/A"}</span></div>
               </div>
+              <div class="lean-badge ${leanInfo.className}">Lean: ${leanInfo.label}</div>
+              <div class="alt-opportunity">Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
             </div>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
       `;
     }
@@ -1688,7 +1784,6 @@
                 <div class="odds-lines">
                   <div>Books: ${safeNumeric(prop.booksCount) || 0}</div>
                   <div>Line ladder summary: ${Number.isFinite(prop.lowestLine) ? prop.lowestLine : "N/A"} to ${Number.isFinite(prop.highestLine) ? prop.highestLine : "N/A"}</div>
-                  <div>Debug statID: ${escapeHtml(prop.statID || "n/a")} • periodID: ${escapeHtml(prop.periodID || "n/a")} • marketKey: ${escapeHtml(prop.marketKey || "n/a")}</div>
                 </div>
                 <button class="odds-expand" onclick="toggleAlternateCard('${cardKey}')">${isExpanded ? "Hide line ladders" : "Show line ladders"}</button>
                 ${isExpanded ? `<div class="odds-ladder">
