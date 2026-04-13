@@ -344,6 +344,16 @@ const NBA_PRIZEPICKS_SUPPORT_MAP = {
   "2h": new Set(["fantasyscore"]),
   "4q": new Set(["fantasyscore"])
 };
+const SOCCER_PRIZEPICKS_SUPPORTED_STATS = new Set([
+  "shots",
+  "shotsongoal",
+  "goals+assists",
+  "tackles",
+  "passesattempted",
+  "clearances",
+  "goaliesaves",
+  "goaliegoalsagainst"
+]);
 
 function normalizeLeagueID(value) {
   const target = String(value || "NBA").trim().toUpperCase();
@@ -405,6 +415,12 @@ function isPrizePicksSupportedNBA(statID, periodID, betTypeID) {
   const supportedStats = NBA_PRIZEPICKS_SUPPORT_MAP[periodKey];
   if (!supportedStats) return false;
   return supportedStats.has(normalizePrizePicksStatKey(statID));
+}
+
+function isPrizePicksSupportedSoccer(statID, betTypeID) {
+  const betTypeKey = String(betTypeID || "").trim().toLowerCase();
+  if (betTypeKey !== "ou") return false;
+  return SOCCER_PRIZEPICKS_SUPPORTED_STATS.has(normalizePrizePicksStatKey(statID).replace(/_/g, ""));
 }
 
 function formatPlayerName(statEntityID) {
@@ -615,7 +631,9 @@ function normalizeSportsGameOddsResponse(events, options) {
       const eventID = String(event?.eventID || event?.id || "");
       const ppSupported = options.leagueID === "NBA"
         ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
-        : false;
+        : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
+          ? isPrizePicksSupportedSoccer(statID, betTypeID)
+          : false;
       const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: statEntityID, statID, periodID, betTypeID });
       if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
         prizePicksTraceByGroup.set(prizePicksMatchKey, {

@@ -1176,6 +1176,14 @@
           <option value="threes">threes</option>
           <option value="pra">pra</option>
           <option value="fantasy_points">fantasy_points</option>
+          <option value="shots">shots</option>
+          <option value="shots_onGoal">shots_onGoal</option>
+          <option value="goals+assists">goals+assists</option>
+          <option value="tackles">tackles</option>
+          <option value="passes_attempted">passes_attempted</option>
+          <option value="clearances">clearances</option>
+          <option value="goalie_saves">goalie_saves</option>
+          <option value="goalie_goalsAgainst">goalie_goalsAgainst</option>
         </select>
         <div class="timestamp-pill" style="display:flex;align-items:center;">Core books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
@@ -1265,7 +1273,15 @@
       assists: ["assists"],
       threes: ["threepointersmade"],
       pra: ["points+rebounds+assists"],
-      fantasy_points: ["fantasyscore"]
+      fantasy_points: ["fantasyscore"],
+      shots: ["shots"],
+      shots_ongoal: ["shotsongoal", "shots_on_goal", "shotsongoal"],
+      "goals+assists": ["goals+assists", "goals_assists"],
+      tackles: ["tackles"],
+      passes_attempted: ["passesattempted", "passes_attempted"],
+      clearances: ["clearances"],
+      goalie_saves: ["goaliesaves", "goalie_saves", "saves"],
+      goalie_goalsagainst: ["goaliegoalsagainst", "goalie_goalsagainst", "goalsagainst"]
     };
     const CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
@@ -1274,6 +1290,26 @@
       { key: "betonline", label: "BetOnline", weight: 0.15, aliases: ["betonline", "betonlineag"] }
     ];
     const LINE_SHIFT_PER_HALF = 0.035;
+    const SOCCER_SHIFT_PER_1 = {
+      shots: 0.12,
+      shotsongoal: 0.18,
+      "goals+assists": 0.25,
+      tackles: 0.14,
+      passesattempted: 0.035,
+      clearances: 0.10,
+      goaliesaves: 0.12,
+      goaliegoalsagainst: 0.20
+    };
+    const SOCCER_MIN_LINE_DIFF = {
+      shots: 0.5,
+      shotsongoal: 0.5,
+      "goals+assists": 0.5,
+      tackles: 0.5,
+      passesattempted: 3.0,
+      clearances: 0.5,
+      goaliesaves: 0.5,
+      goaliegoalsagainst: 0.5
+    };
     const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
       "NBA",
       "NFL",
@@ -1610,11 +1646,31 @@
       return String(value || "").trim().toLowerCase().replace(/[\s_]/g, "");
     }
 
+    function getSoccerShiftPer1(statID) {
+      const normalized = normalizeStatIDKey(statID);
+      return Number.isFinite(SOCCER_SHIFT_PER_1[normalized]) ? SOCCER_SHIFT_PER_1[normalized] : Number.NaN;
+    }
+
+    function getMinLineDiffByStat(statID) {
+      const normalized = normalizeStatIDKey(statID);
+      return Number.isFinite(SOCCER_MIN_LINE_DIFF[normalized]) ? SOCCER_MIN_LINE_DIFF[normalized] : 0;
+    }
+
     function filterOddsRowsBySelectedMarket(rows, selectedMarket) {
       if (selectedMarket === "all") return rows;
       const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
       const allowed = new Set(targetStatIDs);
       return rows.filter(row => allowed.has(normalizeStatIDKey(row.statID)));
+    }
+
+    function passesOddsLaunchFilters(row) {
+      if (!Number.isFinite(row?.valuePercent)) return false;
+      if (!Number.isFinite(row?.prizePicksLine)) return false;
+      if ((row?.availableCoreBooks || 0) < 2) return false;
+      if ((row?.recommendedProbability || 0) < 0.54) return false;
+      const minLineDiff = getMinLineDiffByStat(row?.normalizedStatID);
+      if (minLineDiff > 0 && (!Number.isFinite(row?.lineDiffAbs) || row.lineDiffAbs < minLineDiff)) return false;
+      return true;
     }
 
     function renderOddsSummary() {
@@ -1632,7 +1688,7 @@
       const marketFilteredRows = filterOddsRowsBySelectedMarket(oddsStandardGroups, selectedMarket);
       const enrichedRows = marketFilteredRows
         .map(buildWeightedOddsRow)
-        .filter(row => Number.isFinite(row.valuePercent));
+        .filter(row => passesOddsLaunchFilters(row));
       oddsFilterDebug = {
         selectedMarket,
         groupedBeforeFilter: oddsStandardGroups.length,
@@ -1692,42 +1748,66 @@
 
     function buildWeightedOddsRow(prop) {
       const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
+      const normalizedStatID = normalizeStatIDKey(prop?.statID || prop?.marketKey);
+      const soccerShiftPer1 = getSoccerShiftPer1(normalizedStatID);
       const coreBooks = {};
       CORE_BOOKS.forEach(book => {
-        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine);
+        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1);
       });
 
       const weightedParts = CORE_BOOKS
         .map(book => ({ config: book, line: coreBooks[book.key] }))
-        .filter(item => item.line && Number.isFinite(item.line.adjustedOverProbability));
+        .filter(item => item.line && Number.isFinite(item.line.adjustedOverProbability) && Number.isFinite(item.line.adjustedUnderProbability));
 
       const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
       let weightedOverProbability = Number.NaN;
+      let weightedUnderProbability = Number.NaN;
       if (totalWeight > 0) {
         weightedOverProbability = weightedParts.reduce((sum, item) => {
           return sum + (item.line.adjustedOverProbability * (item.config.weight / totalWeight));
         }, 0);
+        weightedUnderProbability = weightedParts.reduce((sum, item) => {
+          return sum + (item.line.adjustedUnderProbability * (item.config.weight / totalWeight));
+        }, 0);
       }
-      const weightedUnderProbability = Number.isFinite(weightedOverProbability) ? (1 - weightedOverProbability) : Number.NaN;
+      if (Number.isFinite(weightedOverProbability) && Number.isFinite(weightedUnderProbability)) {
+        const total = weightedOverProbability + weightedUnderProbability;
+        if (total > 0) {
+          weightedOverProbability = weightedOverProbability / total;
+          weightedUnderProbability = weightedUnderProbability / total;
+        }
+      }
       const recommendedSide = weightedOverProbability >= weightedUnderProbability ? "Over" : "Under";
       const recommendedProbability = Math.max(weightedOverProbability, weightedUnderProbability);
       const fairOdds = probabilityToAmericanOdds(recommendedProbability);
       const statLabel = getStatTypeLabel(prop.statID, prop.marketKey);
+      const averageCoreLine = weightedParts.length
+        ? weightedParts.reduce((sum, item) => sum + item.line.line, 0) / weightedParts.length
+        : Number.NaN;
+      const lineDiffAbs = Number.isFinite(prizePicksLine) && Number.isFinite(averageCoreLine)
+        ? Math.abs(prizePicksLine - averageCoreLine)
+        : Number.NaN;
 
       return {
         ...prop,
         prizePicksLine,
+        normalizedStatID,
+        soccerShiftPer1,
         coreBooks,
+        availableCoreBooks: weightedParts.length,
         weightedOverProbability,
         weightedUnderProbability,
         recommendedSideLabel: recommendedSide,
+        recommendedProbability,
         fairOdds,
+        averageCoreLine,
+        lineDiffAbs,
         valuePercent: recommendedProbability * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
       };
     }
 
-    function findCoreBookLine(books, coreBookConfig, prizePicksLine) {
+    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1) {
       const book = (books || []).find(item => {
         const id = String(item?.bookmakerID || "").toLowerCase();
         return coreBookConfig.aliases.some(alias => id.includes(alias));
@@ -1739,22 +1819,53 @@
       if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(line)) {
         return { line, overOdds: book.overOdds, underOdds: book.underOdds };
       }
-      const adjustedOverProbability = adjustFairProbabilityForLine(fairOverProbability, line, prizePicksLine);
+      const { adjustedOverProbability, adjustedUnderProbability, lineDiff } = adjustFairProbabilityForLine({
+        fairOverProbability,
+        fairUnderProbability,
+        bookLine: line,
+        prizePicksLine,
+        normalizedStatID,
+        soccerShiftPer1
+      });
       return {
         line,
         overOdds: book.overOdds,
         underOdds: book.underOdds,
         fairOverProbability,
         fairUnderProbability,
-        adjustedOverProbability
+        adjustedOverProbability,
+        adjustedUnderProbability,
+        lineDiff
       };
     }
 
-    function adjustFairProbabilityForLine(baseOverProbability, bookLine, prizePicksLine) {
-      if (!Number.isFinite(baseOverProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) return Number.NaN;
-      const halfStepDifference = (prizePicksLine - bookLine) / 0.5;
-      const shifted = baseOverProbability - (halfStepDifference * LINE_SHIFT_PER_HALF);
-      return Math.min(0.98, Math.max(0.02, shifted));
+    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1 }) {
+      if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) {
+        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN };
+      }
+      const lineDiff = prizePicksLine - bookLine;
+      if (Number.isFinite(soccerShiftPer1)) {
+        const capMin = normalizedStatID === "goals+assists" ? 0.15 : 0.20;
+        const capMax = normalizedStatID === "goals+assists" ? 0.85 : 0.80;
+        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * soccerShiftPer1)));
+        const adjOver = Math.min(capMax, Math.max(capMin, 1 - adjUnder));
+        const total = adjUnder + adjOver;
+        if (total > 0) {
+          return {
+            adjustedOverProbability: adjOver / total,
+            adjustedUnderProbability: adjUnder / total,
+            lineDiff
+          };
+        }
+        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
+      }
+      const halfStepDifference = lineDiff / 0.5;
+      const shiftedOver = Math.min(0.98, Math.max(0.02, fairOverProbability - (halfStepDifference * LINE_SHIFT_PER_HALF)));
+      return {
+        adjustedOverProbability: shiftedOver,
+        adjustedUnderProbability: 1 - shiftedOver,
+        lineDiff
+      };
     }
 
     function renderCoreBookCell(book) {
@@ -1891,7 +2002,7 @@
     }
 
     function getStatTypeLabel(statID, fallback) {
-      const key = String(statID || "").toLowerCase();
+      const key = normalizeStatIDKey(statID);
       const statLabels = {
         points: "Points",
         rebounds: "Rebounds",
@@ -1899,13 +2010,24 @@
         threepointersmade: "3PT Made",
         pra: "PRA",
         "points+rebounds+assists": "PRA",
-        points_rebounds_assists: "PRA",
-        player_points: "Points",
-        player_rebounds: "Rebounds",
-        player_assists: "Assists",
-        player_points_rebounds_assists: "PRA",
+        pointsreboundsassists: "PRA",
+        playerpoints: "Points",
+        playerrebounds: "Rebounds",
+        playerassists: "Assists",
+        playerpointsreboundsassists: "PRA",
         fantasyscore: "Fantasy Points",
-        fantasy_points: "Fantasy Points"
+        fantasypoints: "Fantasy Points",
+        shots: "Shots",
+        shotsongoal: "Shots on Goal",
+        "goals+assists": "Goals + Assists",
+        goalsassists: "Goals + Assists",
+        tackles: "Tackles",
+        passesattempted: "Passes Attempted",
+        clearances: "Clearances",
+        goaliesaves: "Saves",
+        saves: "Saves",
+        goaliegoalsagainst: "Goals Against",
+        goalsagainst: "Goals Against"
       };
       return statLabels[key] || String(fallback || statID || "Stat");
     }
