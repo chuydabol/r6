@@ -1170,26 +1170,6 @@
         </select>
         <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
           <option value="all">All markets</option>
-          <option value="points">Points</option>
-          <option value="rebounds">Rebounds</option>
-          <option value="assists">Assists</option>
-          <option value="threes">3PT Made</option>
-          <option value="pra">PRA</option>
-          <option value="fantasy_points">Fantasy Points</option>
-          <option value="pitcher_strikeouts">Pitcher Strikeouts</option>
-          <option value="hits">Hits</option>
-          <option value="total_bases">Total Bases</option>
-          <option value="hits_allowed">Hits Allowed</option>
-          <option value="earned_runs">Earned Runs</option>
-          <option value="runs+rbi+hits">Runs + RBIs + Hits</option>
-          <option value="shots">Shots</option>
-          <option value="shots_onGoal">Shots on Goal</option>
-          <option value="goals+assists">Goals + Assists</option>
-          <option value="tackles">Tackles</option>
-          <option value="passes_attempted">Passes Attempted</option>
-          <option value="clearances">Clearances</option>
-          <option value="goalie_saves">Saves</option>
-          <option value="goalie_goalsAgainst">Goals Against</option>
         </select>
         <div class="timestamp-pill" style="display:flex;align-items:center;">Core books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
@@ -1273,6 +1253,49 @@
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
     let oddsFilterDebug = { selectedMarket: "all", groupedBeforeFilter: 0, groupedAfterFilter: 0 };
+    const ODDS_MARKET_OPTIONS_BY_LEAGUE = {
+      NBA: [
+        { value: "points", label: "Points" },
+        { value: "rebounds", label: "Rebounds" },
+        { value: "assists", label: "Assists" },
+        { value: "threes", label: "3PT Made" },
+        { value: "pra", label: "PRA" },
+        { value: "fantasy_points", label: "Fantasy Points" }
+      ],
+      MLB: [
+        { value: "pitcher_strikeouts", label: "Pitcher Strikeouts" },
+        { value: "hits_allowed", label: "Hits Allowed" },
+        { value: "pitching_outs", label: "Outs" },
+        { value: "earned_runs", label: "Earned Runs" },
+        { value: "hits", label: "Hits" },
+        { value: "runs+rbi+hits", label: "Hits + Runs + RBIs" },
+        { value: "total_bases", label: "Total Bases" },
+        { value: "batting_basesonballs", label: "Batter Walks" },
+        { value: "batting_rbi", label: "Runs Batted In" },
+        { value: "points", label: "Runs" },
+        { value: "fantasy_score", label: "Fantasy Score" }
+      ],
+      EPL: [
+        { value: "shots", label: "Shots" },
+        { value: "shots_ongoal", label: "Shots on Goal" },
+        { value: "goals+assists", label: "Goals + Assists" },
+        { value: "tackles", label: "Tackles" },
+        { value: "passes_attempted", label: "Passes Attempted" },
+        { value: "clearances", label: "Clearances" },
+        { value: "goalie_saves", label: "Saves" },
+        { value: "goalie_goalsagainst", label: "Goals Against" }
+      ],
+      UEFA_CHAMPIONS_LEAGUE: [
+        { value: "shots", label: "Shots" },
+        { value: "shots_ongoal", label: "Shots on Goal" },
+        { value: "goals+assists", label: "Goals + Assists" },
+        { value: "tackles", label: "Tackles" },
+        { value: "passes_attempted", label: "Passes Attempted" },
+        { value: "clearances", label: "Clearances" },
+        { value: "goalie_saves", label: "Saves" },
+        { value: "goalie_goalsagainst", label: "Goals Against" }
+      ]
+    };
     const ODDS_MARKET_TO_STAT_ID = {
       points: ["points"],
       rebounds: ["rebounds"],
@@ -1288,12 +1311,15 @@
       clearances: ["clearances"],
       goalie_saves: ["goaliesaves", "goalie_saves", "saves"],
       goalie_goalsagainst: ["goaliegoalsagainst", "goalie_goalsagainst", "goalsagainst"],
-      pitcher_strikeouts: ["pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
-      hits: ["hits", "player_hits"],
-      total_bases: ["total_bases", "totalbases", "player_total_bases"],
-      hits_allowed: ["hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
-      earned_runs: ["earned_runs", "earnedruns", "pitcher_earned_runs"],
-      "runs+rbi+hits": ["runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"]
+      pitcher_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+      hits: ["hits", "player_hits", "batting_hits", "battinghits"],
+      total_bases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases"],
+      hits_allowed: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+      earned_runs: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs"],
+      "runs+rbi+hits": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"],
+      batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks"],
+      batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in"],
+      pitching_outs: ["pitching_outs", "pitchingouts", "outs"]
     };
     const CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
@@ -1313,15 +1339,16 @@
       goaliegoalsagainst: 0.20
     };
     const MLB_SHIFT_PER_1 = {
-      pitcherstrikeouts: 0.16,
-      hits: 0.20,
-      totalbases: 0.18,
-      hitsallowed: 0.16,
-      earnedruns: 0.22,
-      "runs+rbi+hits": 0.14,
-      "runs+rbis+hits": 0.14,
-      runsrbihits: 0.14,
-      walksallowed: 0.16,
+      pitchingstrikeouts: 0.16,
+      pitchinghits: 0.16,
+      pitchingouts: 0.10,
+      pitchingearnedruns: 0.22,
+      battinghits: 0.20,
+      "battinghits+runs+rbi": 0.14,
+      battingtotalbases: 0.18,
+      battingbasesonballs: 0.16,
+      battingrbi: 0.18,
+      points: 0.18,
       fantasyscore: 0.08
     };
     const SOCCER_MIN_LINE_DIFF = {
@@ -1335,17 +1362,51 @@
       goaliegoalsagainst: 0.5
     };
     const MLB_MIN_LINE_DIFF = {
-      pitcherstrikeouts: 0.5,
-      hits: 0.5,
-      totalbases: 0.5,
-      hitsallowed: 0.5,
-      earnedruns: 0.5,
-      "runs+rbi+hits": 0.5,
-      "runs+rbis+hits": 0.5,
-      runsrbihits: 0.5,
+      pitchingstrikeouts: 0.5,
+      pitchinghits: 0.5,
+      pitchingouts: 1.0,
+      pitchingearnedruns: 0.5,
+      battinghits: 0.5,
+      "battinghits+runs+rbi": 0.5,
+      battingtotalbases: 0.5,
+      battingbasesonballs: 0.5,
+      battingrbi: 0.5,
+      points: 0.5,
       fantasyscore: 1.0
     };
-    const MLB_HIGH_VOLATILITY_STATS = new Set(["earnedruns"]);
+    const MLB_HIGH_VOLATILITY_STATS = new Set(["pitchingearnedruns"]);
+    const MLB_SUPPORTED_STAT_IDS = new Set([
+      "points",
+      "fantasyscore",
+      "battinghomeruns",
+      "pitchingstrikeouts",
+      "pitchinghits",
+      "pitchingouts",
+      "pitchingearnedruns",
+      "battingstolenbases",
+      "battingbasesonballs",
+      "battingrbi",
+      "battinghits+runs+rbi",
+      "pitchingbasesonballs",
+      "battinghits",
+      "battingsingles",
+      "battingstrikeouts",
+      "battingtotalbases",
+      "pitchingpitchesthrown"
+    ]);
+    const MLB_VISIBLE_LAUNCH_STAT_IDS = new Set([
+      "pitchingstrikeouts",
+      "pitchinghits",
+      "pitchingouts",
+      "pitchingearnedruns",
+      "battinghits",
+      "battinghits+runs+rbi",
+      "battingtotalbases",
+      "battingbasesonballs",
+      "battingrbi",
+      "points",
+      "fantasyscore"
+    ]);
     const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
       "NBA",
       "NFL",
@@ -1378,11 +1439,23 @@
       loadPropsBoard();
       playerSearch.addEventListener("input", applyPropFilters);
       oddsLeagueSelect.value = "NBA";
-      oddsStatSelect.value = "all";
+      refreshOddsStatOptionsByLeague("NBA");
       oddsSelectedMarket = "all";
+      oddsLeagueSelect.addEventListener("change", () => {
+        refreshOddsStatOptionsByLeague(oddsLeagueSelect.value || "NBA");
+      });
       oddsLastUpdated.textContent = "Last updated: Never";
       renderCurrentView();
     });
+
+    function refreshOddsStatOptionsByLeague(leagueID) {
+      const selectedLeague = String(leagueID || "NBA").trim().toUpperCase();
+      const options = ODDS_MARKET_OPTIONS_BY_LEAGUE[selectedLeague] || [];
+      const allOptions = [{ value: "all", label: "All markets" }, ...options];
+      oddsStatSelect.innerHTML = allOptions.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("");
+      oddsSelectedMarket = "all";
+      oddsStatSelect.value = "all";
+    }
 
     function setAppView(nextView) {
       appView = nextView === "oddsComparison" ? "oddsComparison" : "r6Props";
@@ -1650,7 +1723,10 @@
         applyOddsSortingAndRendering();
 
         if (!oddsStandardGroups.length) {
-          oddsResultsSection.innerHTML = `<div class="empty">No props available yet for this selection.<br/>Player props may appear closer to game time.</div>`;
+          const emptyMessage = leagueID === "MLB"
+            ? "No MLB props available yet for this selection."
+            : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
+          oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         }
       } catch (error) {
         oddsBookProps = [];
@@ -1712,6 +1788,13 @@
       if (!Number.isFinite(row?.prizePicksLine)) return false;
       if ((row?.availableCoreBooks || 0) < 2) return false;
       if ((row?.recommendedProbability || 0) < 0.54) return false;
+      if (row?.leagueID === "MLB") {
+        if (!row?.isMLBSupportedStat || !row?.isMLBLaunchVisibleStat) return false;
+        if (String(row?.periodID || "").trim().toLowerCase() !== "game") return false;
+        if (String(row?.betTypeID || "").trim().toLowerCase() !== "ou") return false;
+        const statEntity = String(row?.playerIDRaw || "").trim().toLowerCase();
+        if (!statEntity || ["home", "away", "all"].includes(statEntity)) return false;
+      }
       const minLineDiff = getMinLineDiffByStat(row?.normalizedStatID, row?.leagueID);
       if (minLineDiff > 0 && (!Number.isFinite(row?.lineDiffAbs) || row.lineDiffAbs < minLineDiff)) return false;
       return true;
@@ -1745,7 +1828,11 @@
 
     function renderOddsProps(rows) {
       if (!rows.length) {
-        oddsResultsSection.innerHTML = `<div class="empty">No props available yet for this selection.<br/>Player props may appear closer to game time.</div>`;
+        const leagueID = String(oddsLeagueSelect.value || "NBA").trim().toUpperCase();
+        const emptyMessage = leagueID === "MLB"
+          ? "No MLB props available yet for this selection."
+          : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
+        oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         return;
       }
 
@@ -1793,6 +1880,8 @@
     function buildWeightedOddsRow(prop) {
       const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
       const normalizedStatID = normalizeStatIDKey(prop?.statID || prop?.marketKey);
+      const isMLBSupportedStat = MLB_SUPPORTED_STAT_IDS.has(normalizedStatID);
+      const isMLBLaunchVisibleStat = MLB_VISIBLE_LAUNCH_STAT_IDS.has(normalizedStatID);
       const soccerShiftPer1 = getSoccerShiftPer1(normalizedStatID);
       const mlbShiftPer1 = getMLBShiftPer1(normalizedStatID);
       const coreBooks = {};
@@ -1825,7 +1914,7 @@
       const recommendedSide = weightedOverProbability >= weightedUnderProbability ? "Over" : "Under";
       const recommendedProbability = Math.max(weightedOverProbability, weightedUnderProbability);
       const fairOdds = probabilityToAmericanOdds(recommendedProbability);
-      const statLabel = getStatTypeLabel(prop.statID, prop.marketKey);
+      const statLabel = getStatTypeLabel(prop.statID, prop.marketKey, prop.leagueID);
       const averageCoreLine = weightedParts.length
         ? weightedParts.reduce((sum, item) => sum + item.line.line, 0) / weightedParts.length
         : Number.NaN;
@@ -1837,6 +1926,8 @@
         ...prop,
         prizePicksLine,
         normalizedStatID,
+        isMLBSupportedStat,
+        isMLBLaunchVisibleStat,
         soccerShiftPer1,
         mlbShiftPer1,
         coreBooks,
@@ -2065,7 +2156,7 @@
       return "Unknown matchup";
     }
 
-    function getStatTypeLabel(statID, fallback) {
+    function getStatTypeLabel(statID, fallback, leagueID) {
       const key = normalizeStatIDKey(statID);
       const statLabels = {
         points: "Points",
@@ -2092,16 +2183,29 @@
         saves: "Saves",
         goaliegoalsagainst: "Goals Against",
         goalsagainst: "Goals Against",
+        pitchingstrikeouts: "Pitcher Strikeouts",
         pitcherstrikeouts: "Pitcher Strikeouts",
         strikeouts: "Pitcher Strikeouts",
+        pitchinghits: "Hits Allowed",
+        pitchingouts: "Outs",
+        pitchingearnedruns: "Earned Runs",
+        battinghits: "Hits",
+        "battinghits+runs+rbi": "Hits + Runs + RBIs",
+        "runs+rbi+hits": "Hits + Runs + RBIs",
+        "runs+rbis+hits": "Hits + Runs + RBIs",
+        runsrbihits: "Hits + Runs + RBIs",
+        battingtotalbases: "Total Bases",
+        battingbasesonballs: "Batter Walks",
+        battingrbi: "Runs Batted In",
         hits: "Hits",
         totalbases: "Total Bases",
         hitsallowed: "Hits Allowed",
-        earnedruns: "Earned Runs",
-        "runs+rbi+hits": "Runs + RBIs + Hits",
-        "runs+rbis+hits": "Runs + RBIs + Hits",
-        runsrbihits: "Runs + RBIs + Hits"
+        earnedruns: "Earned Runs"
       };
+      if (String(leagueID || "").trim().toUpperCase() === "MLB") {
+        if (key === "points") return "Runs";
+        if (key === "fantasyscore" || key === "fantasypoints") return "Fantasy Score";
+      }
       return statLabels[key] || String(fallback || statID || "Stat");
     }
 
