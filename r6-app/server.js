@@ -534,6 +534,49 @@ function buildPrizePicksFromRawEntries(entries) {
   return withLine || candidates[0] || null;
 }
 
+function scanRawPrizePicksOdds(events) {
+  let rawOddsScanned = 0;
+  let rawPrizePicksOddsFound = 0;
+
+  events.forEach(event => {
+    const eventID = String(event?.eventID || event?.id || "");
+    const oddsNode = event?.odds && typeof event.odds === "object" ? event.odds : {};
+    Object.entries(oddsNode).forEach(([oddID, oddNode]) => {
+      rawOddsScanned += 1;
+      const parsedOddID = parseOddID(oddID);
+      const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
+      const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
+      const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
+      const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
+      const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
+
+      const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
+      const bookmakerKeys = Object.keys(byBookmaker);
+      const prizePicksRaw = byBookmaker?.prizepicks;
+      const hasPrizePicks = bookmakerKeys.includes("prizepicks");
+
+      if (hasPrizePicks) {
+        rawPrizePicksOddsFound += 1;
+        console.log("RAW_PRIZEPICKS_ODD_DEBUG", {
+          eventID,
+          oddID,
+          statID,
+          statEntityID,
+          periodID,
+          betTypeID,
+          sideID,
+          prizepicks: prizePicksRaw
+        });
+      }
+    });
+  });
+
+  return {
+    rawOddsScanned,
+    rawPrizePicksOddsFound
+  };
+}
+
 function normalizeSportsGameOddsResponse(events, options) {
   const rawPlayerPropRecords = [];
   const uniqueBookmakers = new Map();
@@ -1038,6 +1081,7 @@ app.get("/api/odds-comparison", async (req, res) => {
 
     const payload = await response.json();
     const events = Array.isArray(payload?.data) ? payload.data : [];
+    const rawPrizePicksDebug = scanRawPrizePicksOdds(events);
 
     const normalized = normalizeSportsGameOddsResponse(events, {
       leagueID,
@@ -1057,7 +1101,11 @@ app.get("/api/odds-comparison", async (req, res) => {
       uniqueBookmakers: normalized.uniqueBookmakers,
       debug: {
         sentParams,
-        eventsReturned: events.length
+        eventsReturned: events.length,
+        rawPrizePicks: {
+          ...rawPrizePicksDebug,
+          rawPrizePicksExists: rawPrizePicksDebug.rawPrizePicksOddsFound > 0
+        }
       },
       bookProps: normalized.pairedBookProps,
       groupedStandardProps: normalized.groupedStandardProps,
