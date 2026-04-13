@@ -536,44 +536,56 @@ function buildPrizePicksFromRawEntries(entries) {
 
 function scanRawPrizePicksOdds(events) {
   let rawOddsScanned = 0;
-  let rawPrizePicksOddsFound = 0;
+  let rawOddsWithPrizePicks = 0;
+  const rawUniqueBookmakers = new Set();
 
   events.forEach(event => {
     const eventID = String(event?.eventID || event?.id || "");
     const oddsNode = event?.odds && typeof event.odds === "object" ? event.odds : {};
-    Object.entries(oddsNode).forEach(([oddID, oddNode]) => {
-      rawOddsScanned += 1;
-      const parsedOddID = parseOddID(oddID);
-      const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
-      const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
-      const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
-      const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
-      const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
 
-      const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
-      const bookmakerKeys = Object.keys(byBookmaker);
-      const prizePicksRaw = byBookmaker?.prizepicks;
-      const hasPrizePicks = bookmakerKeys.includes("prizepicks");
+    Object.entries(oddsNode).forEach(([oddID, oddContainer]) => {
+      const oddObjects = Array.isArray(oddContainer) ? oddContainer : [oddContainer];
 
-      if (hasPrizePicks) {
-        rawPrizePicksOddsFound += 1;
-        console.log("RAW_PRIZEPICKS_ODD_DEBUG", {
+      oddObjects.forEach(odd => {
+        if (!odd || typeof odd !== "object") return;
+
+        rawOddsScanned += 1;
+        const parsedOddID = parseOddID(oddID);
+        const statID = String(odd?.statID || parsedOddID.statID || "").trim();
+        const statEntityID = String(odd?.statEntityID || parsedOddID.statEntityID || "").trim();
+        const periodID = String(odd?.periodID || parsedOddID.periodID || "").trim();
+        const betTypeID = String(odd?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
+        const sideID = String(odd?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
+
+        const byBookmaker = odd?.byBookmaker && typeof odd.byBookmaker === "object" ? odd.byBookmaker : {};
+        const bookmakerIDs = Object.keys(byBookmaker);
+        bookmakerIDs.forEach(bookmakerID => rawUniqueBookmakers.add(bookmakerID));
+        const prizepicksExists = Boolean(odd?.byBookmaker?.prizepicks);
+
+        console.log("RAW_ODD_TRAVERSAL_DEBUG", {
           eventID,
           oddID,
+          bookmakerIDs,
+          prizepicksExists,
           statID,
           statEntityID,
           periodID,
           betTypeID,
-          sideID,
-          prizepicks: prizePicksRaw
+          sideID
         });
-      }
+
+        if (prizepicksExists) {
+          rawOddsWithPrizePicks += 1;
+        }
+      });
     });
   });
 
   return {
     rawOddsScanned,
-    rawPrizePicksOddsFound
+    rawOddsWithPrizePicks,
+    rawUniqueBookmakers: rawUniqueBookmakers.size,
+    rawPrizePicksOddsFound: rawOddsWithPrizePicks
   };
 }
 
