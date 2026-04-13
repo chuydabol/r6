@@ -1169,21 +1169,27 @@
           <option value="NCAAF">NCAAF</option>
         </select>
         <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
-          <option value="all">all</option>
-          <option value="points">points</option>
-          <option value="rebounds">rebounds</option>
-          <option value="assists">assists</option>
-          <option value="threes">threes</option>
-          <option value="pra">pra</option>
-          <option value="fantasy_points">fantasy_points</option>
-          <option value="shots">shots</option>
-          <option value="shots_onGoal">shots_onGoal</option>
-          <option value="goals+assists">goals+assists</option>
-          <option value="tackles">tackles</option>
-          <option value="passes_attempted">passes_attempted</option>
-          <option value="clearances">clearances</option>
-          <option value="goalie_saves">goalie_saves</option>
-          <option value="goalie_goalsAgainst">goalie_goalsAgainst</option>
+          <option value="all">All markets</option>
+          <option value="points">Points</option>
+          <option value="rebounds">Rebounds</option>
+          <option value="assists">Assists</option>
+          <option value="threes">3PT Made</option>
+          <option value="pra">PRA</option>
+          <option value="fantasy_points">Fantasy Points</option>
+          <option value="pitcher_strikeouts">Pitcher Strikeouts</option>
+          <option value="hits">Hits</option>
+          <option value="total_bases">Total Bases</option>
+          <option value="hits_allowed">Hits Allowed</option>
+          <option value="earned_runs">Earned Runs</option>
+          <option value="runs+rbi+hits">Runs + RBIs + Hits</option>
+          <option value="shots">Shots</option>
+          <option value="shots_onGoal">Shots on Goal</option>
+          <option value="goals+assists">Goals + Assists</option>
+          <option value="tackles">Tackles</option>
+          <option value="passes_attempted">Passes Attempted</option>
+          <option value="clearances">Clearances</option>
+          <option value="goalie_saves">Saves</option>
+          <option value="goalie_goalsAgainst">Goals Against</option>
         </select>
         <div class="timestamp-pill" style="display:flex;align-items:center;">Core books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
@@ -1281,7 +1287,13 @@
       passes_attempted: ["passesattempted", "passes_attempted"],
       clearances: ["clearances"],
       goalie_saves: ["goaliesaves", "goalie_saves", "saves"],
-      goalie_goalsagainst: ["goaliegoalsagainst", "goalie_goalsagainst", "goalsagainst"]
+      goalie_goalsagainst: ["goaliegoalsagainst", "goalie_goalsagainst", "goalsagainst"],
+      pitcher_strikeouts: ["pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+      hits: ["hits", "player_hits"],
+      total_bases: ["total_bases", "totalbases", "player_total_bases"],
+      hits_allowed: ["hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+      earned_runs: ["earned_runs", "earnedruns", "pitcher_earned_runs"],
+      "runs+rbi+hits": ["runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"]
     };
     const CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
@@ -1300,6 +1312,18 @@
       goaliesaves: 0.12,
       goaliegoalsagainst: 0.20
     };
+    const MLB_SHIFT_PER_1 = {
+      pitcherstrikeouts: 0.16,
+      hits: 0.20,
+      totalbases: 0.18,
+      hitsallowed: 0.16,
+      earnedruns: 0.22,
+      "runs+rbi+hits": 0.14,
+      "runs+rbis+hits": 0.14,
+      runsrbihits: 0.14,
+      walksallowed: 0.16,
+      fantasyscore: 0.08
+    };
     const SOCCER_MIN_LINE_DIFF = {
       shots: 0.5,
       shotsongoal: 0.5,
@@ -1310,6 +1334,18 @@
       goaliesaves: 0.5,
       goaliegoalsagainst: 0.5
     };
+    const MLB_MIN_LINE_DIFF = {
+      pitcherstrikeouts: 0.5,
+      hits: 0.5,
+      totalbases: 0.5,
+      hitsallowed: 0.5,
+      earnedruns: 0.5,
+      "runs+rbi+hits": 0.5,
+      "runs+rbis+hits": 0.5,
+      runsrbihits: 0.5,
+      fantasyscore: 1.0
+    };
+    const MLB_HIGH_VOLATILITY_STATS = new Set(["earnedruns"]);
     const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
       "NBA",
       "NFL",
@@ -1651,8 +1687,16 @@
       return Number.isFinite(SOCCER_SHIFT_PER_1[normalized]) ? SOCCER_SHIFT_PER_1[normalized] : Number.NaN;
     }
 
-    function getMinLineDiffByStat(statID) {
+    function getMLBShiftPer1(statID) {
       const normalized = normalizeStatIDKey(statID);
+      return Number.isFinite(MLB_SHIFT_PER_1[normalized]) ? MLB_SHIFT_PER_1[normalized] : Number.NaN;
+    }
+
+    function getMinLineDiffByStat(statID, leagueID) {
+      const normalized = normalizeStatIDKey(statID);
+      if (leagueID === "MLB") {
+        return Number.isFinite(MLB_MIN_LINE_DIFF[normalized]) ? MLB_MIN_LINE_DIFF[normalized] : 0;
+      }
       return Number.isFinite(SOCCER_MIN_LINE_DIFF[normalized]) ? SOCCER_MIN_LINE_DIFF[normalized] : 0;
     }
 
@@ -1668,7 +1712,7 @@
       if (!Number.isFinite(row?.prizePicksLine)) return false;
       if ((row?.availableCoreBooks || 0) < 2) return false;
       if ((row?.recommendedProbability || 0) < 0.54) return false;
-      const minLineDiff = getMinLineDiffByStat(row?.normalizedStatID);
+      const minLineDiff = getMinLineDiffByStat(row?.normalizedStatID, row?.leagueID);
       if (minLineDiff > 0 && (!Number.isFinite(row?.lineDiffAbs) || row.lineDiffAbs < minLineDiff)) return false;
       return true;
     }
@@ -1750,9 +1794,10 @@
       const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
       const normalizedStatID = normalizeStatIDKey(prop?.statID || prop?.marketKey);
       const soccerShiftPer1 = getSoccerShiftPer1(normalizedStatID);
+      const mlbShiftPer1 = getMLBShiftPer1(normalizedStatID);
       const coreBooks = {};
       CORE_BOOKS.forEach(book => {
-        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1);
+        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, prop?.leagueID);
       });
 
       const weightedParts = CORE_BOOKS
@@ -1793,6 +1838,7 @@
         prizePicksLine,
         normalizedStatID,
         soccerShiftPer1,
+        mlbShiftPer1,
         coreBooks,
         availableCoreBooks: weightedParts.length,
         weightedOverProbability,
@@ -1807,7 +1853,7 @@
       };
     }
 
-    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1) {
+    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, leagueID) {
       const book = (books || []).find(item => {
         const id = String(item?.bookmakerID || "").toLowerCase();
         return coreBookConfig.aliases.some(alias => id.includes(alias));
@@ -1825,7 +1871,9 @@
         bookLine: line,
         prizePicksLine,
         normalizedStatID,
-        soccerShiftPer1
+        soccerShiftPer1,
+        mlbShiftPer1,
+        leagueID
       });
       return {
         line,
@@ -1839,11 +1887,27 @@
       };
     }
 
-    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1 }) {
+    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, leagueID }) {
       if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) {
         return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN };
       }
       const lineDiff = prizePicksLine - bookLine;
+      if (leagueID === "MLB" && Number.isFinite(mlbShiftPer1)) {
+        const isHighVolatility = MLB_HIGH_VOLATILITY_STATS.has(normalizedStatID);
+        const capMin = isHighVolatility ? 0.15 : 0.20;
+        const capMax = isHighVolatility ? 0.85 : 0.80;
+        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * mlbShiftPer1)));
+        const adjOver = 1 - adjUnder;
+        const total = adjUnder + adjOver;
+        if (total > 0) {
+          return {
+            adjustedOverProbability: adjOver / total,
+            adjustedUnderProbability: adjUnder / total,
+            lineDiff
+          };
+        }
+        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
+      }
       if (Number.isFinite(soccerShiftPer1)) {
         const capMin = normalizedStatID === "goals+assists" ? 0.15 : 0.20;
         const capMax = normalizedStatID === "goals+assists" ? 0.85 : 0.80;
@@ -2027,7 +2091,16 @@
         goaliesaves: "Saves",
         saves: "Saves",
         goaliegoalsagainst: "Goals Against",
-        goalsagainst: "Goals Against"
+        goalsagainst: "Goals Against",
+        pitcherstrikeouts: "Pitcher Strikeouts",
+        strikeouts: "Pitcher Strikeouts",
+        hits: "Hits",
+        totalbases: "Total Bases",
+        hitsallowed: "Hits Allowed",
+        earnedruns: "Earned Runs",
+        "runs+rbi+hits": "Runs + RBIs + Hits",
+        "runs+rbis+hits": "Runs + RBIs + Hits",
+        runsrbihits: "Runs + RBIs + Hits"
       };
       return statLabels[key] || String(fallback || statID || "Stat");
     }
