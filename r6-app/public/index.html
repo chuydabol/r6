@@ -1111,7 +1111,7 @@
     let oddsSortBy = "default";
     let oddsSortOrder = "desc";
     let isOddsLoading = false;
-    let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard" };
+    let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
     const ODDS_SORT_OPTIONS = {
       standard: [
         { value: "default", label: "Default" },
@@ -1396,23 +1396,16 @@
         oddsResultsSection.innerHTML = `<div class="empty">Unsupported league for current SportsGameOdds setup</div>`;
         return;
       }
-      const statIDs = oddsStatSelect.value || "all";
-      const marketMode = oddsMarketMode;
       startOddsLoading("Loading events...");
       oddsMessage.style.display = "none";
 
       try {
-        const params = new URLSearchParams({
-          leagueID,
-          marketMode,
-          statIDs,
-          includeAltLines: "true",
-          limit: "20"
-        });
+        const params = new URLSearchParams({ leagueID });
         const res = await fetch(`/api/odds-comparison?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.message || data.error || "Failed to load sportsbook props");
+          const debugText = data?.debug?.sentParams ? ` Debug sentParams: ${JSON.stringify(data.debug.sentParams)}` : "";
+          throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
         }
 
         updateOddsLoading("Parsing player props...");
@@ -1427,7 +1420,9 @@
           rawPlayerPropRecords: Number(data.rawPlayerPropRecords) || 0,
           pairedBookProps: Number(data.pairedBookProps) || 0,
           groupedProps: Number(data.groupedProps) || 0,
-          uniqueBookmakers: Array.isArray(data.uniqueBookmakers) ? data.uniqueBookmakers : []
+          uniqueBookmakers: Array.isArray(data.uniqueBookmakers) ? data.uniqueBookmakers : [],
+          sentParams: data?.debug?.sentParams || null,
+          eventsReturned: Number(data?.debug?.eventsReturned) || 0
         };
 
         syncOddsBookmakerFilterOptions();
@@ -1443,7 +1438,7 @@
         oddsStandardGroups = [];
         oddsAlternateGroups = [];
         oddsVisibleProps = [];
-        oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode };
+        oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode, sentParams: null, eventsReturned: 0 };
         syncOddsBookmakerFilterOptions();
         renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
@@ -1462,7 +1457,7 @@
       oddsAlternateGroups = [];
       oddsVisibleProps = [];
       expandedAlternateCards.clear();
-      oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode };
+      oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode, sentParams: null, eventsReturned: 0 };
       syncOddsBookmakerFilterOptions();
       renderOddsSummary();
       oddsResultsSection.innerHTML = `<div class="empty">Load sportsbook props to begin.</div>`;
@@ -1513,7 +1508,8 @@
         ? `${bookTitles.length} (${bookTitles.slice(0, 5).join(", ")}${bookTitles.length > 5 ? ", ..." : ""})`
         : "0";
       const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
-      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw player prop records: ${oddsSummaryData.rawPlayerPropRecords} • Paired book props: ${oddsSummaryData.pairedBookProps} • Grouped props: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText}`;
+      const debugParamsText = oddsSummaryData.sentParams ? JSON.stringify(oddsSummaryData.sentParams) : "{}";
+      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw player prop records: ${oddsSummaryData.rawPlayerPropRecords} • Paired book props: ${oddsSummaryData.pairedBookProps} • Grouped props: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText} • Debug sentParams: ${debugParamsText} • Debug eventsReturned: ${oddsSummaryData.eventsReturned}`;
     }
 
     function setOddsSortOrder(value) {

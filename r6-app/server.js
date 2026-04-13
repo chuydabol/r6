@@ -682,23 +682,40 @@ app.get("/api/odds-comparison", async (req, res) => {
   if (!leagueID) {
     return res.status(400).json({ error: "Unsupported league for current SportsGameOdds setup" });
   }
+  const debugLeagueMap = {
+    NBA: "NBA",
+    NFL: "NFL",
+    MLB: "MLB",
+    NHL: "NHL",
+    NCAAB: "NCAAB",
+    NCAAF: "NCAAF"
+  };
+  const selectedLeagueID = debugLeagueMap[leagueID];
+  if (!selectedLeagueID) {
+    return res.status(400).json({ error: "Unsupported league for current SportsGameOdds setup" });
+  }
   const marketMode = String(req.query.marketMode || "standard") === "alternate" ? "alternate" : "standard";
   const statIDs = String(req.query.statIDs || "");
-  const includeAltLines = String(req.query.includeAltLines || "true") !== "false";
-  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+  const sentParams = {
+    leagueID: selectedLeagueID,
+    oddsAvailable: "true",
+    limit: "10"
+  };
 
   if (!SPORTSGAMEODDS_KEY) {
-    return res.status(500).json({ error: "SPORTSGAMEODDS_KEY is not configured on the server." });
+    return res.status(500).json({
+      success: false,
+      error: "SPORTSGAMEODDS_KEY is not configured on the server.",
+      debug: { sentParams }
+    });
   }
 
   try {
     const eventsURL = new URL(SPORTSGAMEODDS_BASE_URL);
-    eventsURL.searchParams.set("oddsAvailable", "true");
-    eventsURL.searchParams.set("finalized", "false");
-    eventsURL.searchParams.set("limit", String(limit));
-    if (includeAltLines) {
-      eventsURL.searchParams.set("includeAltLines", "true");
-    }
+    Object.entries(sentParams).forEach(([key, value]) => {
+      eventsURL.searchParams.set(key, value);
+    });
+    console.log("SportsGameOdds params:", sentParams);
 
     const response = await fetch(eventsURL.toString(), {
       headers: {
@@ -710,8 +727,10 @@ app.get("/api/odds-comparison", async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       return res.status(response.status).json({
+        success: false,
         error: "Failed to load events from SportsGameOdds",
-        message: errorText
+        message: errorText,
+        debug: { sentParams }
       });
     }
 
@@ -725,16 +744,19 @@ app.get("/api/odds-comparison", async (req, res) => {
     });
 
     res.json({
+      success: true,
       provider: "sportsgameodds",
       leagueID,
       marketMode,
-      includeAltLines,
-      limit,
       eventsLoaded: events.length,
       rawPlayerPropRecords: normalized.rawPlayerPropRecords.length,
       pairedBookProps: normalized.pairedBookProps.length,
       groupedProps: marketMode === "alternate" ? normalized.groupedAlternateProps.length : normalized.groupedStandardProps.length,
       uniqueBookmakers: normalized.uniqueBookmakers,
+      debug: {
+        sentParams,
+        eventsReturned: events.length
+      },
       bookProps: normalized.pairedBookProps,
       groupedStandardProps: normalized.groupedStandardProps,
       groupedAlternateProps: normalized.groupedAlternateProps
@@ -742,8 +764,10 @@ app.get("/api/odds-comparison", async (req, res) => {
   } catch (error) {
     console.error("SPORTSGAMEODDS ODDS COMPARISON ERROR:", error);
     res.status(500).json({
+      success: false,
       error: "Failed to load sportsbook props",
-      message: error.message
+      message: error.message,
+      debug: { sentParams }
     });
   }
 });
