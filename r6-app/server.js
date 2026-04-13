@@ -308,7 +308,15 @@ const STAT_ALIAS_MAP = {
   assists: ["assists", "ast", "player_assists"],
   threes: ["threepointersmade", "three_pointers_made"],
   pra: ["pra", "points+rebounds+assists", "points_rebounds_assists", "player_points_rebounds_assists"],
-  fantasy_points: ["fantasy_points", "fantasyscore", "player_fantasy_points"]
+  fantasy_points: ["fantasy_points", "fantasyscore", "player_fantasy_points"],
+  pitcher_strikeouts: ["pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+  hits: ["hits", "player_hits"],
+  total_bases: ["total_bases", "totalbases", "player_total_bases"],
+  hits_allowed: ["hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+  earned_runs: ["earned_runs", "earnedruns", "pitcher_earned_runs"],
+  "runs+rbi+hits": ["runs+rbi+hits", "runsrbihits", "runs_rbi_hits"],
+  walks_allowed: ["walks_allowed", "walksallowed", "pitcher_walks_allowed"],
+  fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints"]
 };
 const NBA_PRIZEPICKS_SUPPORT_MAP = {
   game: new Set([
@@ -353,6 +361,16 @@ const SOCCER_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "clearances",
   "goaliesaves",
   "goaliegoalsagainst"
+]);
+const MLB_PRIZEPICKS_SUPPORTED_STATS = new Set([
+  "pitcherstrikeouts",
+  "hits",
+  "totalbases",
+  "hitsallowed",
+  "earnedruns",
+  "runs+rbis+hits",
+  "runs+rbi+hits",
+  "runsrbihits"
 ]);
 
 function normalizeLeagueID(value) {
@@ -423,6 +441,13 @@ function isPrizePicksSupportedSoccer(statID, betTypeID) {
   return SOCCER_PRIZEPICKS_SUPPORTED_STATS.has(normalizePrizePicksStatKey(statID).replace(/_/g, ""));
 }
 
+function isPrizePicksSupportedMLB(statID, betTypeID) {
+  const betTypeKey = String(betTypeID || "").trim().toLowerCase();
+  if (betTypeKey !== "ou") return false;
+  const normalized = normalizePrizePicksStatKey(statID).replace(/_/g, "");
+  return MLB_PRIZEPICKS_SUPPORTED_STATS.has(normalized);
+}
+
 function formatPlayerName(statEntityID) {
   const raw = String(statEntityID || "").trim();
   if (!raw) return "Unknown Player";
@@ -490,7 +515,14 @@ function getDisplayMarketLabel(statID, marketKey) {
     assists: "Assists",
     threepointersmade: "3PT Made",
     "points+rebounds+assists": "PRA",
-    fantasyscore: "Fantasy Points"
+    fantasyscore: "Fantasy Points",
+    pitcherstrikeouts: "Pitcher Strikeouts",
+    hits: "Hits",
+    totalbases: "Total Bases",
+    hitsallowed: "Hits Allowed",
+    earnedruns: "Earned Runs",
+    "runs+rbis+hits": "Runs + RBIs + Hits",
+    "runs+rbi+hits": "Runs + RBIs + Hits"
   };
   return labels[key] || String(marketKey || statID || "Stat");
 }
@@ -631,6 +663,8 @@ function normalizeSportsGameOddsResponse(events, options) {
       const eventID = String(event?.eventID || event?.id || "");
       const ppSupported = options.leagueID === "NBA"
         ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
+        : options.leagueID === "MLB"
+          ? isPrizePicksSupportedMLB(statID, betTypeID)
         : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
           ? isPrizePicksSupportedSoccer(statID, betTypeID)
           : false;
