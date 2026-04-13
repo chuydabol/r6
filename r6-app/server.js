@@ -6,7 +6,6 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const SPORTSGAMEODDS_BASE_URL = "https://api.sportsgameodds.com/v2/events";
 const SPORTSGAMEODDS_KEY = process.env.SPORTSGAMEODDS_KEY;
-const DFS_BOOKMAKER_IDS = ["fanduel", "draftkings", "caesars", "prizepicks", "underdog"];
 
 app.use(express.static("public"));
 
@@ -364,12 +363,6 @@ function splitStatIDs(statIDsParam) {
   const raw = String(statIDsParam || "").trim();
   if (!raw) return [];
   return raw.split(",").map(item => item.trim().toLowerCase()).filter(Boolean);
-}
-
-function splitCSV(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return [];
-  return raw.split(",").map(item => item.trim()).filter(Boolean);
 }
 
 function normalizeStatIDKey(value) {
@@ -1059,27 +1052,12 @@ app.get("/api/odds-comparison", async (req, res) => {
   }
   const marketMode = String(req.query.marketMode || "standard") === "alternate" ? "alternate" : "standard";
   const statIDs = String(req.query.statIDs || "");
-  const playerID = String(req.query.playerID || "").trim();
-  const requestedOddIDs = splitCSV(req.query.oddID);
-  const requestedStatIDs = splitStatIDs(statIDs).filter(statID => statID !== "all");
-
-  const generatedOddIDs = playerID && requestedStatIDs.length
-    ? requestedStatIDs.flatMap(statID => ([
-      `${statID}-${playerID}-game-ou-over`,
-      `${statID}-${playerID}-game-ou-under`
-    ]))
-    : [];
-  const oddIDs = Array.from(new Set([ ...requestedOddIDs, ...generatedOddIDs ]));
-
   const sentParams = {
     leagueID: selectedLeagueID,
-    bookmakerID: DFS_BOOKMAKER_IDS.join(","),
-    oddsAvailable: "false",
+    oddsAvailable: "true",
     includeAltLines: "true",
-    includeOpposingOdds: "true",
     limit: "10"
   };
-  if (oddIDs.length) sentParams.oddID = oddIDs.join(",");
 
   if (!SPORTSGAMEODDS_KEY) {
     return res.status(500).json({
