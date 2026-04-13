@@ -1596,6 +1596,7 @@
                 <div>Best Over: ${escapeHtml(prop.bestOver?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestOver?.line) ? prop.bestOver.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestOver?.odds))}</div>
                 <div>Best Under: ${escapeHtml(prop.bestUnder?.bookmakerTitle || "N/A")} (${Number.isFinite(prop.bestUnder?.line) ? prop.bestUnder.line : "N/A"}) ${escapeHtml(formatAmericanOdds(prop.bestUnder?.odds))}</div>
                 <div>PrizePicks Line: ${Number.isFinite(prop.prizepicks?.line) ? prop.prizepicks.line : "Not available"}</div>
+                <div>PP raw: ${prop.rawPrizePicksFound ? "yes" : "no"} • PP paired: ${prop.pairedPrizePicksFound ? "yes" : "no"} • PP grouped: ${prop.groupedPrizePicksFound ? "yes" : "no"}</div>
                 ${prop.prizepicksEdge ? `<div>PrizePicks vs Market: ${escapeHtml(prop.prizepicksEdge)}</div>` : ""}
                 <div>Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
                 <div>${(prop.outliers || []).length ? `Outliers: ${(prop.outliers || []).slice(0, 2).map(item => `${item.bookmakerTitle} ${item.line} (${item.direction})`).join(" • ")}` : "Outliers: none"}</div>

@@ -413,9 +413,62 @@ function buildMarketKey(meta) {
   return [meta.statID || "unknown", meta.periodID || "full", meta.betTypeID || "unknown"].join(":");
 }
 
+function buildPlayerGroupKey(meta) {
+  return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || ""].join("|");
+}
+
+function normalizePrizePicksRawEntry(bookmakerNode, meta) {
+  return {
+    bookmakerID: "prizepicks",
+    odds: getBookmakerOdds(bookmakerNode),
+    overUnder: getBookmakerLine(bookmakerNode),
+    available: bookmakerNode?.available !== false,
+    deeplink: String(bookmakerNode?.deeplink || bookmakerNode?.deepLink || "").trim() || null,
+    oddID: meta.oddID || null,
+    statID: meta.statID || null,
+    statEntityID: meta.statEntityID || null,
+    periodID: meta.periodID || null,
+    sideID: meta.sideID || null
+  };
+}
+
+function buildPrizePicksFromRawEntries(entries) {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const mergedByLine = new Map();
+
+  entries.forEach(entry => {
+    const line = toNumber(entry?.overUnder);
+    const lineKey = Number.isFinite(line) ? String(line) : "no-line";
+    if (!mergedByLine.has(lineKey)) {
+      mergedByLine.set(lineKey, {
+        bookmakerID: "prizepicks",
+        line,
+        overOdds: null,
+        underOdds: null,
+        available: entry?.available !== false,
+        deeplink: entry?.deeplink || null
+      });
+    }
+
+    const merged = mergedByLine.get(lineKey);
+    const side = String(entry?.sideID || "").toLowerCase();
+    const odds = toNumber(entry?.odds);
+    if (side === "over" && Number.isFinite(odds)) merged.overOdds = odds;
+    if (side === "under" && Number.isFinite(odds)) merged.underOdds = odds;
+    if (entry?.available === false) merged.available = false;
+    if (!merged.deeplink && entry?.deeplink) merged.deeplink = entry.deeplink;
+  });
+
+  const candidates = Array.from(mergedByLine.values());
+  const withLine = candidates.find(candidate => Number.isFinite(candidate.line));
+  return withLine || candidates[0] || null;
+}
+
 function normalizeSportsGameOddsResponse(events, options) {
   const rawPlayerPropRecords = [];
   const uniqueBookmakers = new Map();
+  const prizePicksRawByGroup = new Map();
+  const prizePicksTraceByGroup = new Map();
   const requestedStatIDs = splitStatIDs(options.statIDs);
   const mode = options.marketMode === "alternate" ? "alternate" : "standard";
 
@@ -434,11 +487,46 @@ function normalizeSportsGameOddsResponse(events, options) {
       if (!matchesStatID(statID, requestedStatIDs)) return;
       if (betTypeID !== "ou") return;
       if (!PLAYER_SIDE_MAP[sideID]) return;
+      const eventID = String(event?.eventID || event?.id || "");
+      const playerGroupKey = buildPlayerGroupKey({ eventID, playerIDRaw: statEntityID, statID, periodID });
+      if (!prizePicksTraceByGroup.has(playerGroupKey)) {
+        prizePicksTraceByGroup.set(playerGroupKey, {
+          eventID,
+          playerIDRaw: statEntityID,
+          statID,
+          periodID,
+          marketKey: buildMarketKey({ statID, periodID, betTypeID }),
+          rawOddsFound: 0,
+          rawPrizePicksFound: false,
+          pairedPrizePicksFound: false,
+          groupedPrizePicksFound: false,
+          rawPrizePicksEntries: []
+        });
+      }
+      const trace = prizePicksTraceByGroup.get(playerGroupKey);
+      trace.rawOddsFound += 1;
 
       const isAlternateLine = Boolean(oddNode?.isAlternateLine) || Number.isFinite(toNumber(oddNode?.altLineIndex));
       if (mode === "standard" && isAlternateLine) return;
 
       const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
+      const rawPrizePicksBook = byBookmaker?.prizepicks;
+      if (rawPrizePicksBook && typeof rawPrizePicksBook === "object") {
+        trace.rawPrizePicksFound = true;
+        const rawPrizePicksEntry = normalizePrizePicksRawEntry(rawPrizePicksBook, {
+          oddID,
+          statID,
+          statEntityID,
+          periodID,
+          sideID
+        });
+        trace.rawPrizePicksEntries.push(rawPrizePicksEntry);
+        if (!prizePicksRawByGroup.has(playerGroupKey)) {
+          prizePicksRawByGroup.set(playerGroupKey, []);
+        }
+        prizePicksRawByGroup.get(playerGroupKey).push(rawPrizePicksEntry);
+      }
+
       Object.entries(byBookmaker).forEach(([bookmakerID, bookmakerNode]) => {
         const line = getBookmakerLine(bookmakerNode);
         const odds = getBookmakerOdds(bookmakerNode);
@@ -459,7 +547,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 
         rawPlayerPropRecords.push({
           leagueID: options.leagueID,
-          eventID: String(event?.eventID || event?.id || ""),
+          eventID,
           commenceTime: event?.commenceTime || event?.startTime || null,
           homeTeam,
           awayTeam,
@@ -522,6 +610,11 @@ function normalizeSportsGameOddsResponse(events, options) {
 
   const pairedBookProps = Array.from(pairMap.values()).map(pair => {
     if (!Number.isFinite(pair.overOdds) || !Number.isFinite(pair.underOdds)) return null;
+    const pairGroupKey = buildPlayerGroupKey(pair);
+    const pairTrace = prizePicksTraceByGroup.get(pairGroupKey);
+    if (pairTrace && String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
+      pairTrace.pairedPrizePicksFound = true;
+    }
     const impliedOverProbability = americanOddsToImpliedProbability(pair.overOdds);
     const impliedUnderProbability = americanOddsToImpliedProbability(pair.underOdds);
     const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
@@ -563,10 +656,12 @@ function normalizeSportsGameOddsResponse(events, options) {
     standardGroup.books.push(pair);
     if (String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
       standardGroup.prizepicks = {
+        bookmakerID: "prizepicks",
         line: pair.line,
         overOdds: pair.overOdds,
         underOdds: pair.underOdds,
-        bookmakerTitle: pair.bookmakerTitle || "PrizePicks"
+        available: true,
+        deeplink: null
       };
     }
 
@@ -612,6 +707,24 @@ function normalizeSportsGameOddsResponse(events, options) {
   });
 
   const groupedStandardProps = Array.from(groupedMap.values()).map(group => {
+    const standardKey = buildPlayerGroupKey(group);
+    const trace = prizePicksTraceByGroup.get(standardKey) || {
+      rawOddsFound: 0,
+      rawPrizePicksFound: false,
+      pairedPrizePicksFound: false,
+      groupedPrizePicksFound: false,
+      rawPrizePicksEntries: []
+    };
+    const rawPrizePicksEntries = prizePicksRawByGroup.get(standardKey) || [];
+    const rawPrizePicksValue = buildPrizePicksFromRawEntries(rawPrizePicksEntries);
+    if (!group.prizepicks && rawPrizePicksValue) {
+      group.prizepicks = rawPrizePicksValue;
+    } else if (group.prizepicks && rawPrizePicksValue) {
+      group.prizepicks.available = rawPrizePicksValue.available;
+      group.prizepicks.deeplink = rawPrizePicksValue.deeplink;
+    }
+    trace.groupedPrizePicksFound = Boolean(group.prizepicks);
+
     const lines = group.books.map(book => book.line).filter(Number.isFinite).sort((a, b) => a - b);
     const booksCount = group.books.length;
     const minLine = lines.length ? lines[0] : null;
@@ -705,6 +818,15 @@ function normalizeSportsGameOddsResponse(events, options) {
         bookmakerID: bestUnderLine.bookmakerID,
         bookmakerTitle: bestUnderLine.bookmakerTitle
       } : null,
+      rawPrizePicksFound: Boolean(trace.rawPrizePicksFound),
+      pairedPrizePicksFound: Boolean(trace.pairedPrizePicksFound),
+      groupedPrizePicksFound: Boolean(trace.groupedPrizePicksFound),
+      prizepicksDebug: (trace.rawOddsFound || trace.rawPrizePicksEntries?.length || trace.pairedPrizePicksFound || trace.groupedPrizePicksFound)
+        ? {
+          rawOddsFound: trace.rawOddsFound,
+          rawPrizePicksEntries: trace.rawPrizePicksEntries
+        }
+        : null,
       prizepicksEdge,
       bestAltOpportunity,
       consensusFairOverProbability,
