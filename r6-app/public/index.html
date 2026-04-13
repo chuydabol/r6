@@ -1108,21 +1108,21 @@
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard" };
     const ODDS_SORT_OPTIONS = {
-      standard: {
+      standard: [
         { value: "default", label: "Default" },
         { value: "consensusLineMean", label: "Consensus Line" },
         { value: "booksCount", label: "Books Count" },
         { value: "consensusFairOverProbability", label: "Consensus Fair Over %" },
         { value: "consensusFairUnderProbability", label: "Consensus Fair Under %" },
         { value: "playerName", label: "Player Name" }
-      },
-      alternate: {
+      ],
+      alternate: [
         { value: "default", label: "Default" },
         { value: "playerName", label: "Player Name" },
         { value: "booksCount", label: "Books Count" },
         { value: "lowestLine", label: "Lowest Line" },
         { value: "highestLine", label: "Highest Line" }
-      }
+      ]
     };
     const expandedAlternateCards = new Set();
     const PP_TO_BO3_TEAM_MAP = {
