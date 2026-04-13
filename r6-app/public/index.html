@@ -994,11 +994,12 @@
           <option value="NCAAB">NCAAB</option>
           <option value="NCAAF">NCAAF</option>
         </select>
-        <select id="oddsStatSelect">
+        <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
           <option value="all">all</option>
           <option value="points">points</option>
           <option value="rebounds">rebounds</option>
           <option value="assists">assists</option>
+          <option value="threes">threes</option>
           <option value="pra">pra</option>
           <option value="fantasy_points">fantasy_points</option>
         </select>
@@ -1107,11 +1108,21 @@
     let oddsAlternateGroups = [];
     let oddsVisibleProps = [];
     let oddsMarketMode = "standard";
+    let oddsSelectedMarket = "all";
     let oddsBookmakerFilter = "all";
     let oddsSortBy = "default";
     let oddsSortOrder = "desc";
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
+    let oddsFilterDebug = { selectedMarket: "all", groupedBeforeFilter: 0, groupedAfterFilter: 0 };
+    const ODDS_MARKET_TO_STAT_ID = {
+      points: ["points"],
+      rebounds: ["rebounds"],
+      assists: ["assists"],
+      threes: ["threepointersmade"],
+      pra: ["points+rebounds+assists"],
+      fantasy_points: ["fantasyscore"]
+    };
     const ODDS_SORT_OPTIONS = {
       standard: [
         { value: "default", label: "Default" },
@@ -1163,6 +1174,7 @@
       playerSearch.addEventListener("input", applyPropFilters);
       oddsLeagueSelect.value = "NBA";
       oddsStatSelect.value = "all";
+      oddsSelectedMarket = "all";
       oddsMarketModeSelect.value = "standard";
       oddsBookmakerFilterSelect.value = "all";
       oddsSortBySelect.value = "default";
@@ -1390,6 +1402,7 @@
 
     async function loadOddsComparison() {
       const leagueID = oddsLeagueSelect.value || "NBA";
+      const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       if (!SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
         oddsMessage.style.display = "block";
         oddsMessage.textContent = "Unsupported league for current SportsGameOdds setup";
@@ -1400,7 +1413,7 @@
       oddsMessage.style.display = "none";
 
       try {
-        const params = new URLSearchParams({ leagueID });
+        const params = new URLSearchParams({ leagueID, marketMode: oddsMarketMode, statIDs: selectedMarket });
         const res = await fetch(`/api/odds-comparison?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) {
@@ -1463,6 +1476,28 @@
       oddsResultsSection.innerHTML = `<div class="empty">Load sportsbook props to begin.</div>`;
     }
 
+    function setOddsSelectedMarket(value) {
+      oddsSelectedMarket = normalizeSelectedMarket(value);
+      oddsStatSelect.value = oddsSelectedMarket;
+      applyOddsSorting();
+    }
+
+    function normalizeSelectedMarket(value) {
+      const normalized = String(value || "all").trim().toLowerCase();
+      return normalized || "all";
+    }
+
+    function normalizeStatIDKey(value) {
+      return String(value || "").trim().toLowerCase().replace(/[\s_]/g, "");
+    }
+
+    function filterOddsRowsBySelectedMarket(rows, selectedMarket) {
+      if (selectedMarket === "all") return rows;
+      const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
+      const allowed = new Set(targetStatIDs);
+      return rows.filter(row => allowed.has(normalizeStatIDKey(row.statID)));
+    }
+
     function setOddsBookmakerFilter(value) {
       oddsBookmakerFilter = value || "all";
       applyOddsSorting();
@@ -1509,7 +1544,7 @@
         : "0";
       const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
       const debugParamsText = oddsSummaryData.sentParams ? JSON.stringify(oddsSummaryData.sentParams) : "{}";
-      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw player prop records: ${oddsSummaryData.rawPlayerPropRecords} • Paired book props: ${oddsSummaryData.pairedBookProps} • Grouped props: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText} • Debug sentParams: ${debugParamsText} • Debug eventsReturned: ${oddsSummaryData.eventsReturned}`;
+      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw player prop records: ${oddsSummaryData.rawPlayerPropRecords} • Paired book props: ${oddsSummaryData.pairedBookProps} • Grouped props: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText} • selectedMarket: ${oddsFilterDebug.selectedMarket} • groupedBeforeFilter: ${oddsFilterDebug.groupedBeforeFilter} • groupedAfterFilter: ${oddsFilterDebug.groupedAfterFilter} • Debug sentParams: ${debugParamsText} • Debug eventsReturned: ${oddsSummaryData.eventsReturned}`;
     }
 
     function setOddsSortOrder(value) {
@@ -1518,14 +1553,22 @@
     }
 
     function applyOddsSorting() {
+      const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const sourceRows = oddsMarketMode === "alternate" ? oddsAlternateGroups : oddsStandardGroups;
-      const filteredRows = sourceRows.filter(row => {
+      const marketFilteredRows = filterOddsRowsBySelectedMarket(sourceRows, selectedMarket);
+      const filteredRows = marketFilteredRows.filter(row => {
         if (oddsBookmakerFilter === "all") return true;
         if (oddsMarketMode === "alternate") {
           return (row.books || []).some(book => book.bookmakerID === oddsBookmakerFilter);
         }
         return (row.books || []).some(book => book.bookmakerID === oddsBookmakerFilter);
       });
+      oddsFilterDebug = {
+        selectedMarket,
+        groupedBeforeFilter: sourceRows.length,
+        groupedAfterFilter: marketFilteredRows.length
+      };
+      renderOddsSummary();
       oddsVisibleProps = sortOddsProps(filteredRows);
       renderOddsProps(oddsVisibleProps);
     }
@@ -1603,6 +1646,7 @@
                 }
                 <div>PP supported: ${escapeHtml(prop.ppSupported || "no")} • PP raw: ${escapeHtml(prop.ppRaw || "no")} • PP paired: ${escapeHtml(prop.ppPaired || "no")} • PP grouped: ${escapeHtml(prop.ppGrouped || "no")}</div>
                 <div>PP parsed statID: ${escapeHtml(prop.parsedStatID || "n/a")} • PP parsed periodID: ${escapeHtml(prop.parsedPeriodID || "n/a")}</div>
+                <div>Debug statID: ${escapeHtml(prop.statID || "n/a")} • periodID: ${escapeHtml(prop.periodID || "n/a")} • marketKey: ${escapeHtml(prop.marketKey || "n/a")}</div>
                 ${prop.prizepicksEdge ? `<div>PrizePicks vs Market: ${escapeHtml(prop.prizepicksEdge)}</div>` : ""}
                 <div>Best Alt Opportunity: ${prop.bestAltOpportunity ? `${escapeHtml(prop.bestAltOpportunity.bookmakerTitle || "Unknown")} ${prop.bestAltOpportunity.line} (${escapeHtml(prop.bestAltOpportunity.valueTag || "value")})` : "Not found"}</div>
                 <div>${(prop.outliers || []).length ? `Outliers: ${(prop.outliers || []).slice(0, 2).map(item => `${item.bookmakerTitle} ${item.line} (${item.direction})`).join(" • ")}` : "Outliers: none"}</div>
@@ -1644,6 +1688,7 @@
                 <div class="odds-lines">
                   <div>Books: ${safeNumeric(prop.booksCount) || 0}</div>
                   <div>Line ladder summary: ${Number.isFinite(prop.lowestLine) ? prop.lowestLine : "N/A"} to ${Number.isFinite(prop.highestLine) ? prop.highestLine : "N/A"}</div>
+                  <div>Debug statID: ${escapeHtml(prop.statID || "n/a")} • periodID: ${escapeHtml(prop.periodID || "n/a")} • marketKey: ${escapeHtml(prop.marketKey || "n/a")}</div>
                 </div>
                 <button class="odds-expand" onclick="toggleAlternateCard('${cardKey}')">${isExpanded ? "Hide line ladders" : "Show line ladders"}</button>
                 ${isExpanded ? `<div class="odds-ladder">
@@ -1765,12 +1810,16 @@
         points: "Points",
         rebounds: "Rebounds",
         assists: "Assists",
+        threepointersmade: "3PT Made",
         pra: "PRA",
+        "points+rebounds+assists": "PRA",
         points_rebounds_assists: "PRA",
         player_points: "Points",
         player_rebounds: "Rebounds",
         player_assists: "Assists",
-        player_points_rebounds_assists: "PRA"
+        player_points_rebounds_assists: "PRA",
+        fantasyscore: "Fantasy Points",
+        fantasy_points: "Fantasy Points"
       };
       return statLabels[key] || String(fallback || statID || "Stat");
     }
