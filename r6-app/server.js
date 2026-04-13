@@ -306,8 +306,9 @@ const STAT_ALIAS_MAP = {
   points: ["points", "pts", "player_points"],
   rebounds: ["rebounds", "reb", "player_rebounds"],
   assists: ["assists", "ast", "player_assists"],
-  pra: ["pra", "points_rebounds_assists", "player_points_rebounds_assists"],
-  fantasy_points: ["fantasy_points", "player_fantasy_points"]
+  threes: ["threepointersmade", "three_pointers_made"],
+  pra: ["pra", "points+rebounds+assists", "points_rebounds_assists", "player_points_rebounds_assists"],
+  fantasy_points: ["fantasy_points", "fantasyscore", "player_fantasy_points"]
 };
 const NBA_PRIZEPICKS_SUPPORT_MAP = {
   game: new Set([
@@ -364,15 +365,20 @@ function splitStatIDs(statIDsParam) {
   return raw.split(",").map(item => item.trim().toLowerCase()).filter(Boolean);
 }
 
+function normalizeStatIDKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/[\s_]/g, "");
+}
+
 function matchesStatID(statID, requestedStatIDs) {
   if (!requestedStatIDs.length) return true;
-  const statKey = String(statID || "").trim().toLowerCase();
+  const statKey = normalizeStatIDKey(statID);
   if (!statKey) return false;
   return requestedStatIDs.some(requested => {
     if (requested === "all") return true;
-    if (requested === statKey) return true;
     const aliases = STAT_ALIAS_MAP[requested] || [requested];
-    return aliases.some(alias => statKey.includes(alias));
+    return aliases
+      .map(alias => normalizeStatIDKey(alias))
+      .some(alias => statKey === alias);
   });
 }
 
@@ -458,6 +464,19 @@ function getBookmakerLine(bookmakerNode) {
 
 function buildMarketKey(meta) {
   return [meta.statID || "unknown", meta.periodID || "full", meta.betTypeID || "unknown"].join(":");
+}
+
+function getDisplayMarketLabel(statID, marketKey) {
+  const key = normalizeStatIDKey(statID);
+  const labels = {
+    points: "Points",
+    rebounds: "Rebounds",
+    assists: "Assists",
+    threepointersmade: "3PT Made",
+    "points+rebounds+assists": "PRA",
+    fantasyscore: "Fantasy Points"
+  };
+  return labels[key] || String(marketKey || statID || "Stat");
 }
 
 function buildPlayerGroupKey(meta) {
@@ -616,6 +635,7 @@ function normalizeSportsGameOddsResponse(events, options) {
           periodID,
           betTypeID,
           marketKey: buildMarketKey({ statID, periodID, betTypeID }),
+          displayMarketLabel: getDisplayMarketLabel(statID, buildMarketKey({ statID, periodID, betTypeID })),
           bookmakerID,
           bookmakerTitle,
           side: PLAYER_SIDE_MAP[sideID],
@@ -646,6 +666,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         periodID: record.periodID,
         betTypeID: record.betTypeID,
         marketKey: record.marketKey,
+        displayMarketLabel: record.displayMarketLabel,
         bookmakerID: record.bookmakerID,
         bookmakerTitle: record.bookmakerTitle,
         line: record.line,
@@ -707,6 +728,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         periodID: pair.periodID,
         betTypeID: pair.betTypeID,
         marketKey: pair.marketKey,
+        displayMarketLabel: pair.displayMarketLabel,
         books: [],
         prizepicks: null
       });
@@ -734,7 +756,9 @@ function normalizeSportsGameOddsResponse(events, options) {
         playerName: pair.playerName,
         statID: pair.statID,
         periodID: pair.periodID,
+        betTypeID: pair.betTypeID,
         marketKey: pair.marketKey,
+        displayMarketLabel: pair.displayMarketLabel,
         homeTeam: pair.homeTeam,
         awayTeam: pair.awayTeam,
         matchup: pair.matchup,
@@ -932,7 +956,9 @@ function normalizeSportsGameOddsResponse(events, options) {
       playerName: group.playerName,
       statID: group.statID,
       periodID: group.periodID,
+      betTypeID: group.betTypeID,
       marketKey: group.marketKey,
+      displayMarketLabel: group.displayMarketLabel,
       homeTeam: group.homeTeam,
       awayTeam: group.awayTeam,
       matchup: group.matchup,
