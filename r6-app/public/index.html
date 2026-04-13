@@ -247,11 +247,46 @@
       border-radius: 12px;
     }
 
-    .board-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 10px;
+    .odds-table-wrap {
+      border: 1px solid rgba(108, 133, 224, 0.24);
+      border-radius: 14px;
+      overflow: auto;
+      background: rgba(6, 16, 44, 0.9);
     }
+
+    .odds-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1120px;
+    }
+
+    .odds-table th,
+    .odds-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(108, 133, 224, 0.22);
+      text-align: left;
+      font-size: 13px;
+      vertical-align: top;
+    }
+
+    .odds-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(13, 29, 70, 0.98);
+      color: #dce8ff;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .odds-table tr:hover td {
+      background: rgba(21, 41, 92, 0.28);
+    }
+
+    .value-strong { color: #70f0ad; font-weight: 800; }
+    .value-moderate { color: #b9dcff; font-weight: 700; }
+    .book-missing { color: #94a3b8; }
 
     .odds-meta {
       font-size: 12px;
@@ -1142,34 +1177,11 @@
           <option value="pra">pra</option>
           <option value="fantasy_points">fantasy_points</option>
         </select>
-        <select id="oddsMarketModeSelect" onchange="setOddsMarketMode(this.value)">
-          <option value="standard">Standard Markets</option>
-          <option value="alternate">Alternate Markets</option>
-        </select>
-        <select id="oddsBookmakerFilterSelect" onchange="setOddsBookmakerFilter(this.value)">
-          <option value="all">All Bookmakers</option>
-        </select>
+        <div class="timestamp-pill" style="display:flex;align-items:center;">Core books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
 
       <div id="oddsSummary" class="muted" style="margin-bottom:10px;">
         Events loaded: 0 • Raw book props: 0 • Consensus props: 0 • Unique books: 0
-      </div>
-
-      <div class="sort-row">
-        <div class="sort-field">
-          <label class="sort-label" for="oddsSortBySelect">Sort by</label>
-          <select id="oddsSortBySelect" class="sort-select" onchange="setOddsSortBy(this.value)">
-            <option value="biggestEdge">Biggest Edge</option>
-            <option value="default">Default</option>
-          </select>
-        </div>
-        <div class="sort-field">
-          <label class="sort-label" for="oddsSortOrderSelect">Order</label>
-          <select id="oddsSortOrderSelect" class="sort-select" onchange="setOddsSortOrder(this.value)">
-            <option value="desc">Highest first</option>
-            <option value="asc">Lowest first</option>
-          </select>
-        </div>
       </div>
 
       <div id="oddsMessage" class="notice" style="display:none;"></div>
@@ -1205,10 +1217,6 @@
     const viewBtnOdds = document.getElementById("viewBtnOdds");
     const oddsLeagueSelect = document.getElementById("oddsLeagueSelect");
     const oddsStatSelect = document.getElementById("oddsStatSelect");
-    const oddsMarketModeSelect = document.getElementById("oddsMarketModeSelect");
-    const oddsBookmakerFilterSelect = document.getElementById("oddsBookmakerFilterSelect");
-    const oddsSortBySelect = document.getElementById("oddsSortBySelect");
-    const oddsSortOrderSelect = document.getElementById("oddsSortOrderSelect");
     const oddsSummary = document.getElementById("oddsSummary");
     const oddsResultsSection = document.getElementById("oddsResultsSection");
     const oddsLoading = document.getElementById("oddsLoading");
@@ -1245,13 +1253,8 @@
     let appView = "r6Props";
     let oddsBookProps = [];
     let oddsStandardGroups = [];
-    let oddsAlternateGroups = [];
     let oddsVisibleProps = [];
-    let oddsMarketMode = "standard";
     let oddsSelectedMarket = "all";
-    let oddsBookmakerFilter = "all";
-    let oddsSortBy = "biggestEdge";
-    let oddsSortOrder = "desc";
     let oddsLastUpdatedAt = null;
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
@@ -1264,25 +1267,13 @@
       pra: ["points+rebounds+assists"],
       fantasy_points: ["fantasyscore"]
     };
-    const ODDS_SORT_OPTIONS = {
-      standard: [
-        { value: "biggestEdge", label: "Biggest Edge" },
-        { value: "default", label: "Default" },
-        { value: "consensusLineMean", label: "Consensus Line" },
-        { value: "booksCount", label: "Books Count" },
-        { value: "consensusFairOverProbability", label: "Consensus Fair Over %" },
-        { value: "consensusFairUnderProbability", label: "Consensus Fair Under %" },
-        { value: "playerName", label: "Player Name" }
-      ],
-      alternate: [
-        { value: "default", label: "Default" },
-        { value: "playerName", label: "Player Name" },
-        { value: "booksCount", label: "Books Count" },
-        { value: "lowestLine", label: "Lowest Line" },
-        { value: "highestLine", label: "Highest Line" }
-      ]
-    };
-    const expandedAlternateCards = new Set();
+    const CORE_BOOKS = [
+      { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
+      { key: "draftkings", label: "DraftKings", weight: 0.25, aliases: ["draftkings"] },
+      { key: "pinnacle", label: "Pinnacle", weight: 0.35, aliases: ["pinnacle"] },
+      { key: "betonline", label: "BetOnline", weight: 0.15, aliases: ["betonline", "betonlineag"] }
+    ];
+    const LINE_SHIFT_PER_HALF = 0.035;
     const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
       "NBA",
       "NFL",
@@ -1317,13 +1308,7 @@
       oddsLeagueSelect.value = "NBA";
       oddsStatSelect.value = "all";
       oddsSelectedMarket = "all";
-      oddsMarketModeSelect.value = "standard";
-      oddsBookmakerFilterSelect.value = "all";
-      oddsSortBySelect.value = "biggestEdge";
-      oddsSortOrderSelect.value = "desc";
       oddsLastUpdated.textContent = "Last updated: Never";
-      syncOddsSortOptions();
-      syncOddsBookmakerFilterOptions();
       renderCurrentView();
     });
 
@@ -1486,6 +1471,13 @@
       return Math.abs(normalized) / (Math.abs(normalized) + 100);
     }
 
+    function probabilityToAmericanOdds(probability) {
+      const value = safeNumeric(probability);
+      if (!Number.isFinite(value) || value <= 0 || value >= 1) return Number.NaN;
+      if (value >= 0.5) return -Math.round((value / (1 - value)) * 100);
+      return Math.round(((1 - value) / value) * 100);
+    }
+
     function renderAllProps(props) {
       if (!props.length) {
         const emptyText = allProps.length ? "No props found." : "Loading props...";
@@ -1556,7 +1548,7 @@
       oddsMessage.style.display = "none";
 
       try {
-        const params = new URLSearchParams({ leagueID, marketMode: oddsMarketMode, statIDs: selectedMarket });
+        const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: selectedMarket });
         const res = await fetch(`/api/odds-comparison?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) {
@@ -1568,10 +1560,9 @@
         oddsBookProps = Array.isArray(data.bookProps) ? data.bookProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
         updateOddsLoading("Building bookmaker comparisons...");
         oddsStandardGroups = Array.isArray(data.groupedStandardProps) ? data.groupedStandardProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
-        oddsAlternateGroups = Array.isArray(data.groupedAlternateProps) ? data.groupedAlternateProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
 
         oddsSummaryData = {
-          mode: data.marketMode === "alternate" ? "alternate" : "standard",
+          mode: "standard",
           eventsLoaded: Number(data.eventsLoaded) || 0,
           rawPlayerPropRecords: Number(data.rawPlayerPropRecords) || 0,
           pairedBookProps: Number(data.pairedBookProps) || 0,
@@ -1582,22 +1573,19 @@
         };
         oddsLastUpdatedAt = Date.now();
 
-        syncOddsBookmakerFilterOptions();
         renderOddsSummary();
         updateOddsLoading("Finalizing results...");
-        applyOddsSorting();
+        applyOddsSortingAndRendering();
 
-        if (!oddsStandardGroups.length && !oddsAlternateGroups.length) {
+        if (!oddsStandardGroups.length) {
           oddsResultsSection.innerHTML = `<div class="empty">No props available yet for this selection.<br/>Player props may appear closer to game time.</div>`;
         }
       } catch (error) {
         oddsBookProps = [];
         oddsStandardGroups = [];
-        oddsAlternateGroups = [];
         oddsVisibleProps = [];
-        oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode, sentParams: null, eventsReturned: 0 };
+        oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
         oddsLastUpdatedAt = Date.now();
-        syncOddsBookmakerFilterOptions();
         renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
         oddsMessage.style.display = "block";
@@ -1607,24 +1595,10 @@
       }
     }
 
-    function setOddsMarketMode(value) {
-      oddsMarketMode = value === "alternate" ? "alternate" : "standard";
-      syncOddsSortOptions();
-      oddsBookProps = [];
-      oddsStandardGroups = [];
-      oddsAlternateGroups = [];
-      oddsVisibleProps = [];
-      expandedAlternateCards.clear();
-      oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: oddsMarketMode, sentParams: null, eventsReturned: 0 };
-      syncOddsBookmakerFilterOptions();
-      renderOddsSummary();
-      oddsResultsSection.innerHTML = `<div class="empty">Load sportsbook props to begin.</div>`;
-    }
-
     function setOddsSelectedMarket(value) {
       oddsSelectedMarket = normalizeSelectedMarket(value);
       oddsStatSelect.value = oddsSelectedMarket;
-      applyOddsSorting();
+      applyOddsSortingAndRendering();
     }
 
     function normalizeSelectedMarket(value) {
@@ -1643,231 +1617,154 @@
       return rows.filter(row => allowed.has(normalizeStatIDKey(row.statID)));
     }
 
-    function setOddsBookmakerFilter(value) {
-      oddsBookmakerFilter = value || "all";
-      applyOddsSorting();
-    }
-
-    function setOddsSortBy(value) {
-      oddsSortBy = value || "default";
-      applyOddsSorting();
-    }
-
-    function syncOddsSortOptions() {
-      const options = ODDS_SORT_OPTIONS[oddsMarketMode] || ODDS_SORT_OPTIONS.standard;
-      const allowedValues = new Set(options.map(option => option.value));
-      oddsSortBySelect.innerHTML = options
-        .map(option => `<option value="${option.value}">${option.label}</option>`)
-        .join("");
-      if (!allowedValues.has(oddsSortBy)) {
-        oddsSortBy = oddsMarketMode === "standard" ? "biggestEdge" : "default";
-      }
-      oddsSortBySelect.value = oddsSortBy;
-    }
-
-    function syncOddsBookmakerFilterOptions() {
-      const options = [{ value: "all", label: "All Bookmakers" }].concat(
-        (oddsSummaryData.uniqueBookmakers || []).map(book => ({
-          value: book.bookmakerID,
-          label: book.bookmakerTitle || book.bookmakerID
-        }))
-      );
-      oddsBookmakerFilterSelect.innerHTML = options
-        .map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
-        .join("");
-      if (!options.some(option => option.value === oddsBookmakerFilter)) {
-        oddsBookmakerFilter = "all";
-      }
-      oddsBookmakerFilterSelect.value = oddsBookmakerFilter;
-    }
-
     function renderOddsSummary() {
       const books = oddsSummaryData.uniqueBookmakers || [];
       const bookTitles = books.map(book => book.bookmakerTitle).filter(Boolean);
       const booksText = bookTitles.length
         ? `${bookTitles.length} (${bookTitles.slice(0, 5).join(", ")}${bookTitles.length > 5 ? ", ..." : ""})`
         : "0";
-      const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
-      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Consensus props: ${oddsFilterDebug.groupedAfterFilter} • Unique bookmakers: ${booksText}`;
+      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Board rows: ${oddsFilterDebug.groupedAfterFilter} • Unique bookmakers: ${booksText}`;
       oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
-    function setOddsSortOrder(value) {
-      oddsSortOrder = value === "asc" ? "asc" : "desc";
-      applyOddsSorting();
-    }
-
-    function applyOddsSorting() {
+    function applyOddsSortingAndRendering() {
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
-      const sourceRows = oddsMarketMode === "alternate" ? oddsAlternateGroups : oddsStandardGroups;
-      const marketFilteredRows = filterOddsRowsBySelectedMarket(sourceRows, selectedMarket);
-      const filteredRows = marketFilteredRows.filter(row => {
-        if (oddsBookmakerFilter === "all") return true;
-        if (oddsMarketMode === "alternate") {
-          return (row.books || []).some(book => book.bookmakerID === oddsBookmakerFilter);
-        }
-        return (row.books || []).some(book => book.bookmakerID === oddsBookmakerFilter);
-      });
+      const marketFilteredRows = filterOddsRowsBySelectedMarket(oddsStandardGroups, selectedMarket);
+      const enrichedRows = marketFilteredRows
+        .map(buildWeightedOddsRow)
+        .filter(row => Number.isFinite(row.valuePercent));
       oddsFilterDebug = {
         selectedMarket,
-        groupedBeforeFilter: sourceRows.length,
+        groupedBeforeFilter: oddsStandardGroups.length,
         groupedAfterFilter: marketFilteredRows.length
       };
       renderOddsSummary();
-      oddsVisibleProps = sortOddsProps(filteredRows);
+      oddsVisibleProps = [...enrichedRows].sort((a, b) => b.valuePercent - a.valuePercent);
       renderOddsProps(oddsVisibleProps);
-    }
-
-    function sortOddsProps(rows) {
-      if (oddsSortBy === "default") {
-        return [...rows].sort((a, b) => safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder));
-      }
-      const direction = oddsSortOrder === "asc" ? 1 : -1;
-      return [...rows].sort((a, b) => {
-        const aValue = getOddsSortValue(a, oddsSortBy);
-        const bValue = getOddsSortValue(b, oddsSortBy);
-        const isTextSort = oddsSortBy === "playerName";
-
-        if (isTextSort) {
-          const compared = String(aValue).localeCompare(String(bValue));
-          if (compared === 0) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
-          return compared * direction;
-        }
-
-        const aMissing = !Number.isFinite(aValue);
-        const bMissing = !Number.isFinite(bValue);
-        if (aMissing && bMissing) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
-        if (aMissing) return 1;
-        if (bMissing) return -1;
-        if (aValue === bValue) return safeNumeric(a.originalOrder) - safeNumeric(b.originalOrder);
-        return (aValue - bValue) * direction;
-      });
-    }
-
-    function getOddsSortValue(prop, sortBy) {
-      if (sortBy === "playerName") return normalizeName(prop.playerName || "");
-      if (sortBy === "biggestEdge") return Math.abs(computeLineGap(prop));
-      const map = {
-        consensusLineMean: safeNumeric(prop.consensusLineMean),
-        booksCount: safeNumeric(prop.booksCount),
-        consensusFairOverProbability: safeNumeric(prop.consensusFairOverProbability),
-        consensusFairUnderProbability: safeNumeric(prop.consensusFairUnderProbability),
-        lowestLine: safeNumeric(prop.lowestLine),
-        highestLine: safeNumeric(prop.highestLine)
-      };
-      return map[sortBy];
-    }
-
-    function computeLineGap(prop) {
-      const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
-      const consensusLine = safeNumeric(prop?.consensusLineMean);
-      if (!Number.isFinite(prizePicksLine) || !Number.isFinite(consensusLine)) return Number.NaN;
-      return prizePicksLine - consensusLine;
-    }
-
-    function getLeanInfo(lineGap) {
-      if (!Number.isFinite(lineGap) || Math.abs(lineGap) < 0.5) {
-        return { label: "In Line", className: "lean-inline" };
-      }
-      if (lineGap <= -1.5) return { label: "Strong Over Lean", className: "lean-over" };
-      if (lineGap < -0.5) return { label: "Mild Over Lean", className: "lean-over" };
-      if (lineGap >= 1.5) return { label: "Strong Under Lean", className: "lean-under" };
-      return { label: "Mild Under Lean", className: "lean-under" };
     }
 
     function renderOddsProps(rows) {
-      if (oddsMarketMode === "alternate") {
-        renderAlternateOddsProps(rows);
-        return;
-      }
       if (!rows.length) {
         oddsResultsSection.innerHTML = `<div class="empty">No props available yet for this selection.<br/>Player props may appear closer to game time.</div>`;
         return;
       }
 
       oddsResultsSection.innerHTML = `
-        <div class="board-grid">
-          ${rows.map(prop => {
-            const lineGap = computeLineGap(prop);
-            const leanInfo = getLeanInfo(lineGap);
-            const confidence = getConfidenceLabel(lineGap);
-            const marketLabel = prop.displayMarketLabel || getStatTypeLabel(prop.statID, prop.marketKey);
-            return `
-            <div class="odds-card">
-              <div class="prop-top">
-                <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
-                <div class="line-badge">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</div>
-              </div>
-              <div class="odds-meta">${escapeHtml(marketLabel)} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
-              <div class="odds-lines">
-                <div class="odds-row"><span class="odds-row-key">Player</span><span class="odds-row-value">${escapeHtml(prop.playerName || "Unknown Player")}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Market</span><span class="odds-row-value">${escapeHtml(marketLabel)}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Matchup</span><span class="odds-row-value">${escapeHtml(prop.matchup || getMatchupText(prop))}</span></div>
-                <div class="odds-row"><span class="odds-row-key">PrizePicks</span><span class="odds-row-value">${Number.isFinite(prop.prizepicks?.line) ? Number(prop.prizepicks.line).toFixed(1) : "N/A"}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Market Line</span><span class="odds-row-value">${Number.isFinite(prop.consensusLineMean) ? prop.consensusLineMean.toFixed(1) : "N/A"}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Gap</span><span class="odds-row-value">${Number.isFinite(lineGap) ? lineGap.toFixed(1) : "N/A"}</span></div>
-                <div class="odds-row"><span class="odds-row-key">Books</span><span class="odds-row-value">${renderBookmakerLineSummary(prop.books || [])}</span></div>
-              </div>
-              <div class="lean-badge ${leanInfo.className}">Lean: ${leanInfo.label}</div>
-              <div class="confidence-pill">Confidence: ${confidence}</div>
-            </div>
-          `;
-          }).join("")}
+        <div class="odds-table-wrap">
+          <table class="odds-table">
+            <thead>
+              <tr>
+                <th>Site / PP</th>
+                <th>Player Info</th>
+                <th>Bet Details</th>
+                <th>Value %</th>
+                <th>Fair Odds</th>
+                <th>FanDuel</th>
+                <th>DraftKings</th>
+                <th>Pinnacle</th>
+                <th>BetOnline</th>
+                <th>PrizePicks Line</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr>
+                  <td>PrizePicks vs Core Books</td>
+                  <td>
+                    <div><strong>${escapeHtml(row.playerName || "Unknown Player")}</strong></div>
+                    <div class="muted">${escapeHtml(row.matchup || "Unknown matchup")}</div>
+                  </td>
+                  <td>${escapeHtml(row.betDetails)}</td>
+                  <td class="${row.valuePercent >= 57 ? "value-strong" : "value-moderate"}">${formatPercent(row.valuePercent)}</td>
+                  <td>${escapeHtml(row.recommendedSideLabel)} ${escapeHtml(formatAmericanOdds(row.fairOdds))}</td>
+                  <td>${renderCoreBookCell(row.coreBooks.fanduel)}</td>
+                  <td>${renderCoreBookCell(row.coreBooks.draftkings)}</td>
+                  <td>${renderCoreBookCell(row.coreBooks.pinnacle)}</td>
+                  <td>${renderCoreBookCell(row.coreBooks.betonline)}</td>
+                  <td>${Number.isFinite(row.prizePicksLine) ? row.prizePicksLine.toFixed(1) : "N/A"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
       `;
     }
 
-    function toggleAlternateCard(key) {
-      if (!key) return;
-      if (expandedAlternateCards.has(key)) {
-        expandedAlternateCards.delete(key);
-      } else {
-        expandedAlternateCards.add(key);
+    function buildWeightedOddsRow(prop) {
+      const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
+      const coreBooks = {};
+      CORE_BOOKS.forEach(book => {
+        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine);
+      });
+
+      const weightedParts = CORE_BOOKS
+        .map(book => ({ config: book, line: coreBooks[book.key] }))
+        .filter(item => item.line && Number.isFinite(item.line.adjustedOverProbability));
+
+      const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
+      let weightedOverProbability = Number.NaN;
+      if (totalWeight > 0) {
+        weightedOverProbability = weightedParts.reduce((sum, item) => {
+          return sum + (item.line.adjustedOverProbability * (item.config.weight / totalWeight));
+        }, 0);
       }
-      renderOddsProps(oddsVisibleProps);
+      const weightedUnderProbability = Number.isFinite(weightedOverProbability) ? (1 - weightedOverProbability) : Number.NaN;
+      const recommendedSide = weightedOverProbability >= weightedUnderProbability ? "Over" : "Under";
+      const recommendedProbability = Math.max(weightedOverProbability, weightedUnderProbability);
+      const fairOdds = probabilityToAmericanOdds(recommendedProbability);
+      const statLabel = getStatTypeLabel(prop.statID, prop.marketKey);
+
+      return {
+        ...prop,
+        prizePicksLine,
+        coreBooks,
+        weightedOverProbability,
+        weightedUnderProbability,
+        recommendedSideLabel: recommendedSide,
+        fairOdds,
+        valuePercent: recommendedProbability * 100,
+        betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
+      };
     }
 
-    function renderAlternateOddsProps(rows) {
-      if (!rows.length) {
-        oddsResultsSection.innerHTML = `<div class="empty">No props available yet for this selection.<br/>Player props may appear closer to game time.</div>`;
-        return;
+    function findCoreBookLine(books, coreBookConfig, prizePicksLine) {
+      const book = (books || []).find(item => {
+        const id = String(item?.bookmakerID || "").toLowerCase();
+        return coreBookConfig.aliases.some(alias => id.includes(alias));
+      });
+      if (!book) return null;
+      const fairOverProbability = safeNumeric(book.fairOverProbability);
+      const fairUnderProbability = safeNumeric(book.fairUnderProbability);
+      const line = safeNumeric(book.line);
+      if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(line)) {
+        return { line, overOdds: book.overOdds, underOdds: book.underOdds };
       }
+      const adjustedOverProbability = adjustFairProbabilityForLine(fairOverProbability, line, prizePicksLine);
+      return {
+        line,
+        overOdds: book.overOdds,
+        underOdds: book.underOdds,
+        fairOverProbability,
+        fairUnderProbability,
+        adjustedOverProbability
+      };
+    }
 
-      oddsResultsSection.innerHTML = `
-        <div class="props-grid">
-          ${rows.map((prop, index) => {
-            const cardKey = escapeJs(`${prop.eventID}|${prop.marketKey}|${prop.playerIDRaw}|${index}`);
-            const isExpanded = expandedAlternateCards.has(cardKey);
-            return `
-              <div class="odds-card">
-                <div class="prop-top">
-                  <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
-                  <div class="line-badge">${safeNumeric(prop.booksCount) || 0}</div>
-                </div>
-                <div class="odds-meta">${escapeHtml(getStatTypeLabel(prop.statID, prop.marketKey))} • ${escapeHtml(prop.matchup || getMatchupText(prop))}</div>
-                <div class="odds-lines">
-                  <div>Books: ${safeNumeric(prop.booksCount) || 0}</div>
-                  <div>Line ladder summary: ${Number.isFinite(prop.lowestLine) ? prop.lowestLine : "N/A"} to ${Number.isFinite(prop.highestLine) ? prop.highestLine : "N/A"}</div>
-                </div>
-                <button class="odds-expand" onclick="toggleAlternateCard('${cardKey}')">${isExpanded ? "Hide line ladders" : "Show line ladders"}</button>
-                ${isExpanded ? `<div class="odds-ladder">
-                  ${(prop.books || []).map(book => `
-                    <div class="odds-ladder-book">
-                      <div class="odds-meta"><strong>${escapeHtml(book.bookmakerTitle || "Unknown Bookmaker")}</strong></div>
-                      <div class="odds-lines">
-                        ${(book.lines || []).length
-                          ? (book.lines || []).map(line => `<div>${line.line}: O ${escapeHtml(formatAmericanOdds(line.overOdds))} • U ${escapeHtml(formatAmericanOdds(line.underOdds))}</div>`).join("")
-                          : "No alt lines"
-                        }
-                      </div>
-                    </div>
-                  `).join("")}
-                </div>` : ""}
-              </div>
-            `;
-          }).join("")}
-        </div>
-      `;
+    function adjustFairProbabilityForLine(baseOverProbability, bookLine, prizePicksLine) {
+      if (!Number.isFinite(baseOverProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) return Number.NaN;
+      const halfStepDifference = (prizePicksLine - bookLine) / 0.5;
+      const shifted = baseOverProbability - (halfStepDifference * LINE_SHIFT_PER_HALF);
+      return Math.min(0.98, Math.max(0.02, shifted));
+    }
+
+    function renderCoreBookCell(book) {
+      if (!book || !Number.isFinite(book.line)) return `<span class="book-missing">—</span>`;
+      return `${book.line.toFixed(1)}<br/><span class="muted">O ${formatAmericanOdds(book.overOdds)} / U ${formatAmericanOdds(book.underOdds)}</span>`;
+    }
+
+    function formatPercent(value) {
+      if (!Number.isFinite(value)) return "N/A";
+      return `${value.toFixed(1)}%`;
     }
 
     function startOddsLoading(message) {
