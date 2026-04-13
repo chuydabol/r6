@@ -4,8 +4,8 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4";
-const ODDS_API_KEY = process.env.ODDS_API_KEY;
+const SPORTSGAMEODDS_BASE_URL = "https://api.sportsgameodds.com/v2/events";
+const SPORTSGAMEODDS_KEY = process.env.SPORTSGAMEODDS_KEY;
 
 app.use(express.static("public"));
 
@@ -280,99 +280,210 @@ function probabilityToAmericanOdds(probability) {
   return Math.round(((1 - parsed) / parsed) * 100);
 }
 
-const ALTERNATE_PROP_MARKETS = new Set([
-  "player_points_alternate",
-  "player_rebounds_alternate",
-  "player_assists_alternate",
-  "player_blocks_alternate",
-  "player_steals_alternate",
-  "player_turnovers_alternate",
-  "player_threes_alternate",
-  "player_points_assists_alternate",
-  "player_points_rebounds_alternate",
-  "player_rebounds_assists_alternate",
-  "player_points_rebounds_assists_alternate",
-  "player_fantasy_points_alternate"
-]);
+const NON_PLAYER_ENTITIES = new Set(["all", "home", "away"]);
+const PLAYER_SIDE_MAP = { over: "over", under: "under" };
+const LEAGUE_ALIAS_MAP = {
+  NBA: ["NBA"],
+  WNBA: ["WNBA"],
+  NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"]
+};
+const STAT_ALIAS_MAP = {
+  points: ["points", "pts", "player_points"],
+  rebounds: ["rebounds", "reb", "player_rebounds"],
+  assists: ["assists", "ast", "player_assists"],
+  pra: ["pra", "points_rebounds_assists", "player_points_rebounds_assists"],
+  fantasy_points: ["fantasy_points", "player_fantasy_points"]
+};
 
-function normalizeOddsOutcomes(sport, event, eventOddsData) {
-  const bookmakers = Array.isArray(eventOddsData?.bookmakers) ? eventOddsData.bookmakers : [];
-  const rows = [];
-  bookmakers.forEach(bookmaker => {
-    const markets = Array.isArray(bookmaker?.markets) ? bookmaker.markets : [];
-    markets.forEach(market => {
-      const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
-      outcomes.forEach(outcome => {
-        const playerName = String(outcome?.description || outcome?.name || "").trim();
-        const side = String(outcome?.name || "").trim();
-        const line = Number(outcome?.point);
-        const odds = Number(outcome?.price);
-        if (!playerName || (side !== "Over" && side !== "Under")) return;
+function normalizeLeagueID(value) {
+  const target = String(value || "NBA").trim().toUpperCase();
+  if (target === "BASKETBALL_NBA") return "NBA";
+  if (target === "BASKETBALL_WNBA") return "WNBA";
+  if (target === "BASKETBALL_NCAAB") return "NCAAB";
+  return ["NBA", "WNBA", "NCAAB"].includes(target) ? target : "NBA";
+}
+
+function matchesLeague(eventLeague, selectedLeague) {
+  const eventKey = String(eventLeague || "").trim().toUpperCase();
+  const aliases = LEAGUE_ALIAS_MAP[selectedLeague] || [selectedLeague];
+  return aliases.some(alias => eventKey.includes(alias));
+}
+
+function splitStatIDs(statIDsParam) {
+  const raw = String(statIDsParam || "").trim();
+  if (!raw) return [];
+  return raw.split(",").map(item => item.trim().toLowerCase()).filter(Boolean);
+}
+
+function matchesStatID(statID, requestedStatIDs) {
+  if (!requestedStatIDs.length) return true;
+  const statKey = String(statID || "").trim().toLowerCase();
+  if (!statKey) return false;
+  return requestedStatIDs.some(requested => {
+    if (requested === "all") return true;
+    if (requested === statKey) return true;
+    const aliases = STAT_ALIAS_MAP[requested] || [requested];
+    return aliases.some(alias => statKey.includes(alias));
+  });
+}
+
+function parseOddID(oddID) {
+  const parts = String(oddID || "").split("-");
+  return {
+    oddID: oddID || "",
+    statID: parts[0] || null,
+    statEntityID: parts[1] || null,
+    periodID: parts[2] || null,
+    betTypeID: parts[3] || null,
+    sideID: parts[4] || null
+  };
+}
+
+function formatPlayerName(statEntityID) {
+  const raw = String(statEntityID || "").trim();
+  if (!raw) return "Unknown Player";
+  const parts = raw.split("_").filter(Boolean);
+  while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();
+  while (parts.length && /^[A-Z]{2,6}$/.test(parts[parts.length - 1])) parts.pop();
+  const formatted = parts.map(part => {
+    const lower = part.toLowerCase();
+    if (["ii", "iii", "iv", "jr", "sr"].includes(lower)) return lower.toUpperCase();
+    if (lower === "mccollum") return "McCollum";
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }).join(" ");
+  return formatted || raw.replace(/_/g, " ");
+}
+
+function toNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getBookmakerOdds(bookmakerNode) {
+  if (!bookmakerNode || typeof bookmakerNode !== "object") return null;
+  const oddsCandidates = [bookmakerNode.odds, bookmakerNode.price, bookmakerNode.americanOdds];
+  for (const candidate of oddsCandidates) {
+    const value = toNumber(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function getBookmakerLine(bookmakerNode) {
+  if (!bookmakerNode || typeof bookmakerNode !== "object") return null;
+  const lineCandidates = [bookmakerNode.overUnder, bookmakerNode.line, bookmakerNode.total, bookmakerNode.spread];
+  for (const candidate of lineCandidates) {
+    const value = toNumber(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function buildMarketKey(meta) {
+  return [meta.statID || "unknown", meta.periodID || "full", meta.betTypeID || "unknown"].join(":");
+}
+
+function normalizeSportsGameOddsResponse(events, options) {
+  const rawPlayerPropRecords = [];
+  const uniqueBookmakers = new Map();
+  const requestedStatIDs = splitStatIDs(options.statIDs);
+  const mode = options.marketMode === "alternate" ? "alternate" : "standard";
+
+  events.forEach(event => {
+    if (!matchesLeague(event?.leagueID || event?.league || event?.sportID, options.leagueID)) return;
+    const oddsNode = event?.odds && typeof event.odds === "object" ? event.odds : {};
+    Object.entries(oddsNode).forEach(([oddID, oddNode]) => {
+      const parsedOddID = parseOddID(oddID);
+      const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
+      if (!statEntityID || NON_PLAYER_ENTITIES.has(statEntityID.toLowerCase())) return;
+
+      const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
+      const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
+      const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
+      const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
+      if (!matchesStatID(statID, requestedStatIDs)) return;
+      if (betTypeID !== "ou") return;
+      if (!PLAYER_SIDE_MAP[sideID]) return;
+
+      const isAlternateLine = Boolean(oddNode?.isAlternateLine) || Number.isFinite(toNumber(oddNode?.altLineIndex));
+      if (mode === "standard" && isAlternateLine) return;
+
+      const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
+      Object.entries(byBookmaker).forEach(([bookmakerID, bookmakerNode]) => {
+        const line = getBookmakerLine(bookmakerNode);
+        const odds = getBookmakerOdds(bookmakerNode);
+        const available = bookmakerNode?.available !== false;
         if (!Number.isFinite(line) || !Number.isFinite(odds)) return;
-        rows.push({
-          sport,
-          eventId: event.id,
-          commenceTime: event.commence_time || null,
-          homeTeam: event.home_team || "",
-          awayTeam: event.away_team || "",
-          bookmakerKey: bookmaker?.key || "",
-          bookmakerTitle: bookmaker?.title || "Unknown Bookmaker",
-          marketKey: market?.key || "",
-          playerName,
-          side,
+
+        const bookmakerTitle = String(bookmakerNode?.bookmakerTitle || bookmakerNode?.title || bookmakerID || "Unknown Bookmaker");
+        uniqueBookmakers.set(bookmakerID, bookmakerTitle);
+
+        rawPlayerPropRecords.push({
+          leagueID: options.leagueID,
+          eventID: String(event?.eventID || event?.id || ""),
+          commenceTime: event?.commenceTime || event?.startTime || null,
+          homeTeam: String(event?.homeTeam || event?.home || ""),
+          awayTeam: String(event?.awayTeam || event?.away || ""),
+          playerIDRaw: statEntityID,
+          playerName: formatPlayerName(statEntityID),
+          statID,
+          periodID,
+          betTypeID,
+          marketKey: buildMarketKey({ statID, periodID, betTypeID }),
+          bookmakerID,
+          bookmakerTitle,
+          side: PLAYER_SIDE_MAP[sideID],
           line,
-          odds
+          odds,
+          available,
+          oddID
         });
       });
     });
   });
-  return rows;
-}
 
-function buildBookLevelProps(normalizedRows) {
-  const grouped = new Map();
-  normalizedRows.forEach(row => {
-    const key = [
-      row.sport,
-      row.eventId,
-      row.bookmakerKey,
-      row.marketKey,
-      row.playerName,
-      row.line
-    ].join("|");
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        sport: row.sport,
-        eventId: row.eventId,
-        commenceTime: row.commenceTime,
-        homeTeam: row.homeTeam,
-        awayTeam: row.awayTeam,
-        bookmakerKey: row.bookmakerKey,
-        bookmakerTitle: row.bookmakerTitle,
-        marketKey: row.marketKey,
-        playerName: row.playerName,
-        line: row.line,
+  const pairMap = new Map();
+  rawPlayerPropRecords.forEach(record => {
+    const key = [record.eventID, record.playerIDRaw, record.statID, record.periodID, record.bookmakerID, record.line].join("|");
+    if (!pairMap.has(key)) {
+      pairMap.set(key, {
+        leagueID: record.leagueID,
+        eventID: record.eventID,
+        commenceTime: record.commenceTime,
+        homeTeam: record.homeTeam,
+        awayTeam: record.awayTeam,
+        playerIDRaw: record.playerIDRaw,
+        playerName: record.playerName,
+        statID: record.statID,
+        periodID: record.periodID,
+        marketKey: record.marketKey,
+        bookmakerID: record.bookmakerID,
+        bookmakerTitle: record.bookmakerTitle,
+        line: record.line,
         overOdds: null,
-        underOdds: null
+        underOdds: null,
+        oddIDOver: null,
+        oddIDUnder: null
       });
     }
-    const entry = grouped.get(key);
-    if (row.side === "Over") entry.overOdds = row.odds;
-    if (row.side === "Under") entry.underOdds = row.odds;
+    const pair = pairMap.get(key);
+    if (record.side === "over") {
+      pair.overOdds = record.odds;
+      pair.oddIDOver = record.oddID;
+    }
+    if (record.side === "under") {
+      pair.underOdds = record.odds;
+      pair.oddIDUnder = record.oddID;
+    }
   });
 
-  return Array.from(grouped.values()).map(entry => {
-    if (!Number.isFinite(entry.overOdds) || !Number.isFinite(entry.underOdds)) {
-      return null;
-    }
-    const impliedOverProbability = americanOddsToImpliedProbability(entry.overOdds);
-    const impliedUnderProbability = americanOddsToImpliedProbability(entry.underOdds);
+  const pairedBookProps = Array.from(pairMap.values()).map(pair => {
+    if (!Number.isFinite(pair.overOdds) || !Number.isFinite(pair.underOdds)) return null;
+    const impliedOverProbability = americanOddsToImpliedProbability(pair.overOdds);
+    const impliedUnderProbability = americanOddsToImpliedProbability(pair.underOdds);
     const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
-    if (!Number.isFinite(fair.fairOver) || !Number.isFinite(fair.fairUnder)) {
-      return null;
-    }
     return {
-      ...entry,
+      ...pair,
       impliedOverProbability,
       impliedUnderProbability,
       fairOverProbability: fair.fairOver,
@@ -381,297 +492,243 @@ function buildBookLevelProps(normalizedRows) {
       fairUnderOdds: probabilityToAmericanOdds(fair.fairUnder)
     };
   }).filter(Boolean);
-}
 
-function buildConsensusProps(bookProps) {
-  const grouped = new Map();
+  const groupedMap = new Map();
+  const alternateMap = new Map();
 
-  bookProps.forEach(prop => {
-    const key = [
-      prop.sport,
-      prop.eventId,
-      prop.marketKey,
-      prop.playerName,
-      prop.line
-    ].join("|");
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        sport: prop.sport,
-        eventId: prop.eventId,
-        commenceTime: prop.commenceTime,
-        homeTeam: prop.homeTeam,
-        awayTeam: prop.awayTeam,
-        marketKey: prop.marketKey,
-        playerName: prop.playerName,
-        line: prop.line,
-        books: []
+  pairedBookProps.forEach(pair => {
+    const standardKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID].join("|");
+    if (!groupedMap.has(standardKey)) {
+      groupedMap.set(standardKey, {
+        leagueID: pair.leagueID,
+        eventID: pair.eventID,
+        commenceTime: pair.commenceTime,
+        homeTeam: pair.homeTeam,
+        awayTeam: pair.awayTeam,
+        playerIDRaw: pair.playerIDRaw,
+        playerName: pair.playerName,
+        statID: pair.statID,
+        periodID: pair.periodID,
+        marketKey: pair.marketKey,
+        books: [],
+        prizepicks: null
       });
     }
-    const group = grouped.get(key);
-    group.books.push({
-      bookmakerKey: prop.bookmakerKey,
-      bookmakerTitle: prop.bookmakerTitle,
-      overOdds: prop.overOdds,
-      underOdds: prop.underOdds,
-      fairOverProbability: prop.fairOverProbability,
-      fairUnderProbability: prop.fairUnderProbability,
-      fairOverOdds: prop.fairOverOdds,
-      fairUnderOdds: prop.fairUnderOdds
+
+    const standardGroup = groupedMap.get(standardKey);
+    standardGroup.books.push(pair);
+    if (pair.bookmakerID === "prizepicks") {
+      standardGroup.prizepicks = {
+        line: pair.line,
+        overOdds: pair.overOdds,
+        underOdds: pair.underOdds,
+        bookmakerTitle: pair.bookmakerTitle || "PrizePicks"
+      };
+    }
+
+    const altKey = standardKey;
+    if (!alternateMap.has(altKey)) {
+      alternateMap.set(altKey, {
+        eventID: pair.eventID,
+        playerIDRaw: pair.playerIDRaw,
+        playerName: pair.playerName,
+        statID: pair.statID,
+        periodID: pair.periodID,
+        marketKey: pair.marketKey,
+        homeTeam: pair.homeTeam,
+        awayTeam: pair.awayTeam,
+        booksMap: new Map()
+      });
+    }
+
+    const altGroup = alternateMap.get(altKey);
+    if (!altGroup.booksMap.has(pair.bookmakerID)) {
+      altGroup.booksMap.set(pair.bookmakerID, {
+        bookmakerID: pair.bookmakerID,
+        bookmakerTitle: pair.bookmakerTitle,
+        lines: []
+      });
+    }
+    altGroup.booksMap.get(pair.bookmakerID).lines.push({
+      line: pair.line,
+      overOdds: pair.overOdds,
+      underOdds: pair.underOdds,
+      available: true
     });
   });
 
-  return Array.from(grouped.values()).map(group => {
-    const validBooks = group.books.filter(book =>
-      Number.isFinite(book?.overOdds) &&
-      Number.isFinite(book?.underOdds) &&
-      Number.isFinite(book?.fairOverProbability) &&
-      Number.isFinite(book?.fairUnderProbability)
+  const groupedStandardProps = Array.from(groupedMap.values()).map(group => {
+    const lines = group.books.map(book => book.line).filter(Number.isFinite).sort((a, b) => a - b);
+    const booksCount = group.books.length;
+    const minLine = lines.length ? lines[0] : null;
+    const maxLine = lines.length ? lines[lines.length - 1] : null;
+    const meanLine = lines.length ? lines.reduce((sum, line) => sum + line, 0) / lines.length : null;
+    const medianLine = lines.length
+      ? (lines.length % 2 === 1
+        ? lines[(lines.length - 1) / 2]
+        : (lines[(lines.length / 2) - 1] + lines[lines.length / 2]) / 2)
+      : null;
+
+    const outliers = Number.isFinite(meanLine)
+      ? group.books
+        .filter(book => Number.isFinite(book.line) && Math.abs(book.line - meanLine) >= 1)
+        .map(book => ({
+          bookmakerID: book.bookmakerID,
+          bookmakerTitle: book.bookmakerTitle,
+          line: book.line,
+          direction: book.line < meanLine ? "lower than consensus" : "higher than consensus"
+        }))
+      : [];
+
+    const fairBooks = group.books.filter(book =>
+      Number.isFinite(book.fairOverProbability) && Number.isFinite(book.fairUnderProbability)
     );
+    const consensusFairOverProbability = fairBooks.length
+      ? fairBooks.reduce((sum, book) => sum + book.fairOverProbability, 0) / fairBooks.length
+      : null;
+    const consensusFairUnderProbability = fairBooks.length
+      ? fairBooks.reduce((sum, book) => sum + book.fairUnderProbability, 0) / fairBooks.length
+      : null;
 
-    const overProbability =
-      validBooks.reduce((sum, book) => sum + book.fairOverProbability, 0) / (validBooks.length || 1);
-    const underProbability =
-      validBooks.reduce((sum, book) => sum + book.fairUnderProbability, 0) / (validBooks.length || 1);
-    const consensusOver = validBooks.length ? overProbability : null;
-    const consensusUnder = validBooks.length ? underProbability : null;
-
-    const bestOverBook = validBooks.reduce((best, book) => {
+    const bestOverLine = group.books.reduce((best, book) => {
       if (!best) return book;
-      return book.overOdds > best.overOdds ? book : best;
+      if (book.overOdds > best.overOdds) return book;
+      return best;
     }, null);
 
-    const bestUnderBook = validBooks.reduce((best, book) => {
+    const bestUnderLine = group.books.reduce((best, book) => {
       if (!best) return book;
-      return book.underOdds > best.underOdds ? book : best;
+      if (book.underOdds > best.underOdds) return book;
+      return best;
     }, null);
 
-    return {
-      sport: group.sport,
-      eventId: group.eventId,
-      commenceTime: group.commenceTime,
-      homeTeam: group.homeTeam,
-      awayTeam: group.awayTeam,
-      marketKey: group.marketKey,
-      playerName: group.playerName,
-      line: group.line,
-      books: validBooks,
-      booksCount: validBooks.length,
-      consensus: {
-        overProbability: consensusOver,
-        underProbability: consensusUnder,
-        fairOverOdds: probabilityToAmericanOdds(consensusOver),
-        fairUnderOdds: probabilityToAmericanOdds(consensusUnder)
-      },
-      bestOverBook: bestOverBook ? {
-        bookmakerKey: bestOverBook.bookmakerKey,
-        bookmakerTitle: bestOverBook.bookmakerTitle,
-        price: bestOverBook.overOdds
-      } : null,
-      bestUnderBook: bestUnderBook ? {
-        bookmakerKey: bestUnderBook.bookmakerKey,
-        bookmakerTitle: bestUnderBook.bookmakerTitle,
-        price: bestUnderBook.underOdds
-      } : null
-    };
-  });
-}
-
-function buildAlternateBookProps(normalizedRows) {
-  const grouped = new Map();
-  normalizedRows.forEach(row => {
-    const key = [
-      row.sport,
-      row.eventId,
-      row.marketKey,
-      row.playerName,
-      row.bookmakerKey
-    ].join("|");
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        sport: row.sport,
-        eventId: row.eventId,
-        commenceTime: row.commenceTime,
-        homeTeam: row.homeTeam,
-        awayTeam: row.awayTeam,
-        marketKey: row.marketKey,
-        playerName: row.playerName,
-        bookmakerKey: row.bookmakerKey,
-        bookmakerTitle: row.bookmakerTitle,
-        linesMap: new Map()
-      });
-    }
-    const group = grouped.get(key);
-    if (!group.linesMap.has(row.line)) {
-      group.linesMap.set(row.line, { line: row.line, overOdds: null, underOdds: null });
-    }
-    const lineEntry = group.linesMap.get(row.line);
-    if (row.side === "Over") lineEntry.overOdds = row.odds;
-    if (row.side === "Under") lineEntry.underOdds = row.odds;
-  });
-
-  return Array.from(grouped.values()).map(group => {
-    const lines = Array.from(group.linesMap.values())
-      .sort((a, b) => a.line - b.line)
-      .map(line => {
-        const impliedOverProbability = americanOddsToImpliedProbability(line.overOdds);
-        const impliedUnderProbability = americanOddsToImpliedProbability(line.underOdds);
-        const fair = removeVigFromTwoWayMarket(impliedOverProbability, impliedUnderProbability);
-        const fairOverProbability = Number.isFinite(fair.fairOver) ? fair.fairOver : null;
-        const fairUnderProbability = Number.isFinite(fair.fairUnder) ? fair.fairUnder : null;
-        return {
-          line: line.line,
-          overOdds: Number.isFinite(line.overOdds) ? line.overOdds : null,
-          underOdds: Number.isFinite(line.underOdds) ? line.underOdds : null,
-          impliedOverProbability,
-          impliedUnderProbability,
-          fairOverProbability,
-          fairUnderProbability,
-          fairOverOdds: probabilityToAmericanOdds(fairOverProbability),
-          fairUnderOdds: probabilityToAmericanOdds(fairUnderProbability)
-        };
-      });
-
-    return {
-      sport: group.sport,
-      eventId: group.eventId,
-      commenceTime: group.commenceTime,
-      homeTeam: group.homeTeam,
-      awayTeam: group.awayTeam,
-      marketKey: group.marketKey,
-      playerName: group.playerName,
-      bookmakerKey: group.bookmakerKey,
-      bookmakerTitle: group.bookmakerTitle,
-      lines,
-      lineCount: lines.length
-    };
-  });
-}
-
-function buildAlternateConsensusProps(alternateBookProps) {
-  const grouped = new Map();
-  alternateBookProps.forEach(prop => {
-    const key = [prop.sport, prop.eventId, prop.marketKey, prop.playerName].join("|");
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        sport: prop.sport,
-        eventId: prop.eventId,
-        commenceTime: prop.commenceTime,
-        homeTeam: prop.homeTeam,
-        awayTeam: prop.awayTeam,
-        marketKey: prop.marketKey,
-        playerName: prop.playerName,
-        books: []
-      });
-    }
-    grouped.get(key).books.push({
-      bookmakerKey: prop.bookmakerKey,
-      bookmakerTitle: prop.bookmakerTitle,
-      lines: prop.lines
-    });
-  });
-
-  return Array.from(grouped.values()).map(group => {
-    const availableLines = new Set();
-    group.books.forEach(book => {
-      (book.lines || []).forEach(line => {
-        if (Number.isFinite(line?.line)) availableLines.add(line.line);
-      });
-    });
-    const sortedAvailableLines = Array.from(availableLines).sort((a, b) => a - b);
     return {
       ...group,
-      booksCount: group.books.length,
-      availableLines: sortedAvailableLines,
-      lineCount: sortedAvailableLines.length,
-      prizePicksReady: {
-        comparableLines: sortedAvailableLines
-      }
+      booksCount,
+      consensusLineMean: meanLine,
+      consensusLineMedian: medianLine,
+      minLine,
+      maxLine,
+      outliers,
+      bestOver: bestOverLine ? {
+        line: bestOverLine.line,
+        odds: bestOverLine.overOdds,
+        bookmakerID: bestOverLine.bookmakerID,
+        bookmakerTitle: bestOverLine.bookmakerTitle
+      } : null,
+      bestUnder: bestUnderLine ? {
+        line: bestUnderLine.line,
+        odds: bestUnderLine.underOdds,
+        bookmakerID: bestUnderLine.bookmakerID,
+        bookmakerTitle: bestUnderLine.bookmakerTitle
+      } : null,
+      consensusFairOverProbability,
+      consensusFairUnderProbability,
+      consensusFairOverOdds: probabilityToAmericanOdds(consensusFairOverProbability),
+      consensusFairUnderOdds: probabilityToAmericanOdds(consensusFairUnderProbability)
     };
   });
+
+  const groupedAlternateProps = Array.from(alternateMap.values()).map(group => {
+    const books = Array.from(group.booksMap.values()).map(book => ({
+      ...book,
+      lines: book.lines
+        .filter(line => Number.isFinite(line?.line))
+        .sort((a, b) => a.line - b.line)
+    }));
+    const allLines = books.flatMap(book => book.lines.map(line => line.line)).filter(Number.isFinite);
+    return {
+      eventID: group.eventID,
+      playerIDRaw: group.playerIDRaw,
+      playerName: group.playerName,
+      statID: group.statID,
+      periodID: group.periodID,
+      marketKey: group.marketKey,
+      homeTeam: group.homeTeam,
+      awayTeam: group.awayTeam,
+      books,
+      booksCount: books.length,
+      lowestLine: allLines.length ? Math.min(...allLines) : null,
+      highestLine: allLines.length ? Math.max(...allLines) : null
+    };
+  });
+
+  return {
+    rawPlayerPropRecords,
+    pairedBookProps,
+    groupedStandardProps,
+    groupedAlternateProps,
+    uniqueBookmakers: Array.from(uniqueBookmakers, ([bookmakerID, bookmakerTitle]) => ({ bookmakerID, bookmakerTitle }))
+  };
 }
 
 app.get("/api/odds-comparison", async (req, res) => {
-  const sport = String(req.query.sport || "basketball_nba");
-  const markets = String(req.query.markets || "player_points");
-  const mode = String(req.query.mode || "standard") === "alternate" ? "alternate" : "standard";
-  const isAlternateMode = mode === "alternate";
-  const marketList = markets
-    .split(",")
-    .map(market => market.trim())
-    .filter(Boolean);
-  const shouldUseAlternateBuilders = isAlternateMode || marketList.some(market => ALTERNATE_PROP_MARKETS.has(market));
+  const leagueID = normalizeLeagueID(req.query.leagueID || "NBA");
+  const marketMode = String(req.query.marketMode || "standard") === "alternate" ? "alternate" : "standard";
+  const statIDs = String(req.query.statIDs || "");
+  const includeAltLines = String(req.query.includeAltLines || "true") !== "false";
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
 
-  if (!ODDS_API_KEY) {
-    return res.status(500).json({ error: "ODDS_API_KEY is not configured on the server." });
+  if (!SPORTSGAMEODDS_KEY) {
+    return res.status(500).json({ error: "SPORTSGAMEODDS_KEY is not configured on the server." });
   }
 
   try {
-    const eventsUrl = new URL(`${ODDS_API_BASE_URL}/sports/${encodeURIComponent(sport)}/odds`);
-    eventsUrl.searchParams.set("apiKey", ODDS_API_KEY);
-    eventsUrl.searchParams.set("regions", "us");
-    eventsUrl.searchParams.set("oddsFormat", "american");
+    const eventsURL = new URL(SPORTSGAMEODDS_BASE_URL);
+    eventsURL.searchParams.set("oddsAvailable", "true");
+    eventsURL.searchParams.set("finalized", "false");
+    eventsURL.searchParams.set("limit", String(limit));
+    if (includeAltLines) {
+      eventsURL.searchParams.set("includeAltLines", "true");
+    }
 
-    const eventsResponse = await fetch(eventsUrl.toString());
-    if (!eventsResponse.ok) {
-      const errorText = await eventsResponse.text();
-      return res.status(eventsResponse.status).json({
-        error: "Failed to load events from Odds API",
+    const response = await fetch(eventsURL.toString(), {
+      headers: {
+        "x-api-key": SPORTSGAMEODDS_KEY,
+        "accept": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        error: "Failed to load events from SportsGameOdds",
         message: errorText
       });
     }
-    const events = await eventsResponse.json();
-    const safeEvents = Array.isArray(events) ? events : [];
 
-    const allRows = [];
-    for (const event of safeEvents) {
-      if (!event?.id) continue;
-      const eventUrl = new URL(`${ODDS_API_BASE_URL}/sports/${encodeURIComponent(sport)}/events/${encodeURIComponent(event.id)}/odds`);
-      eventUrl.searchParams.set("apiKey", ODDS_API_KEY);
-      eventUrl.searchParams.set("regions", "us");
-      eventUrl.searchParams.set("oddsFormat", "american");
-      eventUrl.searchParams.set("markets", markets);
+    const payload = await response.json();
+    const events = Array.isArray(payload?.data) ? payload.data : [];
 
-      try {
-        const eventResponse = await fetch(eventUrl.toString());
-        if (!eventResponse.ok) {
-          continue;
-        }
-        const eventOddsData = await eventResponse.json();
-        const normalizedRows = normalizeOddsOutcomes(sport, event, eventOddsData);
-        allRows.push(...normalizedRows);
-      } catch (eventError) {
-        console.error("ODDS EVENT ERROR:", event?.id, eventError?.message || eventError);
-      }
-    }
-
-    const bookProps = shouldUseAlternateBuilders ? buildAlternateBookProps(allRows) : buildBookLevelProps(allRows);
-    const consensusProps = shouldUseAlternateBuilders ? buildAlternateConsensusProps(bookProps) : buildConsensusProps(bookProps);
-    const uniqueBookTitles = Array.from(
-      new Set(bookProps.map(prop => prop.bookmakerTitle).filter(Boolean))
-    );
+    const normalized = normalizeSportsGameOddsResponse(events, {
+      leagueID,
+      marketMode,
+      statIDs
+    });
 
     res.json({
-      sport,
-      mode: shouldUseAlternateBuilders ? "alternate" : "standard",
-      markets,
-      eventCount: safeEvents.length,
-      rawOutcomeCount: allRows.length,
-      bookPropsCount: bookProps.length,
-      consensusCount: consensusProps.length,
-      uniqueBooksCount: uniqueBookTitles.length,
-      uniqueBooks: uniqueBookTitles,
-      bookProps,
-      consensusProps
+      provider: "sportsgameodds",
+      leagueID,
+      marketMode,
+      includeAltLines,
+      limit,
+      eventsLoaded: events.length,
+      rawPlayerPropRecords: normalized.rawPlayerPropRecords.length,
+      pairedBookProps: normalized.pairedBookProps.length,
+      groupedProps: marketMode === "alternate" ? normalized.groupedAlternateProps.length : normalized.groupedStandardProps.length,
+      uniqueBookmakers: normalized.uniqueBookmakers,
+      bookProps: normalized.pairedBookProps,
+      groupedStandardProps: normalized.groupedStandardProps,
+      groupedAlternateProps: normalized.groupedAlternateProps
     });
   } catch (error) {
-    console.error("ODDS COMPARISON ERROR:", error);
+    console.error("SPORTSGAMEODDS ODDS COMPARISON ERROR:", error);
     res.status(500).json({
       error: "Failed to load sportsbook props",
       message: error.message
     });
   }
 });
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
