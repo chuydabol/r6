@@ -309,6 +309,40 @@ const STAT_ALIAS_MAP = {
   pra: ["pra", "points_rebounds_assists", "player_points_rebounds_assists"],
   fantasy_points: ["fantasy_points", "player_fantasy_points"]
 };
+const NBA_PRIZEPICKS_SUPPORT_MAP = {
+  game: new Set([
+    "points",
+    "rebounds",
+    "assists",
+    "threepointersmade",
+    "points+rebounds+assists",
+    "points+assists",
+    "points+rebounds",
+    "rebounds+assists",
+    "blocks",
+    "steals",
+    "turnovers",
+    "blocks+steals",
+    "fieldgoalsmade",
+    "freethrowsattempted",
+    "freethrowsmade",
+    "fantasyscore"
+  ]),
+  "1q": new Set([
+    "assists",
+    "points",
+    "rebounds",
+    "threepointersmade"
+  ]),
+  "1h": new Set([
+    "fantasyscore",
+    "points+rebounds+assists",
+    "points",
+    "threepointersmade"
+  ]),
+  "2h": new Set(["fantasyscore"]),
+  "4q": new Set(["fantasyscore"])
+};
 
 function normalizeLeagueID(value) {
   const target = String(value || "NBA").trim().toUpperCase();
@@ -352,6 +386,19 @@ function parseOddID(oddID) {
     betTypeID: parts[3] || null,
     sideID: parts[4] || null
   };
+}
+
+function normalizePrizePicksStatKey(statID) {
+  return String(statID || "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function isPrizePicksSupportedNBA(statID, periodID, betTypeID) {
+  const periodKey = String(periodID || "").trim().toLowerCase();
+  const betTypeKey = String(betTypeID || "").trim().toLowerCase();
+  if (betTypeKey !== "ou") return false;
+  const supportedStats = NBA_PRIZEPICKS_SUPPORT_MAP[periodKey];
+  if (!supportedStats) return false;
+  return supportedStats.has(normalizePrizePicksStatKey(statID));
 }
 
 function formatPlayerName(statEntityID) {
@@ -415,6 +462,10 @@ function buildMarketKey(meta) {
 
 function buildPlayerGroupKey(meta) {
   return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || ""].join("|");
+}
+
+function buildPrizePicksMatchKey(meta) {
+  return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || "", meta.betTypeID || ""].join("|");
 }
 
 function normalizePrizePicksRawEntry(bookmakerNode, meta) {
@@ -488,22 +539,29 @@ function normalizeSportsGameOddsResponse(events, options) {
       if (betTypeID !== "ou") return;
       if (!PLAYER_SIDE_MAP[sideID]) return;
       const eventID = String(event?.eventID || event?.id || "");
-      const playerGroupKey = buildPlayerGroupKey({ eventID, playerIDRaw: statEntityID, statID, periodID });
-      if (!prizePicksTraceByGroup.has(playerGroupKey)) {
-        prizePicksTraceByGroup.set(playerGroupKey, {
+      const ppSupported = options.leagueID === "NBA"
+        ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
+        : false;
+      const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: statEntityID, statID, periodID, betTypeID });
+      if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
+        prizePicksTraceByGroup.set(prizePicksMatchKey, {
           eventID,
           playerIDRaw: statEntityID,
           statID,
           periodID,
+          betTypeID,
           marketKey: buildMarketKey({ statID, periodID, betTypeID }),
+          ppSupported,
           rawOddsFound: 0,
           rawPrizePicksFound: false,
           pairedPrizePicksFound: false,
           groupedPrizePicksFound: false,
+          parsedStatID: parsedOddID.statID || null,
+          parsedPeriodID: parsedOddID.periodID || null,
           rawPrizePicksEntries: []
         });
       }
-      const trace = prizePicksTraceByGroup.get(playerGroupKey);
+      const trace = prizePicksTraceByGroup.get(prizePicksMatchKey);
       trace.rawOddsFound += 1;
 
       const isAlternateLine = Boolean(oddNode?.isAlternateLine) || Number.isFinite(toNumber(oddNode?.altLineIndex));
@@ -511,7 +569,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 
       const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
       const rawPrizePicksBook = byBookmaker?.prizepicks;
-      if (rawPrizePicksBook && typeof rawPrizePicksBook === "object") {
+      if (ppSupported && rawPrizePicksBook && typeof rawPrizePicksBook === "object") {
         trace.rawPrizePicksFound = true;
         const rawPrizePicksEntry = normalizePrizePicksRawEntry(rawPrizePicksBook, {
           oddID,
@@ -521,10 +579,10 @@ function normalizeSportsGameOddsResponse(events, options) {
           sideID
         });
         trace.rawPrizePicksEntries.push(rawPrizePicksEntry);
-        if (!prizePicksRawByGroup.has(playerGroupKey)) {
-          prizePicksRawByGroup.set(playerGroupKey, []);
+        if (!prizePicksRawByGroup.has(prizePicksMatchKey)) {
+          prizePicksRawByGroup.set(prizePicksMatchKey, []);
         }
-        prizePicksRawByGroup.get(playerGroupKey).push(rawPrizePicksEntry);
+        prizePicksRawByGroup.get(prizePicksMatchKey).push(rawPrizePicksEntry);
       }
 
       Object.entries(byBookmaker).forEach(([bookmakerID, bookmakerNode]) => {
@@ -573,7 +631,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 
   const pairMap = new Map();
   rawPlayerPropRecords.forEach(record => {
-    const key = [record.eventID, record.playerIDRaw, record.statID, record.periodID, record.bookmakerID, record.line].join("|");
+    const key = [record.eventID, record.playerIDRaw, record.statID, record.periodID, record.betTypeID, record.bookmakerID, record.line].join("|");
     if (!pairMap.has(key)) {
       pairMap.set(key, {
         leagueID: record.leagueID,
@@ -586,6 +644,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         playerName: record.playerName,
         statID: record.statID,
         periodID: record.periodID,
+        betTypeID: record.betTypeID,
         marketKey: record.marketKey,
         bookmakerID: record.bookmakerID,
         bookmakerTitle: record.bookmakerTitle,
@@ -610,9 +669,9 @@ function normalizeSportsGameOddsResponse(events, options) {
 
   const pairedBookProps = Array.from(pairMap.values()).map(pair => {
     if (!Number.isFinite(pair.overOdds) || !Number.isFinite(pair.underOdds)) return null;
-    const pairGroupKey = buildPlayerGroupKey(pair);
+    const pairGroupKey = buildPrizePicksMatchKey(pair);
     const pairTrace = prizePicksTraceByGroup.get(pairGroupKey);
-    if (pairTrace && String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
+    if (pairTrace?.ppSupported && String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
       pairTrace.pairedPrizePicksFound = true;
     }
     const impliedOverProbability = americanOddsToImpliedProbability(pair.overOdds);
@@ -633,7 +692,7 @@ function normalizeSportsGameOddsResponse(events, options) {
   const alternateMap = new Map();
 
   pairedBookProps.forEach(pair => {
-    const standardKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID].join("|");
+    const standardKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID, pair.betTypeID].join("|");
     if (!groupedMap.has(standardKey)) {
       groupedMap.set(standardKey, {
         leagueID: pair.leagueID,
@@ -646,6 +705,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         playerName: pair.playerName,
         statID: pair.statID,
         periodID: pair.periodID,
+        betTypeID: pair.betTypeID,
         marketKey: pair.marketKey,
         books: [],
         prizepicks: null
@@ -654,7 +714,8 @@ function normalizeSportsGameOddsResponse(events, options) {
 
     const standardGroup = groupedMap.get(standardKey);
     standardGroup.books.push(pair);
-    if (String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
+    const pairTrace = prizePicksTraceByGroup.get(buildPrizePicksMatchKey(pair));
+    if (pairTrace?.ppSupported && String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
       standardGroup.prizepicks = {
         bookmakerID: "prizepicks",
         line: pair.line,
@@ -665,7 +726,7 @@ function normalizeSportsGameOddsResponse(events, options) {
       };
     }
 
-    const altKey = standardKey;
+    const altKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID].join("|");
     if (!alternateMap.has(altKey)) {
       alternateMap.set(altKey, {
         eventID: pair.eventID,
@@ -707,21 +768,26 @@ function normalizeSportsGameOddsResponse(events, options) {
   });
 
   const groupedStandardProps = Array.from(groupedMap.values()).map(group => {
-    const standardKey = buildPlayerGroupKey(group);
+    const standardKey = buildPrizePicksMatchKey(group);
     const trace = prizePicksTraceByGroup.get(standardKey) || {
+      ppSupported: false,
       rawOddsFound: 0,
       rawPrizePicksFound: false,
       pairedPrizePicksFound: false,
       groupedPrizePicksFound: false,
+      parsedStatID: null,
+      parsedPeriodID: null,
       rawPrizePicksEntries: []
     };
-    const rawPrizePicksEntries = prizePicksRawByGroup.get(standardKey) || [];
-    const rawPrizePicksValue = buildPrizePicksFromRawEntries(rawPrizePicksEntries);
-    if (!group.prizepicks && rawPrizePicksValue) {
-      group.prizepicks = rawPrizePicksValue;
-    } else if (group.prizepicks && rawPrizePicksValue) {
-      group.prizepicks.available = rawPrizePicksValue.available;
-      group.prizepicks.deeplink = rawPrizePicksValue.deeplink;
+    const rawPrizePicksEntries = trace.ppSupported ? (prizePicksRawByGroup.get(standardKey) || []) : [];
+    const rawPrizePicksValue = trace.ppSupported ? buildPrizePicksFromRawEntries(rawPrizePicksEntries) : null;
+    if (trace.ppSupported) {
+      if (!group.prizepicks && rawPrizePicksValue) {
+        group.prizepicks = rawPrizePicksValue;
+      } else if (group.prizepicks && rawPrizePicksValue) {
+        group.prizepicks.available = rawPrizePicksValue.available;
+        group.prizepicks.deeplink = rawPrizePicksValue.deeplink;
+      }
     }
     trace.groupedPrizePicksFound = Boolean(group.prizepicks);
 
@@ -821,9 +887,21 @@ function normalizeSportsGameOddsResponse(events, options) {
       rawPrizePicksFound: Boolean(trace.rawPrizePicksFound),
       pairedPrizePicksFound: Boolean(trace.pairedPrizePicksFound),
       groupedPrizePicksFound: Boolean(trace.groupedPrizePicksFound),
+      ppSupported: trace.ppSupported ? "yes" : "no",
+      ppRaw: trace.rawPrizePicksFound ? "yes" : "no",
+      ppPaired: trace.pairedPrizePicksFound ? "yes" : "no",
+      ppGrouped: trace.groupedPrizePicksFound ? "yes" : "no",
+      parsedStatID: trace.parsedStatID,
+      parsedPeriodID: trace.parsedPeriodID,
+      prizepicksStatus: trace.ppSupported
+        ? (trace.rawPrizePicksFound ? "line" : "not_returned_by_api")
+        : "unsupported_market",
       prizepicksDebug: (trace.rawOddsFound || trace.rawPrizePicksEntries?.length || trace.pairedPrizePicksFound || trace.groupedPrizePicksFound)
         ? {
           rawOddsFound: trace.rawOddsFound,
+          ppSupported: trace.ppSupported,
+          parsedStatID: trace.parsedStatID,
+          parsedPeriodID: trace.parsedPeriodID,
           rawPrizePicksEntries: trace.rawPrizePicksEntries
         }
         : null,
