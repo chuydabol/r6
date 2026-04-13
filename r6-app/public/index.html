@@ -195,7 +195,7 @@
 
     .odds-controls {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr auto;
+      grid-template-columns: 1fr 1fr 1fr 1fr auto;
       gap: 8px;
       margin-bottom: 12px;
     }
@@ -216,6 +216,32 @@
       display: grid;
       gap: 4px;
       font-size: 12px;
+    }
+
+    .odds-expand {
+      margin-top: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(115, 140, 226, 0.45);
+      background: rgba(10, 23, 58, 0.94);
+      color: #dce8ff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .odds-ladder {
+      margin-top: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .odds-ladder-book {
+      border: 1px solid rgba(108, 133, 224, 0.24);
+      border-radius: 10px;
+      padding: 8px;
+      background: rgba(7, 19, 52, 0.72);
     }
 
     .prop-top,
@@ -970,6 +996,10 @@
           <option value="player_points_rebounds_assists">player_points_rebounds_assists</option>
           <option value="player_fantasy_points">player_fantasy_points</option>
         </select>
+        <select id="oddsMarketModeSelect" onchange="setOddsMarketMode(this.value)">
+          <option value="standard">Standard Markets</option>
+          <option value="alternate">Alternate Markets</option>
+        </select>
         <select id="oddsViewModeSelect" onchange="setOddsViewMode(this.value)">
           <option value="consensus">Consensus View</option>
           <option value="book">Book View</option>
@@ -1030,6 +1060,7 @@
     const viewBtnOdds = document.getElementById("viewBtnOdds");
     const oddsSportSelect = document.getElementById("oddsSportSelect");
     const oddsMarketSelect = document.getElementById("oddsMarketSelect");
+    const oddsMarketModeSelect = document.getElementById("oddsMarketModeSelect");
     const oddsViewModeSelect = document.getElementById("oddsViewModeSelect");
     const oddsSortBySelect = document.getElementById("oddsSortBySelect");
     const oddsSortOrderSelect = document.getElementById("oddsSortOrderSelect");
@@ -1070,12 +1101,37 @@
     let oddsConsensusProps = [];
     let oddsVisibleProps = [];
     let oddsViewMode = "consensus";
+    let oddsMarketMode = "standard";
     let oddsSortBy = "default";
     let oddsSortOrder = "desc";
     let isOddsLoading = false;
-    let oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [] };
+    let oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [], mode: "standard" };
+    const ODDS_MARKET_OPTIONS = {
+      standard: [
+        "player_points",
+        "player_rebounds",
+        "player_assists",
+        "player_points_rebounds_assists",
+        "player_fantasy_points"
+      ],
+      alternate: [
+        "player_points_alternate",
+        "player_rebounds_alternate",
+        "player_assists_alternate",
+        "player_blocks_alternate",
+        "player_steals_alternate",
+        "player_turnovers_alternate",
+        "player_threes_alternate",
+        "player_points_assists_alternate",
+        "player_points_rebounds_alternate",
+        "player_rebounds_assists_alternate",
+        "player_points_rebounds_assists_alternate",
+        "player_fantasy_points_alternate"
+      ]
+    };
     const ODDS_SORT_OPTIONS = {
-      consensus: [
+      standard: {
+        consensus: [
         { value: "default", label: "Default" },
         { value: "booksCount", label: "Books Count" },
         { value: "consensusOverProbability", label: "Consensus Fair Over %" },
@@ -1084,16 +1140,32 @@
         { value: "playerName", label: "Player Name" },
         { value: "bestOverPrice", label: "Best Over Price" },
         { value: "bestUnderPrice", label: "Best Under Price" }
-      ],
-      book: [
+        ],
+        book: [
         { value: "default", label: "Default" },
         { value: "bookmakerTitle", label: "Bookmaker" },
         { value: "fairOverProbability", label: "Fair Over %" },
         { value: "fairUnderProbability", label: "Fair Under %" },
         { value: "line", label: "Line" },
         { value: "playerName", label: "Player Name" }
-      ]
+        ]
+      },
+      alternate: {
+        consensus: [
+          { value: "default", label: "Default" },
+          { value: "booksCount", label: "Books Count" },
+          { value: "lineCount", label: "Line Count" },
+          { value: "playerName", label: "Player Name" }
+        ],
+        book: [
+          { value: "default", label: "Default" },
+          { value: "bookmakerTitle", label: "Bookmaker" },
+          { value: "lineCount", label: "Line Count" },
+          { value: "playerName", label: "Player Name" }
+        ]
+      }
     };
+    const expandedAlternateCards = new Set();
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
       "Imperial": "imperial-esports-r6",
@@ -1117,10 +1189,12 @@
       playerSearch.addEventListener("input", applyPropFilters);
       oddsSportSelect.value = "basketball_nba";
       oddsMarketSelect.value = "player_points";
+      oddsMarketModeSelect.value = "standard";
       oddsViewModeSelect.value = "consensus";
       oddsSortBySelect.value = "default";
       oddsSortOrderSelect.value = "desc";
       syncOddsSortOptions();
+      syncOddsMarketOptions();
       renderCurrentView();
     });
 
@@ -1343,11 +1417,12 @@
     async function loadOddsComparison() {
       const sport = oddsSportSelect.value || "basketball_nba";
       const markets = oddsMarketSelect.value || "player_points";
+      const mode = oddsMarketMode;
       startOddsLoading("Loading events...");
       oddsMessage.style.display = "none";
 
       try {
-        const res = await fetch(`/api/odds-comparison?sport=${encodeURIComponent(sport)}&markets=${encodeURIComponent(markets)}`);
+        const res = await fetch(`/api/odds-comparison?sport=${encodeURIComponent(sport)}&markets=${encodeURIComponent(markets)}&mode=${encodeURIComponent(mode)}`);
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.message || data.error || "Failed to load sportsbook props");
@@ -1358,6 +1433,7 @@
         updateOddsLoading("Building consensus comparison...");
         oddsConsensusProps = Array.isArray(data.consensusProps) ? data.consensusProps.map((prop, index) => ({ ...prop, originalOrder: index })) : [];
         oddsSummaryData = {
+          mode: data.mode === "alternate" ? "alternate" : "standard",
           eventCount: Number(data.eventCount) || 0,
           rawOutcomeCount: Number(data.rawOutcomeCount) || 0,
           bookPropsCount: Number(data.bookPropsCount) || 0,
@@ -1374,7 +1450,7 @@
         oddsBookProps = [];
         oddsConsensusProps = [];
         oddsVisibleProps = [];
-        oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [] };
+        oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [], mode: oddsMarketMode };
         renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
         oddsMessage.style.display = "block";
@@ -1382,6 +1458,19 @@
       } finally {
         stopOddsLoading();
       }
+    }
+
+    function setOddsMarketMode(value) {
+      oddsMarketMode = value === "alternate" ? "alternate" : "standard";
+      syncOddsMarketOptions();
+      syncOddsSortOptions();
+      oddsBookProps = [];
+      oddsConsensusProps = [];
+      oddsVisibleProps = [];
+      expandedAlternateCards.clear();
+      oddsSummaryData = { eventCount: 0, rawOutcomeCount: 0, bookPropsCount: 0, consensusCount: 0, uniqueBooks: [], mode: oddsMarketMode };
+      renderOddsSummary();
+      oddsResultsSection.innerHTML = `<div class="empty">Load sportsbook props to begin.</div>`;
     }
 
     function setOddsSortBy(value) {
@@ -1395,8 +1484,19 @@
       applyOddsSorting();
     }
 
+    function syncOddsMarketOptions() {
+      const markets = ODDS_MARKET_OPTIONS[oddsMarketMode] || ODDS_MARKET_OPTIONS.standard;
+      oddsMarketSelect.innerHTML = markets
+        .map(market => `<option value="${market}">${market}</option>`)
+        .join("");
+      if (!markets.includes(oddsMarketSelect.value)) {
+        oddsMarketSelect.value = markets[0];
+      }
+    }
+
     function syncOddsSortOptions() {
-      const options = ODDS_SORT_OPTIONS[oddsViewMode] || ODDS_SORT_OPTIONS.consensus;
+      const modeOptions = ODDS_SORT_OPTIONS[oddsMarketMode] || ODDS_SORT_OPTIONS.standard;
+      const options = modeOptions[oddsViewMode] || modeOptions.consensus;
       const allowedValues = new Set(options.map(option => option.value));
       oddsSortBySelect.innerHTML = options
         .map(option => `<option value="${option.value}">${option.label}</option>`)
@@ -1412,7 +1512,8 @@
       const booksText = books.length
         ? `${books.length} (${books.slice(0, 5).join(", ")}${books.length > 5 ? ", ..." : ""})`
         : "0";
-      oddsSummary.textContent = `Events loaded: ${oddsSummaryData.eventCount} • Raw book props: ${oddsSummaryData.bookPropsCount} • Consensus props: ${oddsSummaryData.consensusCount} • Unique books: ${booksText}`;
+      const modeText = oddsSummaryData.mode === "alternate" ? "Alternate Markets" : "Standard Markets";
+      oddsSummary.textContent = `${modeText} • Events loaded: ${oddsSummaryData.eventCount} • Raw book props: ${oddsSummaryData.bookPropsCount} • Consensus props: ${oddsSummaryData.consensusCount} • Unique books: ${booksText}`;
     }
 
     function setOddsSortOrder(value) {
@@ -1461,6 +1562,7 @@
         consensusOverProbability: safeNumeric(prop.consensus?.overProbability),
         consensusUnderProbability: safeNumeric(prop.consensus?.underProbability),
         booksCount: safeNumeric(prop.booksCount),
+        lineCount: safeNumeric(prop.lineCount),
         bestOverPrice: safeNumeric(prop.bestOverBook?.price),
         bestUnderPrice: safeNumeric(prop.bestUnderBook?.price),
         line: safeNumeric(prop.line)
@@ -1469,6 +1571,10 @@
     }
 
     function renderOddsProps(rows) {
+      if (oddsMarketMode === "alternate") {
+        renderAlternateOddsProps(rows);
+        return;
+      }
       if (!rows.length) {
         oddsResultsSection.innerHTML = `<div class="empty">No props found.</div>`;
         return;
@@ -1514,6 +1620,78 @@
               </div>
             </div>
           `).join("")}
+        </div>
+      `;
+    }
+
+    function toggleAlternateCard(key) {
+      if (!key) return;
+      if (expandedAlternateCards.has(key)) {
+        expandedAlternateCards.delete(key);
+      } else {
+        expandedAlternateCards.add(key);
+      }
+      renderOddsProps(oddsVisibleProps);
+    }
+
+    function renderAlternateOddsProps(rows) {
+      if (!rows.length) {
+        oddsResultsSection.innerHTML = `<div class="empty">No alternate props found.</div>`;
+        return;
+      }
+      if (oddsViewMode === "book") {
+        oddsResultsSection.innerHTML = `
+          <div class="props-grid">
+            ${rows.map(prop => `
+              <div class="odds-card">
+                <div class="prop-top">
+                  <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                  <div class="line-badge">${safeNumeric(prop.lineCount) || 0}</div>
+                </div>
+                <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+                <div class="odds-meta">${escapeHtml(prop.bookmakerTitle || "Unknown Bookmaker")} • ${escapeHtml(formatDate(prop.commenceTime))}</div>
+                <div class="odds-lines">Alt lines: ${(prop.lines || []).map(line => line.line).join(", ") || "N/A"}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        return;
+      }
+
+      oddsResultsSection.innerHTML = `
+        <div class="props-grid">
+          ${rows.map((prop, index) => {
+            const cardKey = escapeJs(`${prop.eventId}|${prop.marketKey}|${prop.playerName}|${index}`);
+            const isExpanded = expandedAlternateCards.has(cardKey);
+            return `
+            <div class="odds-card">
+              <div class="prop-top">
+                <div class="player-name">${escapeHtml(prop.playerName || "Unknown Player")}</div>
+                <div class="line-badge">${safeNumeric(prop.lineCount) || 0}</div>
+              </div>
+              <div class="odds-meta">${escapeHtml(prop.marketKey || "market")} • ${escapeHtml(prop.homeTeam || "?")} vs ${escapeHtml(prop.awayTeam || "?")}</div>
+              <div class="odds-meta">${escapeHtml(formatDate(prop.commenceTime))}</div>
+              <div class="odds-lines">
+                <div>Alt lines: ${(prop.availableLines || []).join(", ") || "N/A"}</div>
+                <div>Books: ${safeNumeric(prop.booksCount) || 0}</div>
+              </div>
+              <button class="odds-expand" onclick="toggleAlternateCard('${cardKey}')">${isExpanded ? "Hide line ladders" : "Show line ladders"}</button>
+              ${isExpanded ? `<div class="odds-ladder">
+                ${(prop.books || []).map(book => `
+                  <div class="odds-ladder-book">
+                    <div class="odds-meta"><strong>${escapeHtml(book.bookmakerTitle || "Unknown Bookmaker")}</strong></div>
+                    <div class="odds-lines">
+                      ${(book.lines || []).map(line => `<div>
+                        ${line.line}: O ${escapeHtml(formatAmericanOdds(line.overOdds))} (${formatProbabilityPercent(line.fairOverProbability)}) •
+                        U ${escapeHtml(formatAmericanOdds(line.underOdds))} (${formatProbabilityPercent(line.fairUnderProbability)})
+                      </div>`).join("")}
+                    </div>
+                  </div>
+                `).join("")}
+              </div>` : ""}
+            </div>
+          `;
+          }).join("")}
         </div>
       `;
     }
