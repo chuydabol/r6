@@ -1822,7 +1822,7 @@
       oddsMessage.style.display = "none";
 
       try {
-        const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: selectedMarket });
+        const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: "all" });
         const res = await fetch(`/api/odds-comparison?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) {
@@ -2096,15 +2096,15 @@
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
         rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length
       };
-      if (String(oddsLeagueSelect?.value || "").trim().toUpperCase() === "MLB" && selectedMarket !== "all") {
-        console.log("MLB_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
+      if (selectedMarket !== "all") {
+        console.log("ODDS_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
           selectedMarket,
-          groupedRowsBeforeSelectedMarket: groupedBeforeSelectedMarket,
-          groupedRowsAfterSelectedMarket: marketFilteredRows.length,
-          rowsAfterPPFresh: stageCounts.rowsAfterPPFreshnessFilter,
-          rowsAfterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
-          rowsAfterCoverage: stageCounts.rowsAfterCoveragePenalty,
-          rowsAfterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
+          groupedBeforeSelectedMarketFilter: groupedBeforeSelectedMarket,
+          groupedAfterSelectedMarketFilter: marketFilteredRows.length,
+          afterPPFresh: stageCounts.rowsAfterPPFreshnessFilter,
+          afterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
+          afterCoverage: stageCounts.rowsAfterCoveragePenalty,
+          afterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
         });
       }
       const eliminationByStage = [
