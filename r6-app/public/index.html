@@ -1227,6 +1227,10 @@
 
     let currentTeam = null;
     let currentPlayers = [];
+    let masterPlayers = [];
+    let visiblePlayers = [];
+    let selectedPlayerTeamFilter = "all";
+    let r6ViewMode = "team";
     let currentMatches = [];
     let currentMatchDetails = null;
 
@@ -1255,6 +1259,7 @@
     let isOddsLoading = false;
     let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
     let oddsFilterDebug = { selectedMarket: "all", groupedBeforeFilter: 0, groupedAfterFilter: 0 };
+    let selectedPlayerRequestToken = 0;
     const ODDS_MARKET_OPTIONS_BY_LEAGUE = {
       NBA: [
         { value: "points", label: "Points" },
@@ -1372,6 +1377,8 @@
       .reduce((sum, book) => sum + book.weight, 0);
     const MIN_REQUIRED_WEIGHT_TO_SHOW = 0.22;
     const LINE_SHIFT_PER_HALF = 0.035;
+    const LINE_SIGNAL_MAX_SHIFT = 0.09;
+    const LINE_SIGNAL_SCALE = 1.75;
     const SOCCER_SHIFT_PER_1 = {
       shots: 0.12,
       shotsongoal: 0.18,
@@ -2042,7 +2049,13 @@
           config: book,
           line: findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
         }))
-        .filter(item => item.line && Number.isFinite(item.line.adjustedOverProbability) && Number.isFinite(item.line.adjustedUnderProbability));
+        .filter(item =>
+          item.line
+          && Number.isFinite(item.line.adjustedOverProbability)
+          && Number.isFinite(item.line.adjustedUnderProbability)
+          && Number.isFinite(item.line.fairOverProbability)
+          && Number.isFinite(item.line.fairUnderProbability)
+        );
 
       const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
       const topTierWeightPresent = weightedParts
@@ -2054,7 +2067,15 @@
       const coverageLabel = coverageScore >= 0.72 ? "High" : coverageScore >= 0.48 ? "Medium" : "Low";
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
+      let weightedFairOverProbability = Number.NaN;
+      let weightedFairUnderProbability = Number.NaN;
       if (totalWeight > 0) {
+        weightedFairOverProbability = weightedParts.reduce((sum, item) => {
+          return sum + (item.line.fairOverProbability * (item.config.weight / totalWeight));
+        }, 0);
+        weightedFairUnderProbability = weightedParts.reduce((sum, item) => {
+          return sum + (item.line.fairUnderProbability * (item.config.weight / totalWeight));
+        }, 0);
         weightedOverProbability = weightedParts.reduce((sum, item) => {
           return sum + (item.line.adjustedOverProbability * (item.config.weight / totalWeight));
         }, 0);
@@ -2069,8 +2090,21 @@
           weightedUnderProbability = weightedUnderProbability / total;
         }
       }
-      const recommendedSide = weightedOverProbability >= weightedUnderProbability ? "Over" : "Under";
-      const recommendedProbability = Math.max(weightedOverProbability, weightedUnderProbability);
+      const disagreementScore = calculateBookDisagreementScore(weightedParts);
+      const averageConflictPenalty = weightedParts.length
+        ? weightedParts.reduce((sum, item) => sum + (safeNumeric(item.line.signalConflictPenalty) || 0), 0) / weightedParts.length
+        : 0;
+      const consensusOverProbability = blendProbabilities(weightedFairOverProbability, weightedOverProbability, 0.35);
+      const consensusUnderProbability = 1 - consensusOverProbability;
+      const baseRecommendedProbability = Math.max(consensusOverProbability, consensusUnderProbability);
+      const baseEdge = Number.isFinite(baseRecommendedProbability) ? Math.max(0, baseRecommendedProbability - 0.5) : 0;
+      const disagreementPenalty = Math.max(0.45, 1 - (disagreementScore * 0.55));
+      const conflictPenalty = Math.max(0.5, 1 - (averageConflictPenalty * 0.7));
+      const coveragePenalty = 0.5 + (coverageScore * 0.5);
+      const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
+      const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
+      const recommendedProbability = 0.5 + conservativeEdge;
+      const recommendedSide = consensusOverProbability >= consensusUnderProbability ? "Over" : "Under";
       const fairOdds = probabilityToAmericanOdds(recommendedProbability);
       const statLabel = getStatTypeLabel(prop.statID, prop.marketKey, prop.leagueID, tennisMarketID);
       const averageCoreLine = weightedParts.length
@@ -2102,6 +2136,10 @@
         marketCoveragePercent: totalWeightRatio * 100,
         weightedOverProbability,
         weightedUnderProbability,
+        weightedFairOverProbability,
+        weightedFairUnderProbability,
+        disagreementScore,
+        averageConflictPenalty,
         recommendedSideLabel: recommendedSide,
         recommendedProbability,
         fairOdds,
@@ -2118,8 +2156,13 @@
         return coreBookConfig.aliases.some(alias => id.includes(alias));
       });
       if (!book) return null;
-      const fairOverProbability = safeNumeric(book.fairOverProbability);
-      const fairUnderProbability = safeNumeric(book.fairUnderProbability);
+      const fairProbabilityFromOdds = getFairProbabilitiesFromBookOdds(book?.overOdds, book?.underOdds);
+      const fairOverProbability = Number.isFinite(safeNumeric(book.fairOverProbability))
+        ? safeNumeric(book.fairOverProbability)
+        : fairProbabilityFromOdds.fairOverProbability;
+      const fairUnderProbability = Number.isFinite(safeNumeric(book.fairUnderProbability))
+        ? safeNumeric(book.fairUnderProbability)
+        : fairProbabilityFromOdds.fairUnderProbability;
       const line = safeNumeric(book.line);
       if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(line)) {
         return { line, overOdds: book.overOdds, underOdds: book.underOdds };
@@ -2149,63 +2192,84 @@
 
     function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
       if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) {
-        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN };
+        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN, signalConflictPenalty: 0 };
       }
       const lineDiff = prizePicksLine - bookLine;
-      if (leagueID === "MLB" && Number.isFinite(mlbShiftPer1)) {
-        const isHighVolatility = MLB_HIGH_VOLATILITY_STATS.has(normalizedStatID);
-        const capMin = isHighVolatility ? 0.15 : 0.20;
-        const capMax = isHighVolatility ? 0.85 : 0.80;
-        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * mlbShiftPer1)));
-        const adjOver = 1 - adjUnder;
-        const total = adjUnder + adjOver;
-        if (total > 0) {
-          return {
-            adjustedOverProbability: adjOver / total,
-            adjustedUnderProbability: adjUnder / total,
-            lineDiff
-          };
-        }
-        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
+      const shiftPerUnit = resolveLineShiftPerUnit({ normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID });
+      const expectedSideFromLine = lineDiff > 0 ? "under" : lineDiff < 0 ? "over" : "neutral";
+      const juiceSide = fairOverProbability >= fairUnderProbability ? "over" : "under";
+      const conflictStrength = expectedSideFromLine !== "neutral" && expectedSideFromLine !== juiceSide
+        ? Math.min(1, Math.abs(lineDiff) / 1.5)
+        : 0;
+      const lineEffectMagnitude = Math.tanh(Math.abs(lineDiff) / LINE_SIGNAL_SCALE) * (Number.isFinite(shiftPerUnit) ? shiftPerUnit : LINE_SHIFT_PER_HALF * 2);
+      const boundedLineShift = Math.min(LINE_SIGNAL_MAX_SHIFT, Math.abs(lineEffectMagnitude));
+      const lineShiftDirection = lineDiff > 0 ? -1 : lineDiff < 0 ? 1 : 0;
+      let shiftedOver = fairOverProbability + (lineShiftDirection * boundedLineShift);
+      shiftedOver = 0.5 + ((shiftedOver - 0.5) * 0.4);
+      if (conflictStrength > 0) {
+        shiftedOver = 0.5 + ((shiftedOver - 0.5) * (1 - (conflictStrength * 0.55)));
       }
-      if (Number.isFinite(soccerShiftPer1)) {
-        const capMin = normalizedStatID === "goals+assists" ? 0.15 : 0.20;
-        const capMax = normalizedStatID === "goals+assists" ? 0.85 : 0.80;
-        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * soccerShiftPer1)));
-        const adjOver = Math.min(capMax, Math.max(capMin, 1 - adjUnder));
-        const total = adjUnder + adjOver;
-        if (total > 0) {
-          return {
-            adjustedOverProbability: adjOver / total,
-            adjustedUnderProbability: adjUnder / total,
-            lineDiff
-          };
-        }
-        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
-      }
-      if ((leagueID === "ATP" || leagueID === "WTA") && Number.isFinite(tennisShiftPer1)) {
-        const isBreakPoints = normalizedStatID === "breakpoints";
-        const capMin = isBreakPoints ? 0.15 : 0.20;
-        const capMax = isBreakPoints ? 0.85 : 0.80;
-        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * tennisShiftPer1)));
-        const adjOver = 1 - adjUnder;
-        const total = adjUnder + adjOver;
-        if (total > 0) {
-          return {
-            adjustedOverProbability: adjOver / total,
-            adjustedUnderProbability: adjUnder / total,
-            lineDiff
-          };
-        }
-        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
-      }
-      const halfStepDifference = lineDiff / 0.5;
-      const shiftedOver = Math.min(0.98, Math.max(0.02, fairOverProbability - (halfStepDifference * LINE_SHIFT_PER_HALF)));
+      shiftedOver = Math.min(0.98, Math.max(0.02, shiftedOver));
       return {
         adjustedOverProbability: shiftedOver,
         adjustedUnderProbability: 1 - shiftedOver,
-        lineDiff
+        lineDiff,
+        signalConflictPenalty: conflictStrength
       };
+    }
+
+    function resolveLineShiftPerUnit({ normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
+      if (leagueID === "MLB" && Number.isFinite(mlbShiftPer1)) {
+        return MLB_HIGH_VOLATILITY_STATS.has(normalizedStatID) ? mlbShiftPer1 * 0.18 : mlbShiftPer1 * 0.22;
+      }
+      if ((leagueID === "ATP" || leagueID === "WTA") && Number.isFinite(tennisShiftPer1)) {
+        return tennisShiftPer1 * 0.25;
+      }
+      if (Number.isFinite(soccerShiftPer1)) {
+        return soccerShiftPer1 * 0.25;
+      }
+      return LINE_SHIFT_PER_HALF * 0.6;
+    }
+
+    function getFairProbabilitiesFromBookOdds(overOdds, underOdds) {
+      const impliedOver = americanOddsToImpliedProbability(overOdds);
+      const impliedUnder = americanOddsToImpliedProbability(underOdds);
+      if (!Number.isFinite(impliedOver) || !Number.isFinite(impliedUnder)) {
+        return { fairOverProbability: Number.NaN, fairUnderProbability: Number.NaN };
+      }
+      const total = impliedOver + impliedUnder;
+      if (!Number.isFinite(total) || total <= 0) {
+        return { fairOverProbability: Number.NaN, fairUnderProbability: Number.NaN };
+      }
+      return {
+        fairOverProbability: impliedOver / total,
+        fairUnderProbability: impliedUnder / total
+      };
+    }
+
+    function blendProbabilities(primaryProbability, secondaryProbability, secondaryWeight) {
+      const primary = safeNumeric(primaryProbability);
+      const secondary = safeNumeric(secondaryProbability);
+      const normalizedWeight = Math.max(0, Math.min(1, safeNumeric(secondaryWeight)));
+      if (!Number.isFinite(primary) && !Number.isFinite(secondary)) return Number.NaN;
+      if (!Number.isFinite(primary)) return secondary;
+      if (!Number.isFinite(secondary)) return primary;
+      return (primary * (1 - normalizedWeight)) + (secondary * normalizedWeight);
+    }
+
+    function calculateBookDisagreementScore(weightedParts) {
+      if (!Array.isArray(weightedParts) || !weightedParts.length) return 1;
+      const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
+      if (!Number.isFinite(totalWeight) || totalWeight <= 0) return 1;
+      const weightedOverLean = weightedParts.reduce((sum, item) => {
+        const lean = item.line.adjustedOverProbability >= item.line.adjustedUnderProbability ? 1 : 0;
+        return sum + (lean * item.config.weight);
+      }, 0) / totalWeight;
+      const weightedMajority = Math.max(weightedOverLean, 1 - weightedOverLean);
+      const lineValues = weightedParts.map(item => safeNumeric(item.line.line)).filter(Number.isFinite);
+      const lineSpread = lineValues.length > 1 ? Math.max(...lineValues) - Math.min(...lineValues) : 0;
+      const lineSpreadPenalty = Math.min(1, lineSpread / 2.5);
+      return ((1 - weightedMajority) * 0.7) + (lineSpreadPenalty * 0.3);
     }
 
     function renderCoreBookCell(book) {
@@ -2291,7 +2355,11 @@
       isFavoriteProp = false;
       detailFilters = { opponent: "all", event: "all", team: "all" };
       currentTeam = prop.bo3TeamData;
-      currentPlayers = prop.bo3TeamData.players || [];
+      masterPlayers = Array.isArray(prop.bo3TeamData.players) ? [...prop.bo3TeamData.players] : [];
+      selectedPlayerTeamFilter = "all";
+      visiblePlayers = computeVisiblePlayers();
+      currentPlayers = [...visiblePlayers];
+      renderPlayers(visiblePlayers);
       await selectPlayer(prop.bo3Player.id);
 
       const lineInput = document.getElementById("lineInput");
@@ -2467,15 +2535,20 @@
       try {
         const team = await fetchTeam(slug);
         currentTeam = team;
-        currentPlayers = team.players || [];
+        masterPlayers = Array.isArray(team.players) ? [...team.players] : [];
+        selectedPlayerTeamFilter = "all";
+        visiblePlayers = computeVisiblePlayers();
+        currentPlayers = [...visiblePlayers];
         currentMatches = [];
         currentMatchDetails = null;
         selectedPlayer = null;
         selectedPlayerGameLog = [];
+        selectedPlayerRequestToken++;
+        r6ViewMode = "team";
         hidePropMessage();
 
         renderTeam(team);
-        renderPlayers(currentPlayers);
+        renderPlayers(visiblePlayers);
         applyPropFilters();
 
         const matches = await fetchTeamMatches(team.id);
@@ -2708,7 +2781,9 @@
     }
 
     async function selectPlayer(playerId) {
-      const player = currentPlayers.find(p => p.id === playerId);
+      const playerPool = Array.isArray(masterPlayers) && masterPlayers.length ? masterPlayers : currentPlayers;
+      const player = playerPool.find(p => p.id === playerId);
+      const requestToken = ++selectedPlayerRequestToken;
 
       if (!player) {
         analysisSection.innerHTML = `<div class="empty">Player not found.</div>`;
@@ -2717,30 +2792,51 @@
 
       selectedPlayer = player;
       lastAnalyzedLine = null;
+      r6ViewMode = "playerDetail";
       setPlayerDetailMode(true);
       analysisSection.innerHTML = `<div class="empty">Loading player data...</div>`;
 
       try {
         selectedPlayerGameLog = await buildPlayerGameLog(player.id);
+        if (requestToken !== selectedPlayerRequestToken || !selectedPlayer || selectedPlayer.id !== player.id) {
+          return;
+        }
         renderPlayerAnalysis();
       } catch (err) {
         console.error(err);
+        if (requestToken !== selectedPlayerRequestToken) return;
         analysisSection.innerHTML = `<div class="empty">Failed to load player game log.</div>`;
       }
     }
 
     function closePlayerDetail() {
+      selectedPlayerRequestToken++;
       selectedPlayer = null;
       selectedPlayerGameLog = [];
       lastAnalyzedLine = null;
       selectedPropContext = null;
+      r6ViewMode = "team";
       setPlayerDetailMode(false);
+      visiblePlayers = computeVisiblePlayers();
+      currentPlayers = [...visiblePlayers];
+      renderPlayers(visiblePlayers);
       renderPlayerAnalysis();
     }
 
     function setPlayerDetailMode(isOpen) {
       [manualPropsCard, teamResearchCard, matchDetailsCard].forEach(section => {
         section.classList.toggle("hidden-section", isOpen);
+      });
+    }
+
+    function computeVisiblePlayers() {
+      const source = Array.isArray(masterPlayers) ? masterPlayers : [];
+      if (!source.length) return [];
+      if (!selectedPlayerTeamFilter || selectedPlayerTeamFilter === "all") return [...source];
+      const normalizedFilter = normalizeName(selectedPlayerTeamFilter);
+      return source.filter(player => {
+        const playerTeam = normalizeName(player?.current_team?.name || player?.team?.name || currentTeam?.name || "");
+        return playerTeam === normalizedFilter;
       });
     }
 
