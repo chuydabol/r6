@@ -1173,7 +1173,7 @@
         <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
           <option value="all">All markets</option>
         </select>
-        <div class="timestamp-pill" style="display:flex;align-items:center;">Weighted books: Pinnacle, Bet365, FanDuel, DraftKings, Caesars, Underdog, BetOnline, BetRivers, ESPN Bet, BetMGM</div>
+        <div class="timestamp-pill" style="display:flex;align-items:center;">Core sharp books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
 
       <div id="oddsSummary" class="muted" style="margin-bottom:10px;">
@@ -1377,16 +1377,10 @@
       break_points_away: ["breakpoints", "break_points"]
     };
     const GLOBAL_BOOK_WEIGHTS = [
-      { key: "pinnacle", label: "Pinnacle", weight: 0.32, tier: 1, aliases: ["pinnacle"] },
-      { key: "bet365", label: "Bet365", weight: 0.28, tier: 1, aliases: ["bet365"] },
-      { key: "fanduel", label: "FanDuel", weight: 0.18, tier: 2, aliases: ["fanduel"] },
-      { key: "draftkings", label: "DraftKings", weight: 0.18, tier: 2, aliases: ["draftkings"] },
-      { key: "caesars", label: "Caesars", weight: 0.12, tier: 3, aliases: ["caesars", "williamhill_us"] },
-      { key: "underdog", label: "Underdog", weight: 0.12, tier: 3, aliases: ["underdog"] },
-      { key: "betonline", label: "BetOnline", weight: 0.10, tier: 3, aliases: ["betonline", "betonlineag"] },
-      { key: "betrivers", label: "BetRivers", weight: 0.09, tier: 3, aliases: ["betrivers", "sugarhouse"] },
-      { key: "espnbet", label: "ESPN Bet", weight: 0.08, tier: 3, aliases: ["espnbet"] },
-      { key: "betmgm", label: "BetMGM", weight: 0.08, tier: 3, aliases: ["betmgm", "mgm"] }
+      { key: "pinnacle", label: "Pinnacle", weight: 1.20, tier: 1, aliases: ["pinnacle"] },
+      { key: "betonline", label: "BetOnline", weight: 1.15, tier: 1, aliases: ["betonline", "betonlineag"] },
+      { key: "fanduel", label: "FanDuel", weight: 1.00, tier: 2, aliases: ["fanduel"] },
+      { key: "draftkings", label: "DraftKings", weight: 1.00, tier: 2, aliases: ["draftkings"] }
     ];
     const DISPLAY_CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", aliases: ["fanduel"] },
@@ -1437,13 +1431,13 @@
     };
     const NBA_FILTER_PROFILE = {
       coverage: {
-        minBooksToShow: 2,
-        twoBookMinWeight: 0.14,
-        twoBookStrongMinQuality: 0.20,
+        minBooksToShow: 1,
+        oneBookMinRecommendedProbability: 0.538,
+        twoBookStrongMinQuality: 0.22,
         twoBookStrongMinAgreement: 0.76,
-        twoBookStrongMinRecommendedProbability: 0.515,
+        twoBookStrongMinRecommendedProbability: 0.518,
         twoBookMinRecommendedProbability: 0.525,
-        threeBookMinCoverage: 0.16,
+        threeBookMinCoverage: 0.40,
         threeBookMinRecommendedProbability: 0.515
       },
       final: {
@@ -2086,31 +2080,17 @@
     function passesCoverageStage(row) {
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
-      const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
-      const coreBookCount = safeNumeric(row?.availableCoreBookCount);
       const availableBooks = safeNumeric(row?.availableCoreBooks);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
       if (leagueID === "MLB") {
         const recommendedProbability = safeNumeric(row?.recommendedProbability);
-        if (!Number.isFinite(availableBooks) || availableBooks <= 1) return false;
-        if (
-          coverageScore >= MLB_FILTER_PROFILE.coverage.strongMinCoverage
-          && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.strongMinWeight
-        ) return true;
-        if (
-          Number.isFinite(coreBookWeightPresent)
-          && coreBookWeightPresent >= 0.30
-          && Number.isFinite(recommendedProbability)
-          && recommendedProbability >= 0.518
-        ) return true;
+        if (!Number.isFinite(availableBooks) || availableBooks < 1) return false;
         if (!Number.isFinite(recommendedProbability)) return false;
-        if (!Number.isFinite(coreBookCount) || coreBookCount < 1) {
-          return totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
-            && recommendedProbability >= MLB_FILTER_PROFILE.coverage.noCoreBooksMinRecommendedProbability;
-        }
-        return totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
-          && recommendedProbability >= MLB_FILTER_PROFILE.coverage.weakMinRecommendedProbability;
+        if (availableBooks >= 4) return true;
+        if (availableBooks === 3) return recommendedProbability >= 0.514;
+        if (availableBooks === 2) return recommendedProbability >= 0.522;
+        return recommendedProbability >= 0.538;
       }
       if (leagueID === "NBA") {
         const recommendedProbability = safeNumeric(row?.recommendedProbability);
@@ -2122,6 +2102,7 @@
         const hasCoreConflict = Boolean(row?.hasCoreConflict);
         if (!Number.isFinite(availableBooks) || availableBooks < NBA_FILTER_PROFILE.coverage.minBooksToShow) return false;
         if (!Number.isFinite(recommendedProbability)) return false;
+        if (availableBooks === 1) return recommendedProbability >= NBA_FILTER_PROFILE.coverage.oneBookMinRecommendedProbability;
         if (hasCoreConflict && recommendedProbability < 0.54) return false;
         if (Number.isFinite(mixedSignalSeverity) && mixedSignalSeverity >= 0.45 && recommendedProbability < 0.535) return false;
         if (availableBooks >= 4) {
@@ -2138,11 +2119,9 @@
           && Number.isFinite(agreementStrength)
           && agreementStrength >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinAgreement;
         if (strongTwoBookSignal) {
-          return totalAvailableWeight >= NBA_FILTER_PROFILE.coverage.twoBookMinWeight
-            && recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinRecommendedProbability;
+          return recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinRecommendedProbability;
         }
-        return totalAvailableWeight >= NBA_FILTER_PROFILE.coverage.twoBookMinWeight
-          && recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookMinRecommendedProbability;
+        return recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookMinRecommendedProbability;
       }
       if (coverageScore >= 0.30) return true;
       return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
@@ -2160,17 +2139,14 @@
             : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (leagueID === "MLB") {
-        const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+        const availableBooks = safeNumeric(row?.availableCoreBooks);
         const coverageScore = safeNumeric(row?.coverageScore);
-        const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
         if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
         if (
-          Number.isFinite(coreBookWeightPresent)
-          && coreBookWeightPresent >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+          Number.isFinite(availableBooks)
+          && availableBooks >= 2
           && Number.isFinite(coverageScore)
-          && coverageScore >= MLB_FILTER_PROFILE.coverage.strongMinCoverage
-          && Number.isFinite(totalAvailableWeight)
-          && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+          && coverageScore >= 0.38
         ) return true;
         return Boolean(row?.prizePicksIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
       }
@@ -2199,9 +2175,8 @@
         return Boolean(row?.prizePicksIsCurrent)
           && hasMeaningfulEdgeSignal
           && Number.isFinite(coverageScore)
-          && coverageScore >= 0.28
-          && Number.isFinite(totalAvailableWeight)
-          && totalAvailableWeight >= 0.14;
+          && coverageScore >= 0.16
+          && Number.isFinite(totalAvailableWeight);
       }
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
@@ -2224,6 +2199,11 @@
         `raw:${stage.rawFetchedProps ?? 0}`,
         `grouped:${stage.groupedBeforeSelectedMarket ?? 0}`,
         `selected:${stage.groupedAfterSelectedMarket ?? 0}`,
+        `core>=1:${stage.rowsWithAtLeastOneCoreBook ?? 0}`,
+        `core2:${stage.rowsWithAtLeastTwoCoreBooks ?? 0}`,
+        `core3:${stage.rowsWithAtLeastThreeCoreBooks ?? 0}`,
+        `core4:${stage.rowsWithAllFourCoreBooks ?? 0}`,
+        `core0-removed:${stage.rowsRemovedForZeroCoreBooks ?? 0}`,
         `pp-fresh:${stage.rowsAfterPPFreshnessFilter ?? 0}`,
         `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
         `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
@@ -2263,6 +2243,24 @@
             const valuePercent = safeNumeric(row?.valuePercent);
             return Number.isFinite(valuePercent) && valuePercent >= 51.0;
           });
+      const coreCoverageStats = scoredRows.reduce((acc, row) => {
+        const coreCount = safeNumeric(row?.availableCoreBookCount);
+        if (!Number.isFinite(coreCount) || coreCount < 1) {
+          acc.zero += 1;
+          return acc;
+        }
+        if (coreCount >= 1) acc.atLeastOne += 1;
+        if (coreCount >= 2) acc.atLeastTwo += 1;
+        if (coreCount >= 3) acc.atLeastThree += 1;
+        if (coreCount >= 4) acc.allFour += 1;
+        return acc;
+      }, {
+        atLeastOne: 0,
+        atLeastTwo: 0,
+        atLeastThree: 0,
+        allFour: 0,
+        zero: 0
+      });
       const rawFetchedProps = Number(oddsSummaryData.rawFetchedProps) || 0;
       const ppFreshnessRowsKept = marketFilteredRows.length;
       const stageCounts = {
@@ -2272,7 +2270,12 @@
         rowsAfterPPFreshnessFilter: ppFreshnessRowsKept,
         rowsAfterLineJuiceConflictPenalty: rowsAfterLineJuiceConflict.length,
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
-        rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length
+        rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length,
+        rowsWithAtLeastOneCoreBook: coreCoverageStats.atLeastOne,
+        rowsWithAtLeastTwoCoreBooks: coreCoverageStats.atLeastTwo,
+        rowsWithAtLeastThreeCoreBooks: coreCoverageStats.atLeastThree,
+        rowsWithAllFourCoreBooks: coreCoverageStats.allFour,
+        rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       };
       if (selectedMarket !== "all") {
         console.log("ODDS_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
@@ -2316,6 +2319,14 @@
         largestEliminationCount: eliminationByStage[0]?.removed || 0
       };
       console.log("ODDS_STAGE_COUNTS_DEBUG", oddsFilterDebug);
+      console.log("ODDS_CORE_BOOK_COVERAGE_DEBUG", {
+        selectedMarket,
+        rowsWithAtLeastOneCoreBook: coreCoverageStats.atLeastOne,
+        rowsWithAtLeastTwoCoreBooks: coreCoverageStats.atLeastTwo,
+        rowsWithAtLeastThreeCoreBooks: coreCoverageStats.atLeastThree,
+        rowsWithAllFourCoreBooks: coreCoverageStats.allFour,
+        rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
+      });
       renderOddsSummary();
       oddsVisibleProps = [...rowsAfterFinalThresholdWithFallback].sort(compareOddsRowsByFinalValue);
       renderOddsProps(oddsVisibleProps);
@@ -2383,26 +2394,17 @@
       }
       if (leagueID !== "MLB") return valuePercent;
       const coverageScore = safeNumeric(row?.coverageScore);
-      const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
       const availableBooks = safeNumeric(row?.availableCoreBooks);
       const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
       const agreementStrength = safeNumeric(row?.agreementStrength);
       let score = valuePercent;
       if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 3.6;
       else if (availableBooks === 2) {
-        const strongTwoBookSignal = Number.isFinite(coreBookWeightPresent) && coreBookWeightPresent >= 0.30
-          && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
+        const strongTwoBookSignal = Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
           && Number.isFinite(agreementStrength) && agreementStrength >= 0.78;
         score -= strongTwoBookSignal ? 0.2 : 0.95;
       } else if (availableBooks === 3) {
         score -= 0.2;
-      }
-      if (
-        !Number.isFinite(coreBookWeightPresent)
-        || coreBookWeightPresent < MLB_FILTER_PROFILE.rankingPenalty.veryLowCoreWeightCutoff
-      ) score -= MLB_FILTER_PROFILE.rankingPenalty.veryLowCoreWeightPenalty;
-      else if (coreBookWeightPresent < MLB_FILTER_PROFILE.rankingPenalty.lowCoreWeightCutoff) {
-        score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoreWeightPenalty;
       }
       if (
         !Number.isFinite(coverageScore)
@@ -2538,19 +2540,8 @@
       const qualityWeightRatio = TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT > 0 ? qualityAdjustedWeight / TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT : 0;
       const coverageScore = Math.max(0, Math.min(1, (qualityWeightRatio * 0.75) + (totalWeightRatio * 0.25)));
       const isMLBLeague = String(prop?.leagueID || "").trim().toUpperCase() === "MLB";
-      const coverageLabel = isMLBLeague
-        ? coverageScore >= 0.72
-          ? "High"
-          : coverageScore >= 0.48
-            ? "Medium"
-            : coverageScore >= 0.30
-              ? "Low"
-              : "Low (Limited)"
-        : coverageScore >= 0.72
-          ? "High"
-          : coverageScore >= 0.48
-            ? "Medium"
-            : "Low";
+      const coreBookCoverageRatio = DISPLAY_CORE_BOOKS.length > 0 ? availableCoreBookCount / DISPLAY_CORE_BOOKS.length : 0;
+      const coverageLabel = `${availableCoreBookCount}/${DISPLAY_CORE_BOOKS.length} core books`;
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
       let weightedFairOverProbability = Number.NaN;
@@ -2740,6 +2731,7 @@
         availableCoreBookCount,
         coreBookWeightPresent,
         availableCoreBooks: weightedParts.length,
+        coreBookCoverageRatio,
         totalAvailableWeight: totalWeight,
         qualityAdjustedWeight,
         qualityWeightRatio,
@@ -2747,7 +2739,7 @@
         topTierWeightRatio,
         coverageScore,
         coverageLabel,
-        marketCoveragePercent: totalWeightRatio * 100,
+        marketCoveragePercent: coreBookCoverageRatio * 100,
         weightedOverProbability,
         weightedUnderProbability,
         weightedFairOverProbability,
@@ -2932,7 +2924,9 @@
         const side = leansOver ? "over" : "under";
         const fairOnSide = leansOver ? overFair : underFair;
         const juiceStrength = Number.isFinite(fairOnSide) ? Math.max(0, Math.min(1, (fairOnSide - 0.5) / 0.18)) : 0;
-        const qualityMultiplier = BOOK_TIER_QUALITY_MULTIPLIER[item?.config?.tier] ?? 0.75;
+        const qualityMultiplier = TOTAL_BOOK_WEIGHT > 0
+          ? (safeNumeric(item?.config?.weight) / TOTAL_BOOK_WEIGHT) * 4
+          : 1;
         const signal = Math.max(0, Math.min(1, (lineSignal * 0.68) + (juiceStrength * 0.26) + ((qualityMultiplier - 0.75) * 0.24)));
         const sideOdds = side === "over" ? safeNumeric(item?.line?.overOdds) : safeNumeric(item?.line?.underOdds);
         return {
