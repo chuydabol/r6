@@ -318,16 +318,23 @@ const STAT_ALIAS_MAP = {
   pra: ["pra", "points+rebounds+assists", "points_rebounds_assists", "player_points_rebounds_assists"],
   fantasy_points: ["fantasy_points", "fantasyscore", "player_fantasy_points"],
   pitcher_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+  pitching_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
   hits: ["hits", "player_hits", "batting_hits", "battinghits"],
+  batting_hits: ["hits", "player_hits", "batting_hits", "battinghits"],
   total_bases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases"],
+  batting_totalbases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases", "batting_totalBases"],
   hits_allowed: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+  pitching_hits: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
   earned_runs: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs"],
+  pitching_earnedruns: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs", "pitching_earnedRuns"],
   "runs+rbi+hits": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runsrbihits", "runs_rbi_hits"],
-  batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks"],
-  batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in"],
+  "batting_hits+runs+rbi": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runsrbihits", "runs_rbi_hits"],
+  batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks", "batting_basesOnBalls"],
+  batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in", "batting_RBI"],
   pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
   walks_allowed: ["walks_allowed", "walksallowed", "pitcher_walks_allowed"],
-  fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints"]
+  fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
+  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"]
 };
 const NBA_PRIZEPICKS_SUPPORT_MAP = {
   game: new Set([

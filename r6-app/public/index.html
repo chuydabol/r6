@@ -1286,17 +1286,17 @@
         { value: "fantasy_points", label: "Fantasy Points" }
       ],
       MLB: [
-        { value: "pitcher_strikeouts", label: "Pitcher Strikeouts" },
-        { value: "hits_allowed", label: "Hits Allowed" },
+        { value: "pitching_strikeouts", label: "Pitcher Strikeouts" },
+        { value: "pitching_hits", label: "Hits Allowed" },
         { value: "pitching_outs", label: "Outs" },
-        { value: "earned_runs", label: "Earned Runs" },
-        { value: "hits", label: "Hits" },
-        { value: "runs+rbi+hits", label: "Hits + Runs + RBIs" },
-        { value: "total_bases", label: "Total Bases" },
-        { value: "batting_basesonballs", label: "Batter Walks" },
-        { value: "batting_rbi", label: "Runs Batted In" },
+        { value: "pitching_earnedRuns", label: "Earned Runs" },
+        { value: "batting_hits", label: "Hits" },
+        { value: "batting_hits+runs+rbi", label: "Hits + Runs + RBIs" },
+        { value: "batting_totalBases", label: "Total Bases" },
+        { value: "batting_basesOnBalls", label: "Batter Walks" },
+        { value: "batting_RBI", label: "Runs Batted In" },
         { value: "points", label: "Runs" },
-        { value: "fantasy_score", label: "Fantasy Score" }
+        { value: "fantasyScore", label: "Fantasy Score" }
       ],
       ATP: [
         { value: "games_all", label: "Total Games" },
@@ -1353,13 +1353,20 @@
       goalie_saves: ["goaliesaves", "goalie_saves", "saves"],
       goalie_goalsagainst: ["goaliegoalsagainst", "goalie_goalsagainst", "goalsagainst"],
       pitcher_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+      pitching_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
       hits: ["hits", "player_hits", "batting_hits", "battinghits"],
+      batting_hits: ["hits", "player_hits", "batting_hits", "battinghits"],
       total_bases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases"],
+      batting_totalbases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases", "batting_totalBases"],
       hits_allowed: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+      pitching_hits: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
       earned_runs: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs"],
+      pitching_earnedruns: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs", "pitching_earnedRuns"],
       "runs+rbi+hits": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"],
-      batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks"],
-      batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in"],
+      "batting_hits+runs+rbi": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"],
+      batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks", "batting_basesOnBalls"],
+      batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in", "batting_RBI"],
+      fantasyscore: ["fantasy_score", "fantasyscore", "fantasyScore"],
       pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
       games_all: ["games"],
       games_home: ["games"],
@@ -1477,6 +1484,19 @@
       "points",
       "fantasyscore"
     ]);
+    const MLB_SELECTED_MARKET_TO_GROUPED_KEY = {
+      pitchingstrikeouts: "pitchingstrikeouts",
+      pitchinghits: "pitchinghits",
+      pitchingouts: "pitchingouts",
+      pitchingearnedruns: "pitchingearnedruns",
+      battinghits: "battinghits",
+      "battinghits+runs+rbi": "battinghits+runs+rbi",
+      battingtotalbases: "battingtotalbases",
+      battingbasesonballs: "battingbasesonballs",
+      battingrbi: "battingrbi",
+      points: "points",
+      fantasyscore: "fantasyscore"
+    };
     const TENNIS_SHIFT_PER_1 = {
       games: 0.10,
       servingaces: 0.14,
@@ -1913,7 +1933,14 @@
       const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
       const allowed = new Set(targetStatIDs);
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
+      const mlbTargetGroupedKey = leagueID === "MLB"
+        ? MLB_SELECTED_MARKET_TO_GROUPED_KEY[normalizeStatIDKey(selectedMarket)] || normalizeStatIDKey(selectedMarket)
+        : null;
       return rows.filter(row => {
+        if (leagueID === "MLB") {
+          const rowGroupedKey = normalizeStatIDKey(row?.normalizedStatID || row?.statID || row?.marketKey);
+          return rowGroupedKey === mlbTargetGroupedKey;
+        }
         const statKey = normalizeStatIDKey(row?.statID);
         const marketKey = normalizeStatIDKey(row?.marketKey);
         const periodKey = normalizeStatIDKey(row?.periodID);
@@ -1984,7 +2011,16 @@
     function passesCoverageStage(row) {
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+      const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+      const coreBookCount = safeNumeric(row?.availableCoreBookCount);
+      const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
+      if (leagueID === "MLB") {
+        if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.12) return false;
+        if (!Number.isFinite(coreBookCount) || coreBookCount < 1) return false;
+        if (coverageScore >= 0.34 && totalAvailableWeight >= 0.24) return true;
+        return totalAvailableWeight >= 0.30 && (safeNumeric(row?.recommendedProbability) >= 0.548);
+      }
       if (coverageScore >= 0.30) return true;
       return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
     }
@@ -1994,6 +2030,12 @@
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       const minimumDisplayPercent = (leagueID === "ATP" || leagueID === "WTA") ? 51.5 : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
+      if (leagueID === "MLB") {
+        const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+        const coverageScore = safeNumeric(row?.coverageScore);
+        if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.16) return valuePercent >= FINAL_TOP_TIER_MIN_PERCENT;
+        if (!Number.isFinite(coverageScore) || coverageScore < 0.32) return valuePercent >= FINAL_TOP_TIER_MIN_PERCENT;
+      }
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
@@ -2054,6 +2096,17 @@
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
         rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length
       };
+      if (String(oddsLeagueSelect?.value || "").trim().toUpperCase() === "MLB" && selectedMarket !== "all") {
+        console.log("MLB_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
+          selectedMarket,
+          groupedRowsBeforeSelectedMarket: groupedBeforeSelectedMarket,
+          groupedRowsAfterSelectedMarket: marketFilteredRows.length,
+          rowsAfterPPFresh: stageCounts.rowsAfterPPFreshnessFilter,
+          rowsAfterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
+          rowsAfterCoverage: stageCounts.rowsAfterCoveragePenalty,
+          rowsAfterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
+        });
+      }
       const eliminationByStage = [
         {
           stage: "selected-market",
@@ -2091,6 +2144,11 @@
     }
 
     function compareOddsRowsByFinalValue(a, b) {
+      const aRankScore = getOddsRowRankScore(a);
+      const bRankScore = getOddsRowRankScore(b);
+      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) {
+        return bRankScore - aRankScore;
+      }
       const aValuePercent = safeNumeric(a?.valuePercent);
       const bValuePercent = safeNumeric(b?.valuePercent);
       const aHasValue = Number.isFinite(aValuePercent);
@@ -2116,6 +2174,21 @@
       if (aHasBookWeight !== bHasBookWeight) return aHasBookWeight ? -1 : 1;
 
       return safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder);
+    }
+
+    function getOddsRowRankScore(row) {
+      const valuePercent = safeNumeric(row?.valuePercent);
+      if (!Number.isFinite(valuePercent)) return Number.NaN;
+      const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      if (leagueID !== "MLB") return valuePercent;
+      const coverageScore = safeNumeric(row?.coverageScore);
+      const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+      let score = valuePercent;
+      if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.12) score -= 8;
+      else if (coreBookWeightPresent < 0.18) score -= 4;
+      if (!Number.isFinite(coverageScore) || coverageScore < 0.30) score -= 5;
+      else if (coverageScore < 0.36) score -= 2;
+      return score;
     }
 
     function renderOddsProps(rows) {
@@ -2199,6 +2272,11 @@
       DISPLAY_CORE_BOOKS.forEach(book => {
         coreBooks[book.key] = findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
       });
+      const availableCoreBookCount = Object.values(coreBooks).filter(Boolean).length;
+      const coreBookWeightPresent = GLOBAL_BOOK_WEIGHTS.reduce((sum, book) => {
+        if (!coreBooks[book.key]) return sum;
+        return sum + book.weight;
+      }, 0);
 
       const weightedParts = GLOBAL_BOOK_WEIGHTS
         .map(book => ({
@@ -2293,6 +2371,8 @@
         isTennisSupportedMarket,
         isTennisLaunchVisibleMarket,
         coreBooks,
+        availableCoreBookCount,
+        coreBookWeightPresent,
         availableCoreBooks: weightedParts.length,
         totalAvailableWeight: totalWeight,
         topTierWeightPresent,
