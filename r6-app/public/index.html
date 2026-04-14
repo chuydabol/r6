@@ -1516,6 +1516,11 @@
         agreementStrength: 0.12
       }
     };
+    const CORE_LINE_DIFF_TIERS = {
+      veryStrong: 1.5,
+      strong: 1.0,
+      moderate: 0.5
+    };
     const NBA_MARKET_WEIGHT_BY_STAT = {
       points: 1.0,
       rebounds: 1.0,
@@ -2552,6 +2557,10 @@
     }
 
     function compareMergedOddsRowsByFinalValue(a, b) {
+      const aRankScore = getOddsRowRankScore(a);
+      const bRankScore = getOddsRowRankScore(b);
+      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) return bRankScore - aRankScore;
+      if (Number.isFinite(aRankScore) !== Number.isFinite(bRankScore)) return Number.isFinite(aRankScore) ? -1 : 1;
       const aFinal = safeNumeric(a?.finalValuePercent);
       const bFinal = safeNumeric(b?.finalValuePercent);
       const aHas = Number.isFinite(aFinal);
@@ -2610,28 +2619,43 @@
       const valuePercent = safeNumeric(row?.valuePercent);
       if (!Number.isFinite(valuePercent)) return Number.NaN;
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      const availableBooks = safeNumeric(row?.availableCoreBooks);
+      const agreementStrength = Math.max(0, Math.min(1, safeNumeric(row?.agreementStrength)));
+      const strongestBookSignal = Math.max(0, Math.min(1, safeNumeric(row?.strongestBookSignal)));
+      const coverageScore = Math.max(0, Math.min(1, safeNumeric(row?.coverageScore)));
+      const qualityWeightRatio = Math.max(0, Math.min(1, safeNumeric(row?.qualityWeightRatio)));
+      const topTierWeightRatio = Math.max(0, Math.min(1, safeNumeric(row?.topTierWeightRatio)));
+      const favoredJuiceStrength = Math.max(0, Math.min(1, safeNumeric(row?.favoredJuiceStrength) / 0.16));
+      const weightedLineDiffAbs = safeNumeric(row?.weightedLineDiffAbs);
+      const bestCoreLineDiffAbs = safeNumeric(row?.bestCoreLineDiffAbs);
+      const weightedLineDiffScore = getLineDiffPriorityScore(weightedLineDiffAbs);
+      const bestLineDiffScore = getLineDiffPriorityScore(bestCoreLineDiffAbs);
+      const dominantLineDiffScore = Math.max(bestLineDiffScore, weightedLineDiffScore * 0.85);
+      const weightedMarketValue = Math.max(0, Math.min(1, (valuePercent - 50) / 20));
+      const coreBookQuality = Math.max(0, Math.min(1, ((qualityWeightRatio * 0.6) + (topTierWeightRatio * 0.4))));
+
       if (leagueID === "NBA") {
-        const availableBooks = safeNumeric(row?.availableCoreBooks);
-        const agreementStrength = Math.max(0, Math.min(1, safeNumeric(row?.agreementStrength)));
-        const strongestBookSignal = Math.max(0, Math.min(1, safeNumeric(row?.strongestBookSignal)));
-        const weightedMarketValue = Math.max(0, Math.min(1, (valuePercent - 50) / 20));
         const mixedSignalSeverity = safeNumeric(row?.mixedSignalSeverity);
         const hasCoreConflict = Boolean(row?.hasCoreConflict);
-        const coverageScore = safeNumeric(row?.coverageScore);
-        const blend = NBA_EDGE_PROFILE.rankingBlend;
         const periodWeight = getNBAPeriodWeight(row?.periodID);
         const periodIsSegment = periodWeight < 1;
         const valueEdgeOverCoinFlip = Math.max(0, (valuePercent / 100) - 0.5);
         const finalRankScore = (
-          (weightedMarketValue * blend.weightedMarketValue)
-          + (strongestBookSignal * blend.strongestBookSignal)
-          + (agreementStrength * blend.agreementStrength)
+          (dominantLineDiffScore * 0.58)
+          + (favoredJuiceStrength * 0.18)
+          + (strongestBookSignal * 0.12)
+          + (coreBookQuality * 0.07)
+          + (agreementStrength * 0.05)
         ) * 100;
-        let score = finalRankScore;
-        if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 6.5;
+        let score = finalRankScore + (weightedMarketValue * 4.5);
+        if (!Number.isFinite(availableBooks) || availableBooks <= 1) {
+          if (bestLineDiffScore < 0.7 || favoredJuiceStrength < 0.36) score -= 7.0;
+          else score -= 2.2;
+        }
         else if (availableBooks === 2) score += 1.0;
         else if (availableBooks >= 4) score += 0.35;
         if (Number.isFinite(coverageScore) && coverageScore < 0.18) score -= 1.0;
+        if (bestLineDiffScore < 0.52 && weightedLineDiffScore < 0.52 && agreementStrength >= 0.82) score -= 8.5;
         if (Number.isFinite(mixedSignalSeverity)) score -= mixedSignalSeverity * 6.5;
         if (hasCoreConflict) score -= 4.0;
         if (periodIsSegment && valueEdgeOverCoinFlip < 0.055) score -= 3.5;
@@ -2639,12 +2663,18 @@
         return score;
       }
       if (leagueID !== "MLB") return valuePercent;
-      const coverageScore = safeNumeric(row?.coverageScore);
-      const availableBooks = safeNumeric(row?.availableCoreBooks);
-      const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
-      const agreementStrength = safeNumeric(row?.agreementStrength);
-      let score = valuePercent;
-      if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 3.6;
+      let score = (
+        (dominantLineDiffScore * 0.56)
+        + (favoredJuiceStrength * 0.20)
+        + (strongestBookSignal * 0.12)
+        + (coreBookQuality * 0.07)
+        + (agreementStrength * 0.05)
+      ) * 100;
+      score += weightedMarketValue * 4.0;
+      if (!Number.isFinite(availableBooks) || availableBooks <= 1) {
+        if (bestLineDiffScore < 0.7 || favoredJuiceStrength < 0.34) score -= 4.8;
+        else score -= 1.4;
+      }
       else if (availableBooks === 2) {
         const strongTwoBookSignal = Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
           && Number.isFinite(agreementStrength) && agreementStrength >= 0.78;
@@ -2659,12 +2689,32 @@
       else if (coverageScore < MLB_FILTER_PROFILE.rankingPenalty.lowCoverageCutoff) {
         score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoveragePenalty;
       }
+      if (bestLineDiffScore < 0.52 && weightedLineDiffScore < 0.52 && agreementStrength >= 0.82) score -= 7.5;
       if (
         Number.isFinite(availableBooks) && availableBooks === 2
         && Number.isFinite(agreementStrength) && agreementStrength >= 0.80
         && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.21
       ) score += 0.35;
       return score;
+    }
+
+    function getLineDiffPriorityScore(lineDiffAbs) {
+      const diff = safeNumeric(lineDiffAbs);
+      if (!Number.isFinite(diff) || diff <= 0) return 0;
+      if (diff >= CORE_LINE_DIFF_TIERS.veryStrong) return 1.0;
+      if (diff >= CORE_LINE_DIFF_TIERS.strong) return 0.82 + (Math.min(0.5, diff - CORE_LINE_DIFF_TIERS.strong) * 0.24);
+      if (diff >= CORE_LINE_DIFF_TIERS.moderate) return 0.44 + (Math.min(0.5, diff - CORE_LINE_DIFF_TIERS.moderate) * 0.76);
+      return Math.max(0.06, (diff / CORE_LINE_DIFF_TIERS.moderate) * 0.40);
+    }
+
+    function getRankDriverLabel({ bestLineDiffAbs, weightedLineDiffAbs, strongestBookSignal, agreementStrength }) {
+      const bestScore = getLineDiffPriorityScore(bestLineDiffAbs);
+      const weightedScore = getLineDiffPriorityScore(weightedLineDiffAbs);
+      const strongestSignal = Math.max(0, Math.min(1, safeNumeric(strongestBookSignal)));
+      const agreement = Math.max(0, Math.min(1, safeNumeric(agreementStrength)));
+      if (bestScore >= 0.74 && strongestSignal >= 0.56) return "Sharp-book edge";
+      if (weightedScore >= 0.48 && agreement >= 0.72) return "Consensus edge";
+      return "Mixed signal";
     }
 
     function renderOddsProps(rows) {
@@ -2723,6 +2773,12 @@
                       <span class="muted">Agreement: ${escapeHtml(row.agreementCountLabel || "0/0 books")}</span>
                       <br/>
                       <span class="muted">Signal: ${escapeHtml(row.signalTypeLabel || "Mixed signal")}</span>
+                      <br/>
+                      <span class="muted">Best line diff: ${Number.isFinite(row.bestCoreLineDiffAbs) ? row.bestCoreLineDiffAbs.toFixed(1) : "N/A"}</span>
+                      <br/>
+                      <span class="muted">Weighted line diff: ${Number.isFinite(row.weightedLineDiffAbs) ? row.weightedLineDiffAbs.toFixed(2) : "N/A"}</span>
+                      <br/>
+                      <span class="muted">Rank driver: ${escapeHtml(row.rankDriverLabel || "Mixed signal")}</span>
                     </div>
                   </td>
                   <td>${renderCoreBookCell(row.coreBooks.fanduel)}</td>
@@ -2959,6 +3015,12 @@
       const lineDiffAbs = Number.isFinite(prizePicksLine) && Number.isFinite(averageCoreLine)
         ? Math.abs(prizePicksLine - averageCoreLine)
         : Number.NaN;
+      const rankDriverLabel = getRankDriverLabel({
+        bestLineDiffAbs: safeNumeric(strongestBookMetrics.bestLineDiffAbs),
+        weightedLineDiffAbs,
+        strongestBookSignal: safeNumeric(strongestBookMetrics.strongestBookSignal),
+        agreementStrength: Math.max(0, 1 - disagreementScore)
+      });
       const staleThresholdMs = safeNumeric(oddsSummaryData?.stalePrizePicks?.staleThresholdMinutes) * 60 * 1000;
       const prizePicksAgeMs = safeNumeric(prop?.prizepicksAgeMs);
       const prizePicksIsCurrent = !Number.isFinite(prizePicksAgeMs)
@@ -3024,9 +3086,19 @@
         strongestBookOdds: safeNumeric(strongestBookMetrics.strongestBookOdds),
         strongestBookLabel: strongestBookMetrics?.strongestBook?.bookmakerTitle || "N/A",
         strongestBookOddsLabel: formatAmericanOdds(safeNumeric(strongestBookMetrics.strongestBookOdds)),
+        strongestBookUsedForRanking: strongestBookMetrics?.strongestBook?.bookmakerID || null,
         agreementCount: safeNumeric(strongestBookMetrics.agreementCount),
         agreementCountLabel: `${safeNumeric(strongestBookMetrics.agreementCount) || 0}/${safeNumeric(strongestBookMetrics.totalBooks) || 0} books`,
         signalTypeLabel: strongestBookMetrics.signalType || "Mixed signal",
+        bestCoreLineDiffAbs: safeNumeric(strongestBookMetrics.bestLineDiffAbs),
+        blendedLineDiffAbs: weightedLineDiffAbs,
+        rankDriverLabel,
+        rankDebug: {
+          bestCoreLineDiffAbs: safeNumeric(strongestBookMetrics.bestLineDiffAbs),
+          weightedLineDiffAbs,
+          strongestBookUsedForRanking: strongestBookMetrics?.strongestBook?.bookmakerID || null,
+          rankDriverLabel
+        },
         isConsensusAtPrizePicksLine,
         mixedSignalSeverity: safeNumeric(mixedSignalMetrics.mixedSignalSeverity),
         mixedSignalPenalty: safeNumeric(mixedSignalMetrics.mixedSignalPenalty),
@@ -3174,6 +3246,7 @@
           strongestBookLine: Number.NaN,
           strongestBookOdds: Number.NaN,
           strongestBookSide: null,
+          bestLineDiffAbs: Number.NaN,
           agreementCount: 0,
           totalBooks: 0,
           signalType: "Mixed signal"
@@ -3182,17 +3255,27 @@
       const normalizedPreferredSide = String(preferredSide || "").trim().toLowerCase();
       const normalized = parts.map(item => {
         const lineDiffAbs = Math.abs(safeNumeric(item?.line?.lineDiff));
-        const lineSignal = Number.isFinite(lineDiffAbs) ? Math.tanh(lineDiffAbs / 0.48) : 0;
+        const lineSignal = getLineDiffPriorityScore(lineDiffAbs);
         const overFair = safeNumeric(item?.line?.fairOverProbability);
         const underFair = safeNumeric(item?.line?.fairUnderProbability);
-        const leansOver = overFair >= underFair;
-        const side = leansOver ? "over" : "under";
-        const fairOnSide = leansOver ? overFair : underFair;
+        const lineDiffRaw = safeNumeric(item?.line?.lineDiff);
+        const lineSide = lineDiffRaw > 0 ? "under" : lineDiffRaw < 0 ? "over" : "neutral";
+        const juiceSide = overFair >= underFair ? "over" : "under";
+        const side = lineSide === "neutral" ? juiceSide : lineSide;
+        const fairOnSide = side === "over" ? overFair : underFair;
         const juiceStrength = Number.isFinite(fairOnSide) ? Math.max(0, Math.min(1, (fairOnSide - 0.5) / 0.18)) : 0;
-        const qualityMultiplier = TOTAL_BOOK_WEIGHT > 0
-          ? (safeNumeric(item?.config?.weight) / TOTAL_BOOK_WEIGHT) * 4
-          : 1;
-        const signal = Math.max(0, Math.min(1, (lineSignal * 0.68) + (juiceStrength * 0.26) + ((qualityMultiplier - 0.75) * 0.24)));
+        const qualityMultiplier = Math.max(0.5, Math.min(1.0, safeNumeric(item?.config?.weight) / 1.2));
+        const supportsLineSide = lineSide === "neutral" ? true : (lineSide === juiceSide);
+        const alignsWithPreferred = normalizedPreferredSide === "over" || normalizedPreferredSide === "under"
+          ? side === normalizedPreferredSide
+          : false;
+        const signal = Math.max(0, Math.min(1,
+          (lineSignal * 0.72)
+          + (juiceStrength * 0.18)
+          + (qualityMultiplier * 0.10)
+          + (supportsLineSide ? 0.08 : -0.18)
+          + (alignsWithPreferred ? 0.06 : 0)
+        ));
         const sideOdds = side === "over" ? safeNumeric(item?.line?.overOdds) : safeNumeric(item?.line?.underOdds);
         return {
           ...item,
@@ -3202,7 +3285,8 @@
           lineDiffAbs,
           lineSignal,
           juiceStrength,
-          qualityMultiplier
+          qualityMultiplier,
+          supportsLineSide
         };
       });
 
@@ -3213,7 +3297,8 @@
           const a = normalized[i];
           const b = normalized[j];
           if (a.side !== b.side) continue;
-          const pairSignal = Math.max(0, Math.min(1, ((a.signal + b.signal) / 2) + 0.12));
+          const pairLineBoost = Math.max(a.lineSignal, b.lineSignal) >= 0.82 ? 0.12 : 0.06;
+          const pairSignal = Math.max(0, Math.min(1, ((a.signal + b.signal) / 2) + pairLineBoost));
           if (pairSignal > strongestPairSignal) {
             strongestPairSignal = pairSignal;
           }
@@ -3228,12 +3313,15 @@
         ? normalizedPreferredSide
         : (strongestSingle?.side || null);
       const agreementCount = consensusSide
-        ? normalized.filter(item => item.side === consensusSide).length
+        ? normalized.filter(item => item.side === consensusSide && item.supportsLineSide).length
         : 0;
       const totalBooks = normalized.length;
+      const bestLineDiffAbs = normalized.length
+        ? Math.max(...normalized.map(item => safeNumeric(item.lineDiffAbs)).filter(Number.isFinite))
+        : Number.NaN;
       let signalType = "Mixed signal";
-      if (agreementCount >= 3 && strongestBookSignal >= 0.58) signalType = "Consensus edge";
-      else if (strongestPairSignal >= 0.6 || (strongestSingle && strongestSingle.signal >= 0.67)) signalType = "Sharp-book edge";
+      if (Number.isFinite(bestLineDiffAbs) && bestLineDiffAbs >= CORE_LINE_DIFF_TIERS.strong && strongestBookSignal >= 0.58) signalType = "Sharp-book edge";
+      else if (agreementCount >= 3 && strongestBookSignal >= 0.54) signalType = "Consensus edge";
 
       return {
         strongestBookSignal,
@@ -3246,6 +3334,7 @@
         strongestBookLine: strongestSingle ? safeNumeric(strongestSingle.line?.line) : Number.NaN,
         strongestBookOdds: strongestSingle ? safeNumeric(strongestSingle.sideOdds) : Number.NaN,
         strongestBookSide: strongestSingle?.side || null,
+        bestLineDiffAbs,
         agreementCount,
         totalBooks,
         signalType
