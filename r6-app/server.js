@@ -1158,7 +1158,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 
   const groupedStandardProps = allGroupedStandardProps.filter(group => {
     const staleReasons = {
-      missing: !group.prizepicks || !group.rawPrizePicksFound,
+      missing: !group.prizepicks || !Number.isFinite(group.prizepicks?.line),
       unavailable: group.prizepicks?.available === false,
       lastUpdatedTooOld: Number.isFinite(group.prizepicksLastUpdatedAt)
         ? (Date.now() - group.prizepicksLastUpdatedAt) > PRIZEPICKS_STALE_MS

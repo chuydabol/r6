@@ -1257,8 +1257,24 @@
     let oddsSelectedMarket = "all";
     let oddsLastUpdatedAt = null;
     let isOddsLoading = false;
-    let oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
-    let oddsFilterDebug = { selectedMarket: "all", groupedBeforeFilter: 0, groupedAfterFilter: 0 };
+    let oddsSummaryData = {
+      eventsLoaded: 0,
+      rawPlayerPropRecords: 0,
+      pairedBookProps: 0,
+      groupedProps: 0,
+      uniqueBookmakers: [],
+      mode: "standard",
+      sentParams: null,
+      eventsReturned: 0,
+      rawFetchedProps: 0,
+      stalePrizePicks: null
+    };
+    let oddsFilterDebug = {
+      selectedMarket: "all",
+      groupedBeforeFilter: 0,
+      groupedAfterFilter: 0,
+      stageCounts: {}
+    };
     let selectedPlayerRequestToken = 0;
     const ODDS_MARKET_OPTIONS_BY_LEAGUE = {
       NBA: [
@@ -1375,7 +1391,10 @@
     const TOTAL_TOP_TIER_WEIGHT = GLOBAL_BOOK_WEIGHTS
       .filter(book => book.tier === 1)
       .reduce((sum, book) => sum + book.weight, 0);
-    const MIN_REQUIRED_WEIGHT_TO_SHOW = 0.22;
+    const MIN_REQUIRED_WEIGHT_TO_SHOW = 0.16;
+    const FINAL_DISPLAY_MIN_PERCENT = 53.0;
+    const FINAL_SOLID_MIN_PERCENT = 54.0;
+    const FINAL_TOP_TIER_MIN_PERCENT = 56.0;
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
     const LINE_SIGNAL_SCALE = 1.75;
@@ -1804,7 +1823,9 @@
           groupedProps: Number(data.groupedProps) || 0,
           uniqueBookmakers: Array.isArray(data.uniqueBookmakers) ? data.uniqueBookmakers : [],
           sentParams: data?.debug?.sentParams || null,
-          eventsReturned: Number(data?.debug?.eventsReturned) || 0
+          eventsReturned: Number(data?.debug?.eventsReturned) || 0,
+          rawFetchedProps: Number(data?.debug?.rawPrizePicks?.rawOddsScanned) || 0,
+          stalePrizePicks: data?.debug?.stalePrizePicks || null
         };
         oddsLastUpdatedAt = Date.now();
 
@@ -1824,7 +1845,18 @@
         oddsBookProps = [];
         oddsStandardGroups = [];
         oddsVisibleProps = [];
-        oddsSummaryData = { eventsLoaded: 0, rawPlayerPropRecords: 0, pairedBookProps: 0, groupedProps: 0, uniqueBookmakers: [], mode: "standard", sentParams: null, eventsReturned: 0 };
+        oddsSummaryData = {
+          eventsLoaded: 0,
+          rawPlayerPropRecords: 0,
+          pairedBookProps: 0,
+          groupedProps: 0,
+          uniqueBookmakers: [],
+          mode: "standard",
+          sentParams: null,
+          eventsReturned: 0,
+          rawFetchedProps: 0,
+          stalePrizePicks: null
+        };
         oddsLastUpdatedAt = Date.now();
         renderOddsSummary();
         oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook props.</div>`;
@@ -1883,11 +1915,10 @@
       return rows.filter(row => allowed.has(normalizeStatIDKey(row.statID)));
     }
 
-    function passesOddsLaunchFilters(row) {
+    function passesOddsLaunchPrerequisites(row) {
       if (!Number.isFinite(row?.valuePercent)) return false;
       if (!Number.isFinite(row?.prizePicksLine)) return false;
       if (!Number.isFinite(row?.totalAvailableWeight) || row.totalAvailableWeight < MIN_REQUIRED_WEIGHT_TO_SHOW) return false;
-      if ((row?.recommendedProbability || 0) < 0.54) return false;
       if (row?.leagueID === "MLB") {
         if (!row?.isMLBSupportedStat || !row?.isMLBLaunchVisibleStat) return false;
         if (String(row?.periodID || "").trim().toLowerCase() !== "game") return false;
@@ -1908,29 +1939,106 @@
       return true;
     }
 
+    function passesLineJuiceConflictStage(row) {
+      const conflictPenalty = safeNumeric(row?.conflictPenalty);
+      const disagreementPenalty = safeNumeric(row?.disagreementPenalty);
+      const recommendedProbability = safeNumeric(row?.recommendedProbability);
+      if (!Number.isFinite(conflictPenalty) || !Number.isFinite(disagreementPenalty)) return false;
+      if (conflictPenalty >= 0.72 && disagreementPenalty >= 0.70) return true;
+      return recommendedProbability >= 0.545;
+    }
+
+    function passesCoverageStage(row) {
+      const coverageScore = safeNumeric(row?.coverageScore);
+      const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+      if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
+      if (coverageScore >= 0.30) return true;
+      return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
+    }
+
+    function passesFinalDisplayThreshold(row) {
+      const valuePercent = safeNumeric(row?.valuePercent);
+      if (!Number.isFinite(valuePercent) || valuePercent < FINAL_DISPLAY_MIN_PERCENT) return false;
+      if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
+      const coverageScore = safeNumeric(row?.coverageScore);
+      const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+      return Boolean(row?.prizePicksIsCurrent)
+        && Number.isFinite(coverageScore)
+        && coverageScore >= 0.45
+        && Number.isFinite(totalAvailableWeight)
+        && totalAvailableWeight >= 0.22;
+    }
+
     function renderOddsSummary() {
       const books = oddsSummaryData.uniqueBookmakers || [];
       const bookTitles = books.map(book => book.bookmakerTitle).filter(Boolean);
       const booksText = bookTitles.length
         ? `${bookTitles.length} (${bookTitles.slice(0, 5).join(", ")}${bookTitles.length > 5 ? ", ..." : ""})`
         : "0";
-      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Board rows: ${oddsFilterDebug.groupedAfterFilter} • Unique bookmakers: ${booksText}`;
+      const stage = oddsFilterDebug.stageCounts || {};
+      const stageText = [
+        `raw:${stage.rawFetchedProps ?? 0}`,
+        `grouped:${stage.groupedPropsBeforeScoring ?? 0}`,
+        `pp-fresh:${stage.rowsAfterPPFreshnessFilter ?? 0}`,
+        `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
+        `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
+        `final:${stage.rowsAfterFinalDisplayThreshold ?? 0}`
+      ].join(" → ");
+      const largestStageText = oddsFilterDebug.largestEliminationStage
+        ? ` • Biggest drop: ${oddsFilterDebug.largestEliminationStage} (-${oddsFilterDebug.largestEliminationCount || 0})`
+        : "";
+      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Stage counts ${stageText} • Unique bookmakers: ${booksText}${largestStageText}`;
       oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
     function applyOddsSortingAndRendering() {
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const marketFilteredRows = filterOddsRowsBySelectedMarket(oddsStandardGroups, selectedMarket);
-      const enrichedRows = marketFilteredRows
+      const scoredRows = marketFilteredRows
         .map(buildWeightedOddsRow)
-        .filter(row => passesOddsLaunchFilters(row));
+        .filter(row => passesOddsLaunchPrerequisites(row));
+      const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row));
+      const rowsAfterCoveragePenalty = rowsAfterLineJuiceConflict.filter(row => passesCoverageStage(row));
+      const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
+      const rawFetchedProps = Number(oddsSummaryData.rawFetchedProps) || 0;
+      const ppFreshnessRowsKept = Number(oddsSummaryData?.stalePrizePicks?.rowsKept) || marketFilteredRows.length;
+      const stageCounts = {
+        rawFetchedProps,
+        groupedPropsBeforeScoring: marketFilteredRows.length,
+        rowsAfterPPFreshnessFilter: ppFreshnessRowsKept,
+        rowsAfterLineJuiceConflictPenalty: rowsAfterLineJuiceConflict.length,
+        rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
+        rowsAfterFinalDisplayThreshold: rowsAfterFinalThreshold.length
+      };
+      const eliminationByStage = [
+        {
+          stage: "PP freshness",
+          removed: Math.max(0, stageCounts.groupedPropsBeforeScoring - stageCounts.rowsAfterPPFreshnessFilter)
+        },
+        {
+          stage: "line/juice conflict",
+          removed: Math.max(0, stageCounts.rowsAfterPPFreshnessFilter - stageCounts.rowsAfterLineJuiceConflictPenalty)
+        },
+        {
+          stage: "coverage",
+          removed: Math.max(0, stageCounts.rowsAfterLineJuiceConflictPenalty - stageCounts.rowsAfterCoveragePenalty)
+        },
+        {
+          stage: "final threshold",
+          removed: Math.max(0, stageCounts.rowsAfterCoveragePenalty - stageCounts.rowsAfterFinalDisplayThreshold)
+        }
+      ].sort((a, b) => b.removed - a.removed);
       oddsFilterDebug = {
         selectedMarket,
         groupedBeforeFilter: oddsStandardGroups.length,
-        groupedAfterFilter: marketFilteredRows.length
+        groupedAfterFilter: marketFilteredRows.length,
+        stageCounts,
+        largestEliminationStage: eliminationByStage[0]?.stage || "none",
+        largestEliminationCount: eliminationByStage[0]?.removed || 0
       };
+      console.log("ODDS_STAGE_COUNTS_DEBUG", oddsFilterDebug);
       renderOddsSummary();
-      oddsVisibleProps = [...enrichedRows].sort(compareOddsRowsByFinalValue);
+      oddsVisibleProps = [...rowsAfterFinalThreshold].sort(compareOddsRowsByFinalValue);
       renderOddsProps(oddsVisibleProps);
     }
 
@@ -2001,7 +2109,7 @@
                     <div class="muted">${escapeHtml(row.matchup || "Unknown matchup")}</div>
                   </td>
                   <td>${escapeHtml(row.betDetails)}</td>
-                  <td class="${row.valuePercent >= 57 ? "value-strong" : "value-moderate"}">${formatPercent(row.valuePercent)}</td>
+                  <td class="${row.valuePercent >= FINAL_TOP_TIER_MIN_PERCENT ? "value-strong" : "value-moderate"}">${formatPercent(row.valuePercent)}</td>
                   <td>${escapeHtml(row.recommendedSideLabel)} ${escapeHtml(formatAmericanOdds(row.fairOdds))}</td>
                   <td>
                     <div class="confidence-pill">
@@ -2098,9 +2206,9 @@
       const consensusUnderProbability = 1 - consensusOverProbability;
       const baseRecommendedProbability = Math.max(consensusOverProbability, consensusUnderProbability);
       const baseEdge = Number.isFinite(baseRecommendedProbability) ? Math.max(0, baseRecommendedProbability - 0.5) : 0;
-      const disagreementPenalty = Math.max(0.45, 1 - (disagreementScore * 0.55));
-      const conflictPenalty = Math.max(0.5, 1 - (averageConflictPenalty * 0.7));
-      const coveragePenalty = 0.5 + (coverageScore * 0.5);
+      const disagreementPenalty = Math.max(0.60, 1 - (disagreementScore * 0.40));
+      const conflictPenalty = Math.max(0.75, 1 - (averageConflictPenalty * 0.35));
+      const coveragePenalty = 0.82 + (coverageScore * 0.18);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
       const recommendedProbability = 0.5 + conservativeEdge;
@@ -2113,6 +2221,11 @@
       const lineDiffAbs = Number.isFinite(prizePicksLine) && Number.isFinite(averageCoreLine)
         ? Math.abs(prizePicksLine - averageCoreLine)
         : Number.NaN;
+      const staleThresholdMs = safeNumeric(oddsSummaryData?.stalePrizePicks?.staleThresholdMinutes) * 60 * 1000;
+      const prizePicksAgeMs = safeNumeric(prop?.prizepicksAgeMs);
+      const prizePicksIsCurrent = !Number.isFinite(prizePicksAgeMs)
+        || !Number.isFinite(staleThresholdMs)
+        || prizePicksAgeMs <= (staleThresholdMs * 2);
 
       return {
         ...prop,
@@ -2140,11 +2253,15 @@
         weightedFairUnderProbability,
         disagreementScore,
         averageConflictPenalty,
+        disagreementPenalty,
+        conflictPenalty,
+        coveragePenalty,
         recommendedSideLabel: recommendedSide,
         recommendedProbability,
         fairOdds,
         averageCoreLine,
         lineDiffAbs,
+        prizePicksIsCurrent,
         valuePercent: recommendedProbability * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
       };
