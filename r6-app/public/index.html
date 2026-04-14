@@ -1151,9 +1151,9 @@
         <div id="oddsLastUpdated" class="timestamp-pill">Last updated: Never</div>
         <div class="odds-actions">
           <button class="btn" onclick="loadOddsComparison()">Refresh Board</button>
-          <label class="switch-wrap" title="Reserved for future rollout">
-            <input type="checkbox" id="oddsAutoRefreshToggle" disabled />
-            Auto-refresh (off)
+          <label class="switch-wrap">
+            <input type="checkbox" id="oddsAutoRefreshToggle" />
+            Auto-refresh (45s)
           </label>
         </div>
       </div>
@@ -1162,6 +1162,7 @@
           <option value="NBA">NBA</option>
           <option value="NFL">NFL</option>
           <option value="MLB">MLB</option>
+          <option value="NBA_MLB">NBA + MLB</option>
           <option value="NHL">NHL</option>
           <option value="ATP">ATP</option>
           <option value="WTA">WTA</option>
@@ -1218,6 +1219,7 @@
     const oddsLoading = document.getElementById("oddsLoading");
     const oddsMessage = document.getElementById("oddsMessage");
     const oddsLastUpdated = document.getElementById("oddsLastUpdated");
+    const oddsAutoRefreshToggle = document.getElementById("oddsAutoRefreshToggle");
 
     let allProps = [];
     let visibleProps = [];
@@ -1257,6 +1259,9 @@
     let oddsSelectedMarket = "all";
     let oddsLastUpdatedAt = null;
     let isOddsLoading = false;
+    let oddsAutoRefreshTimer = null;
+    const COMBINED_LEAGUE_ID = "NBA_MLB";
+    const COMBINED_AUTO_REFRESH_MS = 45000;
     let oddsSummaryData = {
       eventsLoaded: 0,
       rawPlayerPropRecords: 0,
@@ -1297,6 +1302,23 @@
         { value: "batting_RBI", label: "Runs Batted In" },
         { value: "points", label: "Runs" },
         { value: "fantasyScore", label: "Fantasy Score" }
+      ],
+      NBA_MLB: [
+        { value: "points", label: "Points / Runs" },
+        { value: "rebounds", label: "Rebounds" },
+        { value: "assists", label: "Assists" },
+        { value: "threes", label: "3PT Made" },
+        { value: "pra", label: "PRA" },
+        { value: "pitching_strikeouts", label: "Pitcher Strikeouts" },
+        { value: "pitching_hits", label: "Hits Allowed" },
+        { value: "pitching_outs", label: "Outs" },
+        { value: "pitching_earnedRuns", label: "Earned Runs" },
+        { value: "batting_hits", label: "Hits" },
+        { value: "batting_hits+runs+rbi", label: "Hits + Runs + RBIs" },
+        { value: "batting_totalBases", label: "Total Bases" },
+        { value: "batting_basesOnBalls", label: "Batter Walks" },
+        { value: "batting_RBI", label: "Runs Batted In" },
+        { value: "fantasy_points", label: "Fantasy Points / Score" }
       ],
       ATP: [
         { value: "games_all", label: "Total Games" },
@@ -1600,6 +1622,7 @@
       "NBA",
       "NFL",
       "MLB",
+      COMBINED_LEAGUE_ID,
       "NHL",
       "ATP",
       "WTA",
@@ -1634,8 +1657,14 @@
       oddsSelectedMarket = "all";
       oddsLeagueSelect.addEventListener("change", () => {
         refreshOddsStatOptionsByLeague(oddsLeagueSelect.value || "NBA");
+        updateOddsAutoRefreshMode();
+      });
+      oddsAutoRefreshToggle.checked = true;
+      oddsAutoRefreshToggle.addEventListener("change", () => {
+        updateOddsAutoRefreshMode();
       });
       oddsLastUpdated.textContent = "Last updated: Never";
+      updateOddsAutoRefreshMode();
       renderCurrentView();
     });
 
@@ -1646,6 +1675,64 @@
       oddsStatSelect.innerHTML = allOptions.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("");
       oddsSelectedMarket = "all";
       oddsStatSelect.value = "all";
+    }
+
+    function clearOddsAutoRefreshTimer() {
+      if (!oddsAutoRefreshTimer) return;
+      clearInterval(oddsAutoRefreshTimer);
+      oddsAutoRefreshTimer = null;
+    }
+
+    function updateOddsAutoRefreshMode() {
+      clearOddsAutoRefreshTimer();
+      const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
+      const shouldRun = leagueID === COMBINED_LEAGUE_ID && Boolean(oddsAutoRefreshToggle?.checked);
+      if (!shouldRun) return;
+      oddsAutoRefreshTimer = setInterval(() => {
+        if (isOddsLoading) return;
+        loadOddsComparison();
+      }, COMBINED_AUTO_REFRESH_MS);
+    }
+
+    async function fetchOddsByLeague(leagueID) {
+      const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: "all" });
+      const res = await fetch(`/api/odds-comparison?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        const debugText = data?.debug?.sentParams ? ` Debug sentParams: ${JSON.stringify(data.debug.sentParams)}` : "";
+        throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
+      }
+      return data;
+    }
+
+    function computeSportValueCalibration(rows) {
+      const bySport = rows.reduce((acc, row) => {
+        const sport = String(row?.leagueID || "").trim().toUpperCase();
+        const value = safeNumeric(row?.valuePercent);
+        if (!Number.isFinite(value)) return acc;
+        if (!acc[sport]) acc[sport] = [];
+        acc[sport].push(value);
+        return acc;
+      }, {});
+      const sports = Object.keys(bySport).filter(key => bySport[key].length);
+      if (sports.length < 2) return { adjustments: {}, baselineMedian: Number.NaN };
+      const medians = Object.fromEntries(
+        sports.map(sport => {
+          const values = [...bySport[sport]].sort((a, b) => a - b);
+          const middle = Math.floor(values.length / 2);
+          const median = values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+          return [sport, median];
+        })
+      );
+      const baselineMedian = sports.reduce((sum, sport) => sum + medians[sport], 0) / sports.length;
+      const adjustments = Object.fromEntries(
+        sports.map(sport => {
+          const gap = baselineMedian - medians[sport];
+          const adjustment = Math.max(-1.5, Math.min(1.5, gap * 0.5));
+          return [sport, adjustment];
+        })
+      );
+      return { adjustments, baselineMedian, medians };
     }
 
     function setAppView(nextView) {
@@ -1874,7 +1961,8 @@
     async function loadOddsComparison() {
       const leagueID = oddsLeagueSelect.value || "NBA";
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
-      if (!SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
+      const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
+      if (!isCombinedMode && !SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
         oddsMessage.style.display = "block";
         oddsMessage.textContent = "Unsupported league for current SportsGameOdds setup";
         oddsResultsSection.innerHTML = `<div class="empty">Unsupported league for current SportsGameOdds setup</div>`;
@@ -1884,12 +1972,44 @@
       oddsMessage.style.display = "none";
 
       try {
-        const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: "all" });
-        const res = await fetch(`/api/odds-comparison?${params.toString()}`);
-        const data = await res.json();
-        if (!res.ok) {
-          const debugText = data?.debug?.sentParams ? ` Debug sentParams: ${JSON.stringify(data.debug.sentParams)}` : "";
-          throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
+        let data;
+        let combinedDebug = null;
+        if (isCombinedMode) {
+          const [nbaData, mlbData] = await Promise.all([fetchOddsByLeague("NBA"), fetchOddsByLeague("MLB")]);
+          const nbaRows = Array.isArray(nbaData.groupedStandardProps) ? nbaData.groupedStandardProps : [];
+          const mlbRows = Array.isArray(mlbData.groupedStandardProps) ? mlbData.groupedStandardProps : [];
+          const mergedRows = [
+            ...nbaRows.map(row => ({ ...row, leagueID: "NBA", sport: "NBA" })),
+            ...mlbRows.map(row => ({ ...row, leagueID: "MLB", sport: "MLB" }))
+          ];
+          data = {
+            eventsLoaded: (Number(nbaData.eventsLoaded) || 0) + (Number(mlbData.eventsLoaded) || 0),
+            rawPlayerPropRecords: (Number(nbaData.rawPlayerPropRecords) || 0) + (Number(mlbData.rawPlayerPropRecords) || 0),
+            pairedBookProps: (Number(nbaData.pairedBookProps) || 0) + (Number(mlbData.pairedBookProps) || 0),
+            groupedProps: mergedRows.length,
+            uniqueBookmakers: [...(nbaData.uniqueBookmakers || []), ...(mlbData.uniqueBookmakers || [])],
+            groupedStandardProps: mergedRows,
+            debug: {
+              sentParams: { leagueID: "NBA+MLB", marketMode: "standard", statIDs: "all" },
+              stalePrizePicks: {
+                staleThresholdMinutes: Math.max(
+                  Number(nbaData?.debug?.stalePrizePicks?.staleThresholdMinutes) || 0,
+                  Number(mlbData?.debug?.stalePrizePicks?.staleThresholdMinutes) || 0
+                )
+              },
+              rawPrizePicks: {
+                rawOddsScanned: (Number(nbaData?.debug?.rawPrizePicks?.rawOddsScanned) || 0) + (Number(mlbData?.debug?.rawPrizePicks?.rawOddsScanned) || 0)
+              }
+            }
+          };
+          combinedDebug = {
+            nbaFinalRows: nbaRows.length,
+            mlbFinalRows: mlbRows.length,
+            mergedFinalRows: mergedRows.length,
+            refreshTimestamp: new Date().toISOString()
+          };
+        } else {
+          data = await fetchOddsByLeague(leagueID);
         }
 
         updateOddsLoading("Parsing player props...");
@@ -1907,7 +2027,8 @@
           sentParams: data?.debug?.sentParams || null,
           eventsReturned: Number(data?.debug?.eventsReturned) || 0,
           rawFetchedProps: Number(data?.debug?.rawPrizePicks?.rawOddsScanned) || 0,
-          stalePrizePicks: data?.debug?.stalePrizePicks || null
+          stalePrizePicks: data?.debug?.stalePrizePicks || null,
+          combinedDebug
         };
         oddsLastUpdatedAt = Date.now();
 
@@ -1918,6 +2039,8 @@
         if (!oddsStandardGroups.length) {
           const emptyMessage = leagueID === "MLB"
             ? "No MLB props available yet for this selection."
+            : leagueID === COMBINED_LEAGUE_ID
+              ? "No NBA + MLB props available yet for this selection."
             : (leagueID === "ATP" || leagueID === "WTA")
               ? "No tennis props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
@@ -1937,7 +2060,8 @@
           sentParams: null,
           eventsReturned: 0,
           rawFetchedProps: 0,
-          stalePrizePicks: null
+          stalePrizePicks: null,
+          combinedDebug: null
         };
         oddsLastUpdatedAt = Date.now();
         renderOddsSummary();
@@ -1995,11 +2119,14 @@
       const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
       const allowed = new Set(targetStatIDs);
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
-      const mlbTargetGroupedKey = leagueID === "MLB"
-        ? MLB_SELECTED_MARKET_TO_GROUPED_KEY[normalizeStatIDKey(selectedMarket)] || normalizeStatIDKey(selectedMarket)
-        : null;
       return rows.filter(row => {
-        if (leagueID === "MLB") {
+        const rowLeagueID = leagueID === COMBINED_LEAGUE_ID
+          ? String(row?.leagueID || "").trim().toUpperCase()
+          : leagueID;
+        const mlbTargetGroupedKey = rowLeagueID === "MLB"
+          ? MLB_SELECTED_MARKET_TO_GROUPED_KEY[normalizeStatIDKey(selectedMarket)] || normalizeStatIDKey(selectedMarket)
+          : null;
+        if (rowLeagueID === "MLB") {
           const rowGroupedKey = normalizeStatIDKey(row?.normalizedStatID || row?.statID || row?.marketKey);
           return rowGroupedKey === mlbTargetGroupedKey;
         }
@@ -2014,16 +2141,16 @@
           String(row?.betTypeID || "").trim().toLowerCase()
         ].join("-").replace(/_/g, "_");
         if (allowed.has(statKey) || allowed.has(marketKey)) return true;
-        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("games_")) {
+        if ((rowLeagueID === "ATP" || rowLeagueID === "WTA") && selectedMarket.startsWith("games_")) {
           if (selectedMarket === "games_all") return tennisMarketID === "games-all-game-ou";
           if (selectedMarket === "games_home") return tennisMarketID === "games-home-game-ou";
           if (selectedMarket === "games_away") return tennisMarketID === "games-away-game-ou";
         }
-        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("serving_aces_")) {
+        if ((rowLeagueID === "ATP" || rowLeagueID === "WTA") && selectedMarket.startsWith("serving_aces_")) {
           if (selectedMarket === "serving_aces_home") return tennisMarketID === "serving_aces-home-game-ou";
           if (selectedMarket === "serving_aces_away") return tennisMarketID === "serving_aces-away-game-ou";
         }
-        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("break_points_")) {
+        if ((rowLeagueID === "ATP" || rowLeagueID === "WTA") && selectedMarket.startsWith("break_points_")) {
           if (selectedMarket === "break_points_home") return tennisMarketID === "breakpoints-home-game-ou";
           if (selectedMarket === "break_points_away") return tennisMarketID === "breakpoints-away-game-ou";
         }
@@ -2212,7 +2339,11 @@
       const largestStageText = oddsFilterDebug.largestEliminationStage
         ? ` • Biggest drop: ${oddsFilterDebug.largestEliminationStage} (-${oddsFilterDebug.largestEliminationCount || 0})`
         : "";
-      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Stage counts ${stageText} • Unique bookmakers: ${booksText}${largestStageText}`;
+      const combinedDebug = oddsSummaryData.combinedDebug;
+      const combinedModeText = combinedDebug
+        ? ` • NBA rows: ${combinedDebug.nbaFinalRows} • MLB rows: ${combinedDebug.mlbFinalRows} • Merged rows: ${combinedDebug.mergedFinalRows} • Refresh: ${formatLastUpdated(combinedDebug.refreshTimestamp)}`
+        : "";
+      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Stage counts ${stageText} • Unique bookmakers: ${booksText}${largestStageText}${combinedModeText}`;
       oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
@@ -2227,15 +2358,20 @@
       const rowsAfterCoveragePenalty = rowsAfterLineJuiceConflict.filter(row => passesCoverageStage(row));
       const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
+      const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
       const rowsAfterFinalThresholdWithFallback = rowsAfterFinalThreshold.length
         ? rowsAfterFinalThreshold
-        : leagueID === "MLB"
+        : (leagueID === "MLB" || isCombinedMode)
           ? (() => {
-            const mlbFallbackRows = rowsAfterCoveragePenalty.filter(row => {
+            const fallbackRows = rowsAfterCoveragePenalty.filter(row => {
               const valuePercent = safeNumeric(row?.valuePercent);
-              return Number.isFinite(valuePercent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
+              if (!Number.isFinite(valuePercent)) return false;
+              if (isCombinedMode && String(row?.leagueID || "").trim().toUpperCase() === "NBA") {
+                return valuePercent >= NBA_FILTER_PROFILE.final.minDisplayPercent;
+              }
+              return valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
             });
-            if (mlbFallbackRows.length) return mlbFallbackRows;
+            if (fallbackRows.length) return fallbackRows;
             const bestAvailable = [...rowsAfterCoveragePenalty].sort(compareOddsRowsByFinalValue)[0];
             return bestAvailable ? [bestAvailable] : [];
           })()
@@ -2328,8 +2464,47 @@
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       });
       renderOddsSummary();
-      oddsVisibleProps = [...rowsAfterFinalThresholdWithFallback].sort(compareOddsRowsByFinalValue);
+      const { adjustments, medians } = isCombinedMode
+        ? computeSportValueCalibration(rowsAfterFinalThresholdWithFallback)
+        : { adjustments: {}, medians: {} };
+      oddsVisibleProps = [...rowsAfterFinalThresholdWithFallback]
+        .map(row => {
+          const sport = String(row?.leagueID || "").trim().toUpperCase();
+          const calibrationAdjustment = isCombinedMode ? (safeNumeric(adjustments?.[sport]) || 0) : 0;
+          return {
+            ...row,
+            sport: sport || "N/A",
+            calibrationAdjustment,
+            finalValuePercent: safeNumeric(row?.valuePercent) + calibrationAdjustment
+          };
+        })
+        .sort(isCombinedMode ? compareMergedOddsRowsByFinalValue : compareOddsRowsByFinalValue);
+      if (isCombinedMode) {
+        console.log("ODDS_COMBINED_CALIBRATION_DEBUG", { adjustments, medians });
+      }
       renderOddsProps(oddsVisibleProps);
+    }
+
+    function compareMergedOddsRowsByFinalValue(a, b) {
+      const aFinal = safeNumeric(a?.finalValuePercent);
+      const bFinal = safeNumeric(b?.finalValuePercent);
+      const aHas = Number.isFinite(aFinal);
+      const bHas = Number.isFinite(bFinal);
+      if (aHas && bHas && aFinal !== bFinal) return bFinal - aFinal;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      const aFairStrength = safeNumeric(a?.recommendedProbability);
+      const bFairStrength = safeNumeric(b?.recommendedProbability);
+      if (Number.isFinite(aFairStrength) && Number.isFinite(bFairStrength) && aFairStrength !== bFairStrength) return bFairStrength - aFairStrength;
+      if (Number.isFinite(aFairStrength) !== Number.isFinite(bFairStrength)) return Number.isFinite(aFairStrength) ? -1 : 1;
+      const aAgreement = safeNumeric(a?.agreementStrength);
+      const bAgreement = safeNumeric(b?.agreementStrength);
+      if (Number.isFinite(aAgreement) && Number.isFinite(bAgreement) && aAgreement !== bAgreement) return bAgreement - aAgreement;
+      if (Number.isFinite(aAgreement) !== Number.isFinite(bAgreement)) return Number.isFinite(aAgreement) ? -1 : 1;
+      const aCoverage = safeNumeric(a?.coverageScore);
+      const bCoverage = safeNumeric(b?.coverageScore);
+      if (Number.isFinite(aCoverage) && Number.isFinite(bCoverage) && aCoverage !== bCoverage) return bCoverage - aCoverage;
+      if (Number.isFinite(aCoverage) !== Number.isFinite(bCoverage)) return Number.isFinite(aCoverage) ? -1 : 1;
+      return safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder);
     }
 
     function compareOddsRowsByFinalValue(a, b) {
@@ -2426,9 +2601,11 @@
         const leagueID = String(oddsLeagueSelect.value || "NBA").trim().toUpperCase();
         const emptyMessage = leagueID === "MLB"
           ? "No MLB props available yet for this selection."
+          : leagueID === COMBINED_LEAGUE_ID
+            ? "No NBA + MLB props available yet for this selection."
           : (leagueID === "ATP" || leagueID === "WTA")
             ? "No tennis props available yet for this selection."
-          : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
+            : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
         oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         return;
       }
@@ -2439,6 +2616,7 @@
             <thead>
               <tr>
                 <th>Site / PP</th>
+                <th>Sport</th>
                 <th>Player Info</th>
                 <th>Bet Details</th>
                 <th>Value %</th>
@@ -2455,12 +2633,13 @@
               ${rows.map(row => `
                 <tr>
                   <td>PrizePicks vs Core Books</td>
+                  <td><span class="pill">${escapeHtml(String(row.sport || row.leagueID || "N/A").toUpperCase())}</span></td>
                   <td>
                     <div><strong>${escapeHtml(row.playerName || "Unknown Player")}</strong></div>
                     <div class="muted">${escapeHtml(row.matchup || "Unknown matchup")}</div>
                   </td>
                   <td>${escapeHtml(row.betDetails)}</td>
-                  <td class="${row.valuePercent >= FINAL_TOP_TIER_MIN_PERCENT ? "value-strong" : "value-moderate"}">${formatPercent(row.valuePercent)}</td>
+                  <td class="${(safeNumeric(row.finalValuePercent) || row.valuePercent) >= FINAL_TOP_TIER_MIN_PERCENT ? "value-strong" : "value-moderate"}">${formatPercent(Number.isFinite(safeNumeric(row.finalValuePercent)) ? row.finalValuePercent : row.valuePercent)}</td>
                   <td>${escapeHtml(row.recommendedSideLabel)} ${escapeHtml(formatAmericanOdds(row.fairOdds))}</td>
                   <td>
                     <div class="confidence-pill">
