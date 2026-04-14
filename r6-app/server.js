@@ -336,6 +336,26 @@ const STAT_ALIAS_MAP = {
   fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
   fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"]
 };
+const MLB_STAT_ALIAS_MAP = {
+  pitcher_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+  pitching_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
+  hits: ["hits", "player_hits", "batting_hits", "battinghits"],
+  batting_hits: ["hits", "player_hits", "batting_hits", "battinghits"],
+  total_bases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases"],
+  batting_totalbases: ["total_bases", "totalbases", "player_total_bases", "batting_totalbases", "battingtotalbases", "batting_totalBases"],
+  hits_allowed: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+  pitching_hits: ["pitching_hits", "pitchinghits", "hits_allowed", "hitsallowed", "pitcher_hits_allowed"],
+  earned_runs: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs"],
+  pitching_earnedruns: ["pitching_earnedruns", "pitchingearnedruns", "earned_runs", "earnedruns", "pitcher_earned_runs", "pitching_earnedRuns"],
+  "runs+rbi+hits": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runsrbihits", "runs_rbi_hits"],
+  "batting_hits+runs+rbi": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runsrbihits", "runs_rbi_hits"],
+  batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks", "batting_basesOnBalls"],
+  batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in", "batting_RBI"],
+  pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
+  walks_allowed: ["walks_allowed", "walksallowed", "pitcher_walks_allowed"],
+  fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
+  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"]
+};
 const NBA_PRIZEPICKS_SUPPORT_MAP = {
   game: new Set([
     "points",
@@ -442,6 +462,19 @@ function matchesStatID(statID, requestedStatIDs) {
   return requestedStatIDs.some(requested => {
     if (requested === "all") return true;
     const aliases = STAT_ALIAS_MAP[requested] || [requested];
+    return aliases
+      .map(alias => normalizeStatIDKey(alias))
+      .some(alias => statKey === alias);
+  });
+}
+
+function matchesMLBStatID(statID, requestedStatIDs) {
+  if (!requestedStatIDs.length) return true;
+  const statKey = normalizeStatIDKey(statID);
+  if (!statKey) return false;
+  return requestedStatIDs.some(requested => {
+    if (requested === "all") return true;
+    const aliases = MLB_STAT_ALIAS_MAP[requested] || STAT_ALIAS_MAP[requested] || [requested];
     return aliases
       .map(alias => normalizeStatIDKey(alias))
       .some(alias => statKey === alias);
@@ -623,6 +656,54 @@ function buildPrizePicksMatchKey(meta) {
   return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || "", meta.betTypeID || ""].join("|");
 }
 
+function canonicalizeMLBPlayerID(statEntityID) {
+  const raw = String(statEntityID || "").trim().toLowerCase();
+  if (!raw) return raw;
+  const parts = raw.split("_").filter(Boolean);
+  while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();
+  while (parts.length && /^[a-z]{2,4}$/.test(parts[parts.length - 1])) parts.pop();
+  return parts.join("_") || raw;
+}
+
+function normalizePlayerEntityIDForLeague(leagueID, statEntityID) {
+  if (leagueID !== "MLB") return statEntityID;
+  return canonicalizeMLBPlayerID(statEntityID);
+}
+
+function getMlbCoverageConfig(group) {
+  const statKey = normalizeStatIDKey(group?.statID || "");
+  if (statKey === "battingtotalbases" || statKey === "totalbases") {
+    return {
+      minBooks: 3,
+      minStrongBooks: 2
+    };
+  }
+  return {
+    minBooks: 2,
+    minStrongBooks: 1
+  };
+}
+
+function postProcessMLBGroupedStandardProps(groups) {
+  const weakBookmakers = new Set(["prizepicks", "underdog", "fliff", "hotstreak", "pick6"]);
+  const filtered = groups.filter(group => {
+    const bookIDs = group.books.map(book => String(book.bookmakerID || "").toLowerCase());
+    const strongBooks = bookIDs.filter(bookID => !weakBookmakers.has(bookID));
+    const coverage = getMlbCoverageConfig(group);
+    return group.booksCount >= coverage.minBooks && strongBooks.length >= coverage.minStrongBooks;
+  });
+
+  return filtered.sort((a, b) => {
+    const aStrong = a.books.filter(book => !weakBookmakers.has(String(book.bookmakerID || "").toLowerCase())).length;
+    const bStrong = b.books.filter(book => !weakBookmakers.has(String(book.bookmakerID || "").toLowerCase())).length;
+    if (bStrong !== aStrong) return bStrong - aStrong;
+    if (b.booksCount !== a.booksCount) return b.booksCount - a.booksCount;
+    const aTime = toTimestamp(a.commenceTime) || 0;
+    const bTime = toTimestamp(b.commenceTime) || 0;
+    return aTime - bTime;
+  });
+}
+
 function normalizePrizePicksRawEntry(bookmakerNode, meta) {
   return {
     bookmakerID: "prizepicks",
@@ -755,24 +836,28 @@ function normalizeSportsGameOddsResponse(events, options) {
       const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
       const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
       const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
-      if (!matchesStatID(statID, requestedStatIDs)) return;
+      const statMatches = options.leagueID === "MLB"
+        ? matchesMLBStatID(statID, requestedStatIDs)
+        : matchesStatID(statID, requestedStatIDs);
+      if (!statMatches) return;
       if (betTypeID !== "ou") return;
       if (!PLAYER_SIDE_MAP[sideID]) return;
       const eventID = String(event?.eventID || event?.id || "");
+      const normalizedPlayerID = normalizePlayerEntityIDForLeague(options.leagueID, statEntityID);
       const ppSupported = options.leagueID === "NBA"
         ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
         : options.leagueID === "MLB"
-          ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, statEntityID)
+          ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, normalizedPlayerID)
         : (options.leagueID === "ATP" || options.leagueID === "WTA")
           ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
         : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
           ? isPrizePicksSupportedSoccer(statID, betTypeID)
           : false;
-      const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: statEntityID, statID, periodID, betTypeID });
+      const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: normalizedPlayerID, statID, periodID, betTypeID });
       if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
         prizePicksTraceByGroup.set(prizePicksMatchKey, {
           eventID,
-          playerIDRaw: statEntityID,
+          playerIDRaw: normalizedPlayerID,
           statID,
           periodID,
           betTypeID,
@@ -836,7 +921,8 @@ function normalizeSportsGameOddsResponse(events, options) {
           homeTeam,
           awayTeam,
           matchup: awayTeam && homeTeam ? `${awayTeam} @ ${homeTeam}` : "Unknown matchup",
-          playerIDRaw: statEntityID,
+          playerIDRaw: normalizedPlayerID,
+          playerIDOriginal: statEntityID,
           playerName: resolvePlayerName(event, statEntityID),
           statID,
           periodID,
@@ -1163,7 +1249,7 @@ function normalizeSportsGameOddsResponse(events, options) {
     removedBecauseLastUpdatedTooOld: 0
   };
 
-  const groupedStandardProps = allGroupedStandardProps.filter(group => {
+  const groupedStandardPropsFiltered = allGroupedStandardProps.filter(group => {
     const staleReasons = {
       missing: !group.prizepicks || !Number.isFinite(group.prizepicks?.line),
       unavailable: group.prizepicks?.available === false,
@@ -1186,6 +1272,9 @@ function normalizeSportsGameOddsResponse(events, options) {
   });
 
   console.log("PRIZEPICKS_STALE_FILTER_DEBUG", stalePrizePicksDebug);
+  const groupedStandardProps = options.leagueID === "MLB"
+    ? postProcessMLBGroupedStandardProps(groupedStandardPropsFiltered)
+    : groupedStandardPropsFiltered;
 
   const groupedAlternateProps = Array.from(alternateMap.values()).map(group => {
     const books = Array.from(group.booksMap.values()).map(book => ({
