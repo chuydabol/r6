@@ -1402,6 +1402,34 @@
     const FINAL_DISPLAY_MIN_PERCENT = 53.0;
     const FINAL_SOLID_MIN_PERCENT = 54.0;
     const FINAL_TOP_TIER_MIN_PERCENT = 56.0;
+    const MLB_FILTER_PROFILE = {
+      lineJuice: {
+        minConflictPenalty: 0.58,
+        minDisagreementPenalty: 0.56,
+        minRecommendedProbabilityFallback: 0.522
+      },
+      coverage: {
+        strongMinCoverage: 0.24,
+        strongMinWeight: 0.16,
+        weakMinWeight: 0.12,
+        weakMinRecommendedProbability: 0.525,
+        noCoreBooksMinRecommendedProbability: 0.535
+      },
+      final: {
+        minDisplayPercent: 52.2,
+        premiumPercent: FINAL_TOP_TIER_MIN_PERCENT
+      },
+      rankingPenalty: {
+        veryLowCoverageCutoff: 0.24,
+        lowCoverageCutoff: 0.32,
+        veryLowCoveragePenalty: 3,
+        lowCoveragePenalty: 1.25,
+        veryLowCoreWeightCutoff: 0.10,
+        lowCoreWeightCutoff: 0.16,
+        veryLowCoreWeightPenalty: 4,
+        lowCoreWeightPenalty: 2
+      }
+    };
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
     const LINE_SIGNAL_SCALE = 1.75;
@@ -2004,6 +2032,13 @@
         const severeContradiction = conflictPenalty <= 0.56 && disagreementPenalty <= 0.62 && recommendedProbability < 0.525;
         return !severeContradiction;
       }
+      if (leagueID === "MLB") {
+        if (
+          conflictPenalty >= MLB_FILTER_PROFILE.lineJuice.minConflictPenalty
+          && disagreementPenalty >= MLB_FILTER_PROFILE.lineJuice.minDisagreementPenalty
+        ) return true;
+        return recommendedProbability >= MLB_FILTER_PROFILE.lineJuice.minRecommendedProbabilityFallback;
+      }
       if (conflictPenalty >= 0.68 && disagreementPenalty >= 0.66) return true;
       return recommendedProbability >= 0.535;
     }
@@ -2016,10 +2051,18 @@
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
       if (leagueID === "MLB") {
-        if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.12) return false;
-        if (!Number.isFinite(coreBookCount) || coreBookCount < 1) return false;
-        if (coverageScore >= 0.34 && totalAvailableWeight >= 0.24) return true;
-        return totalAvailableWeight >= 0.30 && (safeNumeric(row?.recommendedProbability) >= 0.548);
+        const recommendedProbability = safeNumeric(row?.recommendedProbability);
+        if (
+          coverageScore >= MLB_FILTER_PROFILE.coverage.strongMinCoverage
+          && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.strongMinWeight
+        ) return true;
+        if (!Number.isFinite(recommendedProbability)) return false;
+        if (!Number.isFinite(coreBookCount) || coreBookCount < 1) {
+          return totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+            && recommendedProbability >= MLB_FILTER_PROFILE.coverage.noCoreBooksMinRecommendedProbability;
+        }
+        return totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+          && recommendedProbability >= MLB_FILTER_PROFILE.coverage.weakMinRecommendedProbability;
       }
       if (coverageScore >= 0.30) return true;
       return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
@@ -2028,13 +2071,26 @@
     function passesFinalDisplayThreshold(row) {
       const valuePercent = safeNumeric(row?.valuePercent);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
-      const minimumDisplayPercent = (leagueID === "ATP" || leagueID === "WTA") ? 51.5 : 52.2;
+      const minimumDisplayPercent = (leagueID === "ATP" || leagueID === "WTA")
+        ? 51.5
+        : leagueID === "MLB"
+          ? MLB_FILTER_PROFILE.final.minDisplayPercent
+          : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (leagueID === "MLB") {
         const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
         const coverageScore = safeNumeric(row?.coverageScore);
-        if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.16) return valuePercent >= FINAL_TOP_TIER_MIN_PERCENT;
-        if (!Number.isFinite(coverageScore) || coverageScore < 0.32) return valuePercent >= FINAL_TOP_TIER_MIN_PERCENT;
+        const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+        if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
+        if (
+          Number.isFinite(coreBookWeightPresent)
+          && coreBookWeightPresent >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+          && Number.isFinite(coverageScore)
+          && coverageScore >= MLB_FILTER_PROFILE.coverage.strongMinCoverage
+          && Number.isFinite(totalAvailableWeight)
+          && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
+        ) return true;
+        return Boolean(row?.prizePicksIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
       }
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
@@ -2079,12 +2135,23 @@
       const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row));
       const rowsAfterCoveragePenalty = rowsAfterLineJuiceConflict.filter(row => passesCoverageStage(row));
       const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
+      const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
       const rowsAfterFinalThresholdWithFallback = rowsAfterFinalThreshold.length
         ? rowsAfterFinalThreshold
-        : rowsAfterCoveragePenalty.filter(row => {
-          const valuePercent = safeNumeric(row?.valuePercent);
-          return Number.isFinite(valuePercent) && valuePercent >= 51.0;
-        });
+        : leagueID === "MLB"
+          ? (() => {
+            const mlbFallbackRows = rowsAfterCoveragePenalty.filter(row => {
+              const valuePercent = safeNumeric(row?.valuePercent);
+              return Number.isFinite(valuePercent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
+            });
+            if (mlbFallbackRows.length) return mlbFallbackRows;
+            const bestAvailable = [...rowsAfterCoveragePenalty].sort(compareOddsRowsByFinalValue)[0];
+            return bestAvailable ? [bestAvailable] : [];
+          })()
+          : rowsAfterCoveragePenalty.filter(row => {
+            const valuePercent = safeNumeric(row?.valuePercent);
+            return Number.isFinite(valuePercent) && valuePercent >= 51.0;
+          });
       const rawFetchedProps = Number(oddsSummaryData.rawFetchedProps) || 0;
       const ppFreshnessRowsKept = marketFilteredRows.length;
       const stageCounts = {
@@ -2184,10 +2251,20 @@
       const coverageScore = safeNumeric(row?.coverageScore);
       const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
       let score = valuePercent;
-      if (!Number.isFinite(coreBookWeightPresent) || coreBookWeightPresent < 0.12) score -= 8;
-      else if (coreBookWeightPresent < 0.18) score -= 4;
-      if (!Number.isFinite(coverageScore) || coverageScore < 0.30) score -= 5;
-      else if (coverageScore < 0.36) score -= 2;
+      if (
+        !Number.isFinite(coreBookWeightPresent)
+        || coreBookWeightPresent < MLB_FILTER_PROFILE.rankingPenalty.veryLowCoreWeightCutoff
+      ) score -= MLB_FILTER_PROFILE.rankingPenalty.veryLowCoreWeightPenalty;
+      else if (coreBookWeightPresent < MLB_FILTER_PROFILE.rankingPenalty.lowCoreWeightCutoff) {
+        score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoreWeightPenalty;
+      }
+      if (
+        !Number.isFinite(coverageScore)
+        || coverageScore < MLB_FILTER_PROFILE.rankingPenalty.veryLowCoverageCutoff
+      ) score -= MLB_FILTER_PROFILE.rankingPenalty.veryLowCoveragePenalty;
+      else if (coverageScore < MLB_FILTER_PROFILE.rankingPenalty.lowCoverageCutoff) {
+        score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoveragePenalty;
+      }
       return score;
     }
 
@@ -2298,7 +2375,20 @@
       const topTierWeightRatio = TOTAL_TOP_TIER_WEIGHT > 0 ? topTierWeightPresent / TOTAL_TOP_TIER_WEIGHT : 0;
       const totalWeightRatio = TOTAL_BOOK_WEIGHT > 0 ? totalWeight / TOTAL_BOOK_WEIGHT : 0;
       const coverageScore = Math.max(0, Math.min(1, (topTierWeightRatio * 0.65) + (totalWeightRatio * 0.35)));
-      const coverageLabel = coverageScore >= 0.72 ? "High" : coverageScore >= 0.48 ? "Medium" : "Low";
+      const isMLBLeague = String(prop?.leagueID || "").trim().toUpperCase() === "MLB";
+      const coverageLabel = isMLBLeague
+        ? coverageScore >= 0.72
+          ? "High"
+          : coverageScore >= 0.48
+            ? "Medium"
+            : coverageScore >= 0.30
+              ? "Low"
+              : "Low (Limited)"
+        : coverageScore >= 0.72
+          ? "High"
+          : coverageScore >= 0.48
+            ? "Medium"
+            : "Low";
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
       let weightedFairOverProbability = Number.NaN;
