@@ -287,6 +287,8 @@ const SUPPORTED_LEAGUE_IDS = new Set([
   "NFL",
   "MLB",
   "NHL",
+  "ATP",
+  "WTA",
   "EPL",
   "UEFA_CHAMPIONS_LEAGUE",
   "NCAAB",
@@ -297,6 +299,8 @@ const LEAGUE_ALIAS_MAP = {
   NFL: ["NFL"],
   MLB: ["MLB"],
   NHL: ["NHL"],
+  ATP: ["ATP"],
+  WTA: ["WTA"],
   EPL: ["EPL"],
   UEFA_CHAMPIONS_LEAGUE: ["UEFA_CHAMPIONS_LEAGUE"],
   NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"],
@@ -384,6 +388,17 @@ const MLB_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "battingtotalbases",
   "pitchingpitchesthrown"
 ]);
+const TENNIS_PRIZEPICKS_SUPPORTED_MARKETS = new Set([
+  "games-away-game-ou",
+  "games-all-game-ou",
+  "games-home-game-ou",
+  "fantasyscore-away-game-ou",
+  "fantasyscore-home-game-ou",
+  "breakpoints-away-game-ou",
+  "breakpoints-home-game-ou",
+  "serving_aces-home-game-ou",
+  "serving_aces-away-game-ou"
+]);
 
 function normalizeLeagueID(value) {
   const target = String(value || "NBA").trim().toUpperCase();
@@ -462,6 +477,22 @@ function isPrizePicksSupportedMLB(statID, periodID, betTypeID, statEntityID) {
   if (!statEntityKey || NON_PLAYER_ENTITIES.has(statEntityKey)) return false;
   const normalized = normalizePrizePicksStatKey(statID).replace(/_/g, "");
   return MLB_PRIZEPICKS_SUPPORTED_STATS.has(normalized);
+}
+
+function isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID) {
+  const betTypeKey = String(betTypeID || "").trim().toLowerCase();
+  const periodKey = String(periodID || "").trim().toLowerCase();
+  const statEntityKey = String(statEntityID || "").trim().toLowerCase();
+  if (betTypeKey !== "ou") return false;
+  if (periodKey !== "game") return false;
+  if (!["home", "away", "all"].includes(statEntityKey)) return false;
+  const marketID = [
+    String(statID || "").trim().toLowerCase(),
+    statEntityKey,
+    periodKey,
+    betTypeKey
+  ].join("-").replace(/_/g, "_");
+  return TENNIS_PRIZEPICKS_SUPPORTED_MARKETS.has(marketID);
 }
 
 function formatPlayerName(statEntityID) {
@@ -669,7 +700,10 @@ function normalizeSportsGameOddsResponse(events, options) {
     Object.entries(oddsNode).forEach(([oddID, oddNode]) => {
       const parsedOddID = parseOddID(oddID);
       const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
-      if (!statEntityID || NON_PLAYER_ENTITIES.has(statEntityID.toLowerCase())) return;
+      const statEntityKey = statEntityID.toLowerCase();
+      const isTennisLeague = options.leagueID === "ATP" || options.leagueID === "WTA";
+      if (!statEntityID) return;
+      if (!isTennisLeague && NON_PLAYER_ENTITIES.has(statEntityKey)) return;
 
       const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
       const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
@@ -683,6 +717,8 @@ function normalizeSportsGameOddsResponse(events, options) {
         ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
         : options.leagueID === "MLB"
           ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, statEntityID)
+        : (options.leagueID === "ATP" || options.leagueID === "WTA")
+          ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
         : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
           ? isPrizePicksSupportedSoccer(statID, betTypeID)
           : false;
@@ -1113,6 +1149,8 @@ app.get("/api/odds-comparison", async (req, res) => {
     NFL: "NFL",
     MLB: "MLB",
     NHL: "NHL",
+    ATP: "ATP",
+    WTA: "WTA",
     NCAAB: "NCAAB",
     NCAAF: "NCAAF"
   };

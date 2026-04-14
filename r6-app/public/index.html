@@ -1163,6 +1163,8 @@
           <option value="NFL">NFL</option>
           <option value="MLB">MLB</option>
           <option value="NHL">NHL</option>
+          <option value="ATP">ATP</option>
+          <option value="WTA">WTA</option>
           <option value="EPL">EPL</option>
           <option value="UEFA_CHAMPIONS_LEAGUE">UEFA Champions League</option>
           <option value="NCAAB">NCAAB</option>
@@ -1275,6 +1277,24 @@
         { value: "points", label: "Runs" },
         { value: "fantasy_score", label: "Fantasy Score" }
       ],
+      ATP: [
+        { value: "games_all", label: "Total Games" },
+        { value: "games_home", label: "Home Player Games Won" },
+        { value: "games_away", label: "Away Player Games Won" },
+        { value: "serving_aces_home", label: "Home Player Aces" },
+        { value: "serving_aces_away", label: "Away Player Aces" },
+        { value: "break_points_home", label: "Home Player Break Points Won" },
+        { value: "break_points_away", label: "Away Player Break Points Won" }
+      ],
+      WTA: [
+        { value: "games_all", label: "Total Games" },
+        { value: "games_home", label: "Home Player Games Won" },
+        { value: "games_away", label: "Away Player Games Won" },
+        { value: "serving_aces_home", label: "Home Player Aces" },
+        { value: "serving_aces_away", label: "Away Player Aces" },
+        { value: "break_points_home", label: "Home Player Break Points Won" },
+        { value: "break_points_away", label: "Away Player Break Points Won" }
+      ],
       EPL: [
         { value: "shots", label: "Shots" },
         { value: "shots_ongoal", label: "Shots on Goal" },
@@ -1319,7 +1339,14 @@
       "runs+rbi+hits": ["batting_hits+runs+rbi", "battinghits+runs+rbi", "runs+rbi+hits", "runs+rbis+hits", "runsrbihits", "runs_rbi_hits"],
       batting_basesonballs: ["batting_basesonballs", "battingbasesonballs", "batter_walks"],
       batting_rbi: ["batting_rbi", "battingrbi", "rbi", "runs_batted_in"],
-      pitching_outs: ["pitching_outs", "pitchingouts", "outs"]
+      pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
+      games_all: ["games"],
+      games_home: ["games"],
+      games_away: ["games"],
+      serving_aces_home: ["serving_aces", "servingaces"],
+      serving_aces_away: ["serving_aces", "servingaces"],
+      break_points_home: ["breakpoints", "break_points"],
+      break_points_away: ["breakpoints", "break_points"]
     };
     const CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
@@ -1407,11 +1434,50 @@
       "points",
       "fantasyscore"
     ]);
+    const TENNIS_SHIFT_PER_1 = {
+      games: 0.10,
+      servingaces: 0.14,
+      breakpoints: 0.16,
+      fantasyscore: 0.08
+    };
+    const TENNIS_MARKET_WHITELIST = new Set([
+      "games-away-game-ou",
+      "games-all-game-ou",
+      "games-home-game-ou",
+      "fantasyscore-away-game-ou",
+      "fantasyscore-home-game-ou",
+      "breakpoints-away-game-ou",
+      "breakpoints-home-game-ou",
+      "serving_aces-home-game-ou",
+      "serving_aces-away-game-ou"
+    ]);
+    const TENNIS_VISIBLE_LAUNCH_MARKETS = new Set([
+      "games-all-game-ou",
+      "games-home-game-ou",
+      "games-away-game-ou",
+      "serving_aces-home-game-ou",
+      "serving_aces-away-game-ou",
+      "breakpoints-home-game-ou",
+      "breakpoints-away-game-ou"
+    ]);
+    const TENNIS_MIN_LINE_DIFF = {
+      "games-all-game-ou": 0.5,
+      "games-home-game-ou": 0.5,
+      "games-away-game-ou": 0.5,
+      "serving_aces-home-game-ou": 0.5,
+      "serving_aces-away-game-ou": 0.5,
+      "breakpoints-home-game-ou": 0.5,
+      "breakpoints-away-game-ou": 0.5,
+      "fantasyscore-home-game-ou": 1.0,
+      "fantasyscore-away-game-ou": 1.0
+    };
     const SPORTSGAMEODDS_SUPPORTED_LEAGUES = new Set([
       "NBA",
       "NFL",
       "MLB",
       "NHL",
+      "ATP",
+      "WTA",
       "EPL",
       "UEFA_CHAMPIONS_LEAGUE",
       "NCAAB",
@@ -1725,6 +1791,8 @@
         if (!oddsStandardGroups.length) {
           const emptyMessage = leagueID === "MLB"
             ? "No MLB props available yet for this selection."
+            : (leagueID === "ATP" || leagueID === "WTA")
+              ? "No tennis props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
           oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         }
@@ -1768,8 +1836,16 @@
       return Number.isFinite(MLB_SHIFT_PER_1[normalized]) ? MLB_SHIFT_PER_1[normalized] : Number.NaN;
     }
 
+    function getTennisShiftPer1(statID) {
+      const normalized = normalizeStatIDKey(statID);
+      return Number.isFinite(TENNIS_SHIFT_PER_1[normalized]) ? TENNIS_SHIFT_PER_1[normalized] : Number.NaN;
+    }
+
     function getMinLineDiffByStat(statID, leagueID) {
       const normalized = normalizeStatIDKey(statID);
+      if (leagueID === "ATP" || leagueID === "WTA") {
+        return Number.isFinite(TENNIS_MIN_LINE_DIFF[normalized]) ? TENNIS_MIN_LINE_DIFF[normalized] : 0;
+      }
       if (leagueID === "MLB") {
         return Number.isFinite(MLB_MIN_LINE_DIFF[normalized]) ? MLB_MIN_LINE_DIFF[normalized] : 0;
       }
@@ -1795,7 +1871,15 @@
         const statEntity = String(row?.playerIDRaw || "").trim().toLowerCase();
         if (!statEntity || ["home", "away", "all"].includes(statEntity)) return false;
       }
-      const minLineDiff = getMinLineDiffByStat(row?.normalizedStatID, row?.leagueID);
+      if (row?.leagueID === "ATP" || row?.leagueID === "WTA") {
+        const statEntity = String(row?.playerIDRaw || "").trim().toLowerCase();
+        const isTennisEntityValid = statEntity === "home" || statEntity === "away" || statEntity === "all";
+        if (!isTennisEntityValid) return false;
+        if (!row?.isTennisSupportedMarket || !row?.isTennisLaunchVisibleMarket) return false;
+        if (String(row?.periodID || "").trim().toLowerCase() !== "game") return false;
+        if (String(row?.betTypeID || "").trim().toLowerCase() !== "ou") return false;
+      }
+      const minLineDiff = getMinLineDiffByStat(row?.tennisMarketID || row?.normalizedStatID, row?.leagueID);
       if (minLineDiff > 0 && (!Number.isFinite(row?.lineDiffAbs) || row.lineDiffAbs < minLineDiff)) return false;
       return true;
     }
@@ -1831,6 +1915,8 @@
         const leagueID = String(oddsLeagueSelect.value || "NBA").trim().toUpperCase();
         const emptyMessage = leagueID === "MLB"
           ? "No MLB props available yet for this selection."
+          : (leagueID === "ATP" || leagueID === "WTA")
+            ? "No tennis props available yet for this selection."
           : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
         oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         return;
@@ -1880,13 +1966,22 @@
     function buildWeightedOddsRow(prop) {
       const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
       const normalizedStatID = normalizeStatIDKey(prop?.statID || prop?.marketKey);
+      const tennisMarketID = [
+        String(prop?.statID || "").trim().toLowerCase(),
+        String(prop?.playerIDRaw || "").trim().toLowerCase(),
+        String(prop?.periodID || "").trim().toLowerCase(),
+        String(prop?.betTypeID || "").trim().toLowerCase()
+      ].join("-").replace(/_/g, "_");
       const isMLBSupportedStat = MLB_SUPPORTED_STAT_IDS.has(normalizedStatID);
       const isMLBLaunchVisibleStat = MLB_VISIBLE_LAUNCH_STAT_IDS.has(normalizedStatID);
       const soccerShiftPer1 = getSoccerShiftPer1(normalizedStatID);
       const mlbShiftPer1 = getMLBShiftPer1(normalizedStatID);
+      const tennisShiftPer1 = getTennisShiftPer1(normalizedStatID);
+      const isTennisSupportedMarket = TENNIS_MARKET_WHITELIST.has(tennisMarketID);
+      const isTennisLaunchVisibleMarket = TENNIS_VISIBLE_LAUNCH_MARKETS.has(tennisMarketID);
       const coreBooks = {};
       CORE_BOOKS.forEach(book => {
-        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, prop?.leagueID);
+        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
       });
 
       const weightedParts = CORE_BOOKS
@@ -1914,7 +2009,7 @@
       const recommendedSide = weightedOverProbability >= weightedUnderProbability ? "Over" : "Under";
       const recommendedProbability = Math.max(weightedOverProbability, weightedUnderProbability);
       const fairOdds = probabilityToAmericanOdds(recommendedProbability);
-      const statLabel = getStatTypeLabel(prop.statID, prop.marketKey, prop.leagueID);
+      const statLabel = getStatTypeLabel(prop.statID, prop.marketKey, prop.leagueID, tennisMarketID);
       const averageCoreLine = weightedParts.length
         ? weightedParts.reduce((sum, item) => sum + item.line.line, 0) / weightedParts.length
         : Number.NaN;
@@ -1930,6 +2025,10 @@
         isMLBLaunchVisibleStat,
         soccerShiftPer1,
         mlbShiftPer1,
+        tennisShiftPer1,
+        tennisMarketID,
+        isTennisSupportedMarket,
+        isTennisLaunchVisibleMarket,
         coreBooks,
         availableCoreBooks: weightedParts.length,
         weightedOverProbability,
@@ -1944,7 +2043,7 @@
       };
     }
 
-    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, leagueID) {
+    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID) {
       const book = (books || []).find(item => {
         const id = String(item?.bookmakerID || "").toLowerCase();
         return coreBookConfig.aliases.some(alias => id.includes(alias));
@@ -1964,6 +2063,7 @@
         normalizedStatID,
         soccerShiftPer1,
         mlbShiftPer1,
+        tennisShiftPer1,
         leagueID
       });
       return {
@@ -1978,7 +2078,7 @@
       };
     }
 
-    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, leagueID }) {
+    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
       if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) {
         return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN };
       }
@@ -2004,6 +2104,22 @@
         const capMax = normalizedStatID === "goals+assists" ? 0.85 : 0.80;
         const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * soccerShiftPer1)));
         const adjOver = Math.min(capMax, Math.max(capMin, 1 - adjUnder));
+        const total = adjUnder + adjOver;
+        if (total > 0) {
+          return {
+            adjustedOverProbability: adjOver / total,
+            adjustedUnderProbability: adjUnder / total,
+            lineDiff
+          };
+        }
+        return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff };
+      }
+      if ((leagueID === "ATP" || leagueID === "WTA") && Number.isFinite(tennisShiftPer1)) {
+        const isBreakPoints = normalizedStatID === "breakpoints";
+        const capMin = isBreakPoints ? 0.15 : 0.20;
+        const capMax = isBreakPoints ? 0.85 : 0.80;
+        const adjUnder = Math.min(capMax, Math.max(capMin, fairUnderProbability + (lineDiff * tennisShiftPer1)));
+        const adjOver = 1 - adjUnder;
         const total = adjUnder + adjOver;
         if (total > 0) {
           return {
@@ -2156,7 +2272,21 @@
       return "Unknown matchup";
     }
 
-    function getStatTypeLabel(statID, fallback, leagueID) {
+    function getStatTypeLabel(statID, fallback, leagueID, tennisMarketID) {
+      const tennisLabels = {
+        "games-all-game-ou": "Total Games",
+        "games-home-game-ou": "Home Player Games Won",
+        "games-away-game-ou": "Away Player Games Won",
+        "serving_aces-home-game-ou": "Home Player Aces",
+        "serving_aces-away-game-ou": "Away Player Aces",
+        "breakpoints-home-game-ou": "Home Player Break Points Won",
+        "breakpoints-away-game-ou": "Away Player Break Points Won",
+        "fantasyscore-home-game-ou": "Home Player Fantasy Score",
+        "fantasyscore-away-game-ou": "Away Player Fantasy Score"
+      };
+      if ((String(leagueID || "").trim().toUpperCase() === "ATP" || String(leagueID || "").trim().toUpperCase() === "WTA") && tennisLabels[tennisMarketID]) {
+        return tennisLabels[tennisMarketID];
+      }
       const key = normalizeStatIDKey(statID);
       const statLabels = {
         points: "Points",
