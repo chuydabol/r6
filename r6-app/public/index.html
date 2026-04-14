@@ -1435,6 +1435,24 @@
         lowCoreWeightPenalty: 0.95
       }
     };
+    const NBA_FILTER_PROFILE = {
+      coverage: {
+        minBooksToShow: 2,
+        twoBookMinWeight: 0.14,
+        twoBookStrongMinQuality: 0.20,
+        twoBookStrongMinAgreement: 0.76,
+        twoBookStrongMinRecommendedProbability: 0.515,
+        twoBookMinRecommendedProbability: 0.525,
+        threeBookMinCoverage: 0.16,
+        threeBookMinRecommendedProbability: 0.515
+      },
+      final: {
+        minDisplayPercent: 52.2,
+        twoBookStrongMinValuePercent: 51.6,
+        twoBookStrongMinQuality: 0.20,
+        twoBookStrongMinAgreement: 0.78
+      }
+    };
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
     const LINE_SIGNAL_SCALE = 1.75;
@@ -2077,6 +2095,28 @@
         return totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
           && recommendedProbability >= MLB_FILTER_PROFILE.coverage.weakMinRecommendedProbability;
       }
+      if (leagueID === "NBA") {
+        const recommendedProbability = safeNumeric(row?.recommendedProbability);
+        const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
+        const agreementStrength = safeNumeric(row?.agreementStrength);
+        if (!Number.isFinite(availableBooks) || availableBooks < NBA_FILTER_PROFILE.coverage.minBooksToShow) return false;
+        if (!Number.isFinite(recommendedProbability)) return false;
+        if (availableBooks >= 4) return true;
+        if (availableBooks === 3) {
+          if (coverageScore >= NBA_FILTER_PROFILE.coverage.threeBookMinCoverage) return true;
+          return recommendedProbability >= NBA_FILTER_PROFILE.coverage.threeBookMinRecommendedProbability;
+        }
+        const strongTwoBookSignal = Number.isFinite(qualityWeightRatio)
+          && qualityWeightRatio >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinQuality
+          && Number.isFinite(agreementStrength)
+          && agreementStrength >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinAgreement;
+        if (strongTwoBookSignal) {
+          return totalAvailableWeight >= NBA_FILTER_PROFILE.coverage.twoBookMinWeight
+            && recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinRecommendedProbability;
+        }
+        return totalAvailableWeight >= NBA_FILTER_PROFILE.coverage.twoBookMinWeight
+          && recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookMinRecommendedProbability;
+      }
       if (coverageScore >= 0.30) return true;
       return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
     }
@@ -2088,7 +2128,9 @@
         ? 51.5
         : leagueID === "MLB"
           ? MLB_FILTER_PROFILE.final.minDisplayPercent
-          : 52.2;
+          : leagueID === "NBA"
+            ? NBA_FILTER_PROFILE.final.minDisplayPercent
+            : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (leagueID === "MLB") {
         const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
@@ -2104,6 +2146,26 @@
           && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.weakMinWeight
         ) return true;
         return Boolean(row?.prizePicksIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
+      }
+      if (leagueID === "NBA") {
+        const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
+        const agreementStrength = safeNumeric(row?.agreementStrength);
+        const availableBooks = safeNumeric(row?.availableCoreBooks);
+        const coverageScore = safeNumeric(row?.coverageScore);
+        const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+        const strongTwoBookSignal = Number.isFinite(availableBooks)
+          && availableBooks === 2
+          && Number.isFinite(qualityWeightRatio)
+          && qualityWeightRatio >= NBA_FILTER_PROFILE.final.twoBookStrongMinQuality
+          && Number.isFinite(agreementStrength)
+          && agreementStrength >= NBA_FILTER_PROFILE.final.twoBookStrongMinAgreement;
+        if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
+        if (strongTwoBookSignal && valuePercent >= NBA_FILTER_PROFILE.final.twoBookStrongMinValuePercent) return true;
+        return Boolean(row?.prizePicksIsCurrent)
+          && Number.isFinite(coverageScore)
+          && coverageScore >= 0.28
+          && Number.isFinite(totalAvailableWeight)
+          && totalAvailableWeight >= 0.14;
       }
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
@@ -2260,6 +2322,30 @@
       const valuePercent = safeNumeric(row?.valuePercent);
       if (!Number.isFinite(valuePercent)) return Number.NaN;
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      if (leagueID === "NBA") {
+        const coverageScore = safeNumeric(row?.coverageScore);
+        const availableBooks = safeNumeric(row?.availableCoreBooks);
+        const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
+        const agreementStrength = safeNumeric(row?.agreementStrength);
+        const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+        let score = valuePercent;
+        if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 4.2;
+        else if (availableBooks === 2) {
+          const strongTwoBookSignal = Number.isFinite(coreBookWeightPresent) && coreBookWeightPresent >= 0.24
+            && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
+            && Number.isFinite(agreementStrength) && agreementStrength >= 0.78;
+          score -= strongTwoBookSignal ? 0.12 : 0.72;
+          if (strongTwoBookSignal) score += 0.42;
+        } else if (availableBooks === 3) {
+          score -= 0.08;
+        }
+        if (!Number.isFinite(coverageScore) || coverageScore < 0.16) score -= 0.45;
+        else if (coverageScore < 0.24) score -= 0.2;
+        if (Number.isFinite(qualityWeightRatio)) score += Math.max(0, qualityWeightRatio - 0.18) * 2.0;
+        if (Number.isFinite(agreementStrength)) score += Math.max(0, agreementStrength - 0.70) * 2.2;
+        if (Number.isFinite(availableBooks) && availableBooks >= 4) score += 0.1;
+        return score;
+      }
       if (leagueID !== "MLB") return valuePercent;
       const coverageScore = safeNumeric(row?.coverageScore);
       const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
@@ -2464,9 +2550,12 @@
       const conflictPenalty = isTennisLeague
         ? Math.max(0.86, 1 - (averageConflictPenalty * 0.16))
         : Math.max(0.75, 1 - (averageConflictPenalty * 0.35));
+      const isNBALeague = String(prop?.leagueID || "").trim().toUpperCase() === "NBA";
       const coveragePenalty = isMLBLeague
         ? 0.90 + (coverageScore * 0.10)
-        : 0.84 + (coverageScore * 0.16);
+        : isNBALeague
+          ? 0.92 + (coverageScore * 0.08)
+          : 0.84 + (coverageScore * 0.16);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
       const recommendedProbability = 0.5 + conservativeEdge;
