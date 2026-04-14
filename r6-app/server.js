@@ -670,33 +670,39 @@ function normalizePlayerEntityIDForLeague(leagueID, statEntityID) {
   return canonicalizeMLBPlayerID(statEntityID);
 }
 
-function getMlbCoverageConfig(group) {
-  const statKey = normalizeStatIDKey(group?.statID || "");
-  if (statKey === "battingtotalbases" || statKey === "totalbases") {
-    return {
-      minBooks: 3,
-      minStrongBooks: 2
-    };
-  }
-  return {
-    minBooks: 2,
-    minStrongBooks: 1
-  };
-}
-
 function postProcessMLBGroupedStandardProps(groups) {
   const weakBookmakers = new Set(["prizepicks", "underdog", "fliff", "hotstreak", "pick6"]);
+  const bookmakerQualityWeights = {
+    pinnacle: 1.0,
+    bet365: 0.98,
+    fanduel: 0.95,
+    draftkings: 0.95,
+    betonline: 0.90,
+    caesars: 0.84,
+    betrivers: 0.80,
+    espnbet: 0.78,
+    betmgm: 0.78
+  };
+  const normalizedBookQualityWeight = (bookmakerID) => {
+    const normalized = String(bookmakerID || "").toLowerCase();
+    if (!normalized) return 0;
+    const directWeight = bookmakerQualityWeights[normalized];
+    if (Number.isFinite(directWeight)) return directWeight;
+    const matchedAlias = Object.entries(bookmakerQualityWeights).find(([bookID]) => normalized.includes(bookID));
+    if (matchedAlias) return matchedAlias[1];
+    return weakBookmakers.has(normalized) ? 0 : 0.72;
+  };
   const filtered = groups.filter(group => {
     const bookIDs = group.books.map(book => String(book.bookmakerID || "").toLowerCase());
     const strongBooks = bookIDs.filter(bookID => !weakBookmakers.has(bookID));
-    const coverage = getMlbCoverageConfig(group);
-    return group.booksCount >= coverage.minBooks && strongBooks.length >= coverage.minStrongBooks;
+    if (group.booksCount <= 1) return false;
+    return strongBooks.length >= 1;
   });
 
   return filtered.sort((a, b) => {
-    const aStrong = a.books.filter(book => !weakBookmakers.has(String(book.bookmakerID || "").toLowerCase())).length;
-    const bStrong = b.books.filter(book => !weakBookmakers.has(String(book.bookmakerID || "").toLowerCase())).length;
-    if (bStrong !== aStrong) return bStrong - aStrong;
+    const aQuality = a.books.reduce((sum, book) => sum + normalizedBookQualityWeight(book?.bookmakerID), 0);
+    const bQuality = b.books.reduce((sum, book) => sum + normalizedBookQualityWeight(book?.bookmakerID), 0);
+    if (bQuality !== aQuality) return bQuality - aQuality;
     if (b.booksCount !== a.booksCount) return b.booksCount - a.booksCount;
     const aTime = toTimestamp(a.commenceTime) || 0;
     const bTime = toTimestamp(b.commenceTime) || 0;
