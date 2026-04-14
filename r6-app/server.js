@@ -619,81 +619,8 @@ function buildPlayerGroupKey(meta) {
   return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || ""].join("|");
 }
 
-function normalizePlayerIdentityToken(value) {
-  return String(value || "")
-    .normalize("NFKD")
-    .replace(/[^\w\s]/g, " ")
-    .replace(/_/g, " ")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getCanonicalPlayerIDFromRaw(statEntityID) {
-  const raw = String(statEntityID || "").trim();
-  if (!raw) return "";
-  const parts = raw.split("_").filter(Boolean);
-  while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();
-  while (parts.length && /^[A-Z]{2,6}$/.test(parts[parts.length - 1])) parts.pop();
-  return normalizePlayerIdentityToken(parts.join(" "));
-}
-
-function resolvePlayerIdentity(event, statEntityID) {
-  const rawPlayerID = String(statEntityID || "").trim();
-  const eventPlayers = event?.players && typeof event.players === "object" ? event.players : {};
-  const directEntry = Object.entries(eventPlayers).find(([key]) => String(key).trim().toLowerCase() === rawPlayerID.toLowerCase());
-  const directPlayerNode = directEntry?.[1] && typeof directEntry[1] === "object" ? directEntry[1] : null;
-  const idCandidates = [
-    directEntry?.[0],
-    directPlayerNode?.id,
-    directPlayerNode?.playerID,
-    directPlayerNode?.playerId,
-    directPlayerNode?.externalID,
-    directPlayerNode?.externalId,
-    directPlayerNode?.mlbPlayerID,
-    directPlayerNode?.mlbamID,
-    directPlayerNode?.mlbamId
-  ].map(value => String(value || "").trim()).filter(Boolean);
-  const uniqueIDs = Array.from(new Set(idCandidates));
-  if (uniqueIDs.length) {
-    return {
-      playerIdentity: `id:${uniqueIDs[0].toLowerCase()}`,
-      playerIdentitySource: "id"
-    };
-  }
-  const canonicalFromRaw = getCanonicalPlayerIDFromRaw(rawPlayerID);
-  if (canonicalFromRaw) {
-    return {
-      playerIdentity: `derived:${canonicalFromRaw}`,
-      playerIdentitySource: "derived_stat_entity_id"
-    };
-  }
-  const resolvedName = normalizePlayerIdentityToken(resolvePlayerName(event, rawPlayerID));
-  if (resolvedName) {
-    return {
-      playerIdentity: `name:${resolvedName}`,
-      playerIdentitySource: "name_fallback"
-    };
-  }
-  return {
-    playerIdentity: `raw:${rawPlayerID.toLowerCase()}`,
-    playerIdentitySource: "raw"
-  };
-}
-
-function buildStablePropIdentityKey(meta) {
-  return [
-    meta.leagueID || "",
-    meta.eventID || "",
-    meta.playerIdentity || meta.playerIDRaw || "",
-    meta.statID || "",
-    meta.periodID || "",
-    meta.betTypeID || ""
-  ].join("|");
-}
-
 function buildPrizePicksMatchKey(meta) {
-  return buildStablePropIdentityKey(meta);
+  return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || "", meta.betTypeID || ""].join("|");
 }
 
 function normalizePrizePicksRawEntry(bookmakerNode, meta) {
@@ -832,7 +759,6 @@ function normalizeSportsGameOddsResponse(events, options) {
       if (betTypeID !== "ou") return;
       if (!PLAYER_SIDE_MAP[sideID]) return;
       const eventID = String(event?.eventID || event?.id || "");
-      const playerIdentityInfo = resolvePlayerIdentity(event, statEntityID);
       const ppSupported = options.leagueID === "NBA"
         ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
         : options.leagueID === "MLB"
@@ -842,22 +768,11 @@ function normalizeSportsGameOddsResponse(events, options) {
         : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
           ? isPrizePicksSupportedSoccer(statID, betTypeID)
           : false;
-      const prizePicksMatchKey = buildPrizePicksMatchKey({
-        leagueID: options.leagueID,
-        eventID,
-        playerIDRaw: statEntityID,
-        playerIdentity: playerIdentityInfo.playerIdentity,
-        statID,
-        periodID,
-        betTypeID
-      });
+      const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: statEntityID, statID, periodID, betTypeID });
       if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
         prizePicksTraceByGroup.set(prizePicksMatchKey, {
           eventID,
-          leagueID: options.leagueID,
           playerIDRaw: statEntityID,
-          playerIdentity: playerIdentityInfo.playerIdentity,
-          playerIdentitySource: playerIdentityInfo.playerIdentitySource,
           statID,
           periodID,
           betTypeID,
@@ -922,8 +837,6 @@ function normalizeSportsGameOddsResponse(events, options) {
           awayTeam,
           matchup: awayTeam && homeTeam ? `${awayTeam} @ ${homeTeam}` : "Unknown matchup",
           playerIDRaw: statEntityID,
-          playerIdentity: playerIdentityInfo.playerIdentity,
-          playerIdentitySource: playerIdentityInfo.playerIdentitySource,
           playerName: resolvePlayerName(event, statEntityID),
           statID,
           periodID,
@@ -945,16 +858,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 
   const pairMap = new Map();
   rawPlayerPropRecords.forEach(record => {
-    const key = [
-      record.leagueID,
-      record.eventID,
-      record.playerIdentity || record.playerIDRaw,
-      record.statID,
-      record.periodID,
-      record.betTypeID,
-      record.bookmakerID,
-      record.line
-    ].join("|");
+    const key = [record.eventID, record.playerIDRaw, record.statID, record.periodID, record.betTypeID, record.bookmakerID, record.line].join("|");
     if (!pairMap.has(key)) {
       pairMap.set(key, {
         leagueID: record.leagueID,
@@ -964,8 +868,6 @@ function normalizeSportsGameOddsResponse(events, options) {
         awayTeam: record.awayTeam,
         matchup: record.matchup,
         playerIDRaw: record.playerIDRaw,
-        playerIdentity: record.playerIdentity || record.playerIDRaw,
-        playerIdentitySource: record.playerIdentitySource || "raw",
         playerName: record.playerName,
         statID: record.statID,
         periodID: record.periodID,
@@ -1018,7 +920,7 @@ function normalizeSportsGameOddsResponse(events, options) {
   const alternateMap = new Map();
 
   pairedBookProps.forEach(pair => {
-    const standardKey = buildStablePropIdentityKey(pair);
+    const standardKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID, pair.betTypeID].join("|");
     if (!groupedMap.has(standardKey)) {
       groupedMap.set(standardKey, {
         leagueID: pair.leagueID,
@@ -1054,7 +956,7 @@ function normalizeSportsGameOddsResponse(events, options) {
       };
     }
 
-    const altKey = [pair.leagueID, pair.eventID, pair.playerIdentity || pair.playerIDRaw, pair.statID, pair.periodID].join("|");
+    const altKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID].join("|");
     if (!alternateMap.has(altKey)) {
       alternateMap.set(altKey, {
         eventID: pair.eventID,
@@ -1316,91 +1218,13 @@ function normalizeSportsGameOddsResponse(events, options) {
     };
   });
 
-  const mlbDebugBookMatching = options.leagueID === "MLB"
-    ? (() => {
-      const trackedMarkets = new Set([
-        "pitchingstrikeouts",
-        "pitchinghits",
-        "pitchingouts",
-        "pitchingearnedruns",
-        "battinghits",
-        "battingtotalbases",
-        "battinghits+runs+rbi",
-        "battingrbi"
-      ]);
-      const normalizeBookmaker = value => String(value || "").trim().toLowerCase();
-      const isTrackedMarket = statID => trackedMarkets.has(normalizeStatIDKey(statID));
-      const byMarketRawBookCounts = {};
-      pairedBookProps.forEach(prop => {
-        if (!isTrackedMarket(prop.statID)) return;
-        const key = normalizeStatIDKey(prop.statID);
-        if (!byMarketRawBookCounts[key]) byMarketRawBookCounts[key] = {};
-        const bookID = normalizeBookmaker(prop.bookmakerID);
-        byMarketRawBookCounts[key][bookID] = (byMarketRawBookCounts[key][bookID] || 0) + 1;
-      });
-
-      const byMarketGroupedBookRows = {};
-      let rowsWithPpOnly = 0;
-      let rowsWithPpPlusOne = 0;
-      let rowsWithPpPlusTwoPlus = 0;
-      const fdRawKeys = new Set();
-      const dkRawKeys = new Set();
-      const fdGroupedKeys = new Set();
-      const dkGroupedKeys = new Set();
-
-      pairedBookProps.forEach(prop => {
-        if (!isTrackedMarket(prop.statID)) return;
-        const key = buildStablePropIdentityKey(prop);
-        const bookID = normalizeBookmaker(prop.bookmakerID);
-        if (bookID.includes("fanduel")) fdRawKeys.add(key);
-        if (bookID.includes("draftkings")) dkRawKeys.add(key);
-      });
-
-      groupedStandardProps.forEach(row => {
-        if (!isTrackedMarket(row.statID)) return;
-        const marketKey = normalizeStatIDKey(row.statID);
-        if (!byMarketGroupedBookRows[marketKey]) byMarketGroupedBookRows[marketKey] = {};
-        const allBooks = Array.isArray(row.books) ? row.books : [];
-        const hasPP = Boolean(row.prizepicks && Number.isFinite(row.prizepicks.line));
-        const compBookCount = allBooks.filter(book => normalizeBookmaker(book.bookmakerID) !== "prizepicks").length;
-        if (hasPP && compBookCount === 0) rowsWithPpOnly += 1;
-        else if (hasPP && compBookCount === 1) rowsWithPpPlusOne += 1;
-        else if (hasPP && compBookCount >= 2) rowsWithPpPlusTwoPlus += 1;
-
-        const identityKey = buildStablePropIdentityKey(row);
-        allBooks.forEach(book => {
-          const bookID = normalizeBookmaker(book.bookmakerID);
-          byMarketGroupedBookRows[marketKey][bookID] = (byMarketGroupedBookRows[marketKey][bookID] || 0) + 1;
-          if (bookID.includes("fanduel")) fdGroupedKeys.add(identityKey);
-          if (bookID.includes("draftkings")) dkGroupedKeys.add(identityKey);
-        });
-      });
-
-      return {
-        trackedMarkets: Array.from(trackedMarkets),
-        rawPropsByBookmakerByMarket: byMarketRawBookCounts,
-        groupedRowsContainingBookmakerByMarket: byMarketGroupedBookRows,
-        rowsWithPpOnly,
-        rowsWithPpPlusOneComparisonBook: rowsWithPpPlusOne,
-        rowsWithPpPlusTwoOrMoreComparisonBooks: rowsWithPpPlusTwoPlus,
-        fdPresentInRawButMissingAfterGrouping: Math.max(0, fdRawKeys.size - fdGroupedKeys.size),
-        dkPresentInRawButMissingAfterGrouping: Math.max(0, dkRawKeys.size - dkGroupedKeys.size)
-      };
-    })()
-    : null;
-
-  if (mlbDebugBookMatching) {
-    console.log("MLB_BOOK_MATCHING_DEBUG", mlbDebugBookMatching);
-  }
-
   return {
     rawPlayerPropRecords,
     pairedBookProps,
     stalePrizePicksDebug,
     groupedStandardProps,
     groupedAlternateProps,
-    uniqueBookmakers: Array.from(uniqueBookmakers, ([bookmakerID, bookmakerTitle]) => ({ bookmakerID, bookmakerTitle })),
-    mlbDebugBookMatching
+    uniqueBookmakers: Array.from(uniqueBookmakers, ([bookmakerID, bookmakerTitle]) => ({ bookmakerID, bookmakerTitle }))
   };
 }
 
@@ -1491,8 +1315,7 @@ app.get("/api/odds-comparison", async (req, res) => {
         rawPrizePicks: {
           ...rawPrizePicksDebug,
           rawPrizePicksExists: rawPrizePicksDebug.rawPrizePicksOddsFound > 0
-        },
-        mlbBookMatching: normalized.mlbDebugBookMatching
+        }
       },
       bookProps: normalized.pairedBookProps,
       groupedStandardProps: normalized.groupedStandardProps,
