@@ -1454,12 +1454,12 @@
       }
     };
     const NBA_EDGE_PROFILE = {
-      lineDiffHalfPointTarget: 0.5,
-      lineDiffSignalWeight: 0.66,
-      juiceSignalWeight: 0.26,
+      lineDiffHalfPointTarget: 0.8,
+      lineDiffSignalWeight: 0.52,
+      juiceSignalWeight: 0.34,
       agreementSignalWeight: 0.08,
-      maxLineEdgeBoost: 0.115,
-      maxJuiceEdgeBoost: 0.075,
+      maxLineEdgeBoost: 0.08,
+      maxJuiceEdgeBoost: 0.07,
       maxConsensusBoost: 0.02,
       maxConsensusInflationPenalty: 0.05
     };
@@ -2627,11 +2627,50 @@
       const consensusInflationPenalty = (isNBALeagueForEdgeModel && isConsensusAtPrizePicksLine)
         ? Math.min(NBA_EDGE_PROFILE.maxConsensusInflationPenalty, (agreementSignal * 0.03) + 0.015)
         : 0;
-      const edgeDrivenProbability = 0.5 + (edgeBlendSignal * 0.13) + lineEdgeBoost + juiceEdgeBoost + consensusMicroBoost - consensusInflationPenalty;
+      const shortLineGapRatio = Number.isFinite(weightedLineDiffAbs)
+        ? Math.max(0, Math.min(1, weightedLineDiffAbs / 0.55))
+        : 0;
+      const shortLineGapDampener = Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs <= 0.55
+        ? 0.74 + (shortLineGapRatio * 0.26)
+        : 1;
+      const edgeDrivenProbability = 0.5
+        + ((edgeBlendSignal * 0.11) * shortLineGapDampener)
+        + (lineEdgeBoost * shortLineGapDampener)
+        + juiceEdgeBoost
+        + consensusMicroBoost
+        - consensusInflationPenalty;
       const baselineRecommendedProbability = 0.5 + conservativeEdge;
-      const recommendedProbability = isNBALeagueForEdgeModel
-        ? Math.min(0.86, Math.max(0.5, (baselineRecommendedProbability * 0.32) + (edgeDrivenProbability * 0.68)))
+      const initialRecommendedProbability = isNBALeagueForEdgeModel
+        ? Math.min(0.86, Math.max(0.5, (baselineRecommendedProbability * 0.38) + (edgeDrivenProbability * 0.62)))
         : baselineRecommendedProbability;
+      const hasMeaningfulLineGap = Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.85;
+      const hasStrongJuiceConfirmation = Number.isFinite(favoredJuiceStrength) && favoredJuiceStrength >= 0.09;
+      const hasMultipleStrongBooks = availableCoreBookCount >= 3
+        && topTierWeightRatio >= 0.56
+        && qualityWeightRatio >= 0.46
+        && agreementSignal >= 0.72;
+      const hasExceptionalBookSupport = hasMultipleStrongBooks && hasMeaningfulLineGap && hasStrongJuiceConfirmation;
+      const isLowCoverageNBA = coverageScore < 0.42;
+      const coverageDeficitRatio = isLowCoverageNBA
+        ? Math.max(0, Math.min(1, (0.42 - coverageScore) / 0.42))
+        : 0;
+      const lowCoverageDampening = isLowCoverageNBA
+        ? Math.max(0.5, 1 - (coverageDeficitRatio * 0.65))
+        : 1;
+      let recommendedProbability = initialRecommendedProbability;
+      if (isNBALeagueForEdgeModel && isLowCoverageNBA) {
+        recommendedProbability = 0.5 + ((recommendedProbability - 0.5) * lowCoverageDampening);
+      }
+      if (isNBALeagueForEdgeModel) {
+        const topEndCap = hasExceptionalBookSupport
+          ? 0.74
+          : hasMultipleStrongBooks && (hasMeaningfulLineGap || hasStrongJuiceConfirmation)
+            ? 0.695
+            : 0.67;
+        const lowCoverageCap = hasExceptionalBookSupport ? 0.695 : 0.648;
+        const finalTopCap = isLowCoverageNBA ? Math.min(topEndCap, lowCoverageCap) : topEndCap;
+        recommendedProbability = Math.min(finalTopCap, Math.max(0.5, recommendedProbability));
+      }
       const recommendedSide = consensusOverProbability >= consensusUnderProbability ? "Over" : "Under";
       const fairOdds = probabilityToAmericanOdds(recommendedProbability);
       const statLabel = getStatTypeLabel(prop.statID, prop.marketKey, prop.leagueID, tennisMarketID);
