@@ -1338,7 +1338,7 @@
       ]
     };
     const ODDS_MARKET_TO_STAT_ID = {
-      points: ["points"],
+      points: ["points", "player_points", "playerpoints", "pts"],
       rebounds: ["rebounds"],
       assists: ["assists"],
       threes: ["threepointersmade"],
@@ -1912,7 +1912,34 @@
       if (selectedMarket === "all") return rows;
       const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
       const allowed = new Set(targetStatIDs);
-      return rows.filter(row => allowed.has(normalizeStatIDKey(row.statID)));
+      const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
+      return rows.filter(row => {
+        const statKey = normalizeStatIDKey(row?.statID);
+        const marketKey = normalizeStatIDKey(row?.marketKey);
+        const periodKey = normalizeStatIDKey(row?.periodID);
+        const entityKey = String(row?.playerIDRaw || "").trim().toLowerCase();
+        const tennisMarketID = [
+          String(row?.statID || "").trim().toLowerCase(),
+          entityKey,
+          String(row?.periodID || "").trim().toLowerCase(),
+          String(row?.betTypeID || "").trim().toLowerCase()
+        ].join("-").replace(/_/g, "_");
+        if (allowed.has(statKey) || allowed.has(marketKey)) return true;
+        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("games_")) {
+          if (selectedMarket === "games_all") return tennisMarketID === "games-all-game-ou";
+          if (selectedMarket === "games_home") return tennisMarketID === "games-home-game-ou";
+          if (selectedMarket === "games_away") return tennisMarketID === "games-away-game-ou";
+        }
+        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("serving_aces_")) {
+          if (selectedMarket === "serving_aces_home") return tennisMarketID === "serving_aces-home-game-ou";
+          if (selectedMarket === "serving_aces_away") return tennisMarketID === "serving_aces-away-game-ou";
+        }
+        if ((leagueID === "ATP" || leagueID === "WTA") && selectedMarket.startsWith("break_points_")) {
+          if (selectedMarket === "break_points_home") return tennisMarketID === "breakpoints-home-game-ou";
+          if (selectedMarket === "break_points_away") return tennisMarketID === "breakpoints-away-game-ou";
+        }
+        return periodKey && allowed.has(`${statKey}:${periodKey}`);
+      });
     }
 
     function passesOddsLaunchPrerequisites(row) {
@@ -1943,9 +1970,15 @@
       const conflictPenalty = safeNumeric(row?.conflictPenalty);
       const disagreementPenalty = safeNumeric(row?.disagreementPenalty);
       const recommendedProbability = safeNumeric(row?.recommendedProbability);
+      const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      const isTennis = leagueID === "ATP" || leagueID === "WTA";
       if (!Number.isFinite(conflictPenalty) || !Number.isFinite(disagreementPenalty)) return false;
-      if (conflictPenalty >= 0.72 && disagreementPenalty >= 0.70) return true;
-      return recommendedProbability >= 0.545;
+      if (isTennis) {
+        const severeContradiction = conflictPenalty <= 0.56 && disagreementPenalty <= 0.62 && recommendedProbability < 0.525;
+        return !severeContradiction;
+      }
+      if (conflictPenalty >= 0.68 && disagreementPenalty >= 0.66) return true;
+      return recommendedProbability >= 0.535;
     }
 
     function passesCoverageStage(row) {
@@ -1958,15 +1991,17 @@
 
     function passesFinalDisplayThreshold(row) {
       const valuePercent = safeNumeric(row?.valuePercent);
-      if (!Number.isFinite(valuePercent) || valuePercent < FINAL_DISPLAY_MIN_PERCENT) return false;
+      const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      const minimumDisplayPercent = (leagueID === "ATP" || leagueID === "WTA") ? 51.5 : 52.2;
+      if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
       return Boolean(row?.prizePicksIsCurrent)
         && Number.isFinite(coverageScore)
-        && coverageScore >= 0.45
+        && coverageScore >= 0.36
         && Number.isFinite(totalAvailableWeight)
-        && totalAvailableWeight >= 0.22;
+        && totalAvailableWeight >= 0.18;
     }
 
     function renderOddsSummary() {
@@ -1978,7 +2013,8 @@
       const stage = oddsFilterDebug.stageCounts || {};
       const stageText = [
         `raw:${stage.rawFetchedProps ?? 0}`,
-        `grouped:${stage.groupedPropsBeforeScoring ?? 0}`,
+        `grouped:${stage.groupedBeforeSelectedMarket ?? 0}`,
+        `selected:${stage.groupedAfterSelectedMarket ?? 0}`,
         `pp-fresh:${stage.rowsAfterPPFreshnessFilter ?? 0}`,
         `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
         `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
@@ -1993,6 +2029,7 @@
 
     function applyOddsSortingAndRendering() {
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
+      const groupedBeforeSelectedMarket = oddsStandardGroups.length;
       const marketFilteredRows = filterOddsRowsBySelectedMarket(oddsStandardGroups, selectedMarket);
       const scoredRows = marketFilteredRows
         .map(buildWeightedOddsRow)
@@ -2000,20 +2037,31 @@
       const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row));
       const rowsAfterCoveragePenalty = rowsAfterLineJuiceConflict.filter(row => passesCoverageStage(row));
       const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
+      const rowsAfterFinalThresholdWithFallback = rowsAfterFinalThreshold.length
+        ? rowsAfterFinalThreshold
+        : rowsAfterCoveragePenalty.filter(row => {
+          const valuePercent = safeNumeric(row?.valuePercent);
+          return Number.isFinite(valuePercent) && valuePercent >= 51.0;
+        });
       const rawFetchedProps = Number(oddsSummaryData.rawFetchedProps) || 0;
-      const ppFreshnessRowsKept = Number(oddsSummaryData?.stalePrizePicks?.rowsKept) || marketFilteredRows.length;
+      const ppFreshnessRowsKept = marketFilteredRows.length;
       const stageCounts = {
         rawFetchedProps,
-        groupedPropsBeforeScoring: marketFilteredRows.length,
+        groupedBeforeSelectedMarket,
+        groupedAfterSelectedMarket: marketFilteredRows.length,
         rowsAfterPPFreshnessFilter: ppFreshnessRowsKept,
         rowsAfterLineJuiceConflictPenalty: rowsAfterLineJuiceConflict.length,
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
-        rowsAfterFinalDisplayThreshold: rowsAfterFinalThreshold.length
+        rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length
       };
       const eliminationByStage = [
         {
+          stage: "selected-market",
+          removed: Math.max(0, stageCounts.groupedBeforeSelectedMarket - stageCounts.groupedAfterSelectedMarket)
+        },
+        {
           stage: "PP freshness",
-          removed: Math.max(0, stageCounts.groupedPropsBeforeScoring - stageCounts.rowsAfterPPFreshnessFilter)
+          removed: Math.max(0, stageCounts.groupedAfterSelectedMarket - stageCounts.rowsAfterPPFreshnessFilter)
         },
         {
           stage: "line/juice conflict",
@@ -2030,7 +2078,7 @@
       ].sort((a, b) => b.removed - a.removed);
       oddsFilterDebug = {
         selectedMarket,
-        groupedBeforeFilter: oddsStandardGroups.length,
+        groupedBeforeFilter: groupedBeforeSelectedMarket,
         groupedAfterFilter: marketFilteredRows.length,
         stageCounts,
         largestEliminationStage: eliminationByStage[0]?.stage || "none",
@@ -2038,7 +2086,7 @@
       };
       console.log("ODDS_STAGE_COUNTS_DEBUG", oddsFilterDebug);
       renderOddsSummary();
-      oddsVisibleProps = [...rowsAfterFinalThreshold].sort(compareOddsRowsByFinalValue);
+      oddsVisibleProps = [...rowsAfterFinalThresholdWithFallback].sort(compareOddsRowsByFinalValue);
       renderOddsProps(oddsVisibleProps);
     }
 
@@ -2206,8 +2254,13 @@
       const consensusUnderProbability = 1 - consensusOverProbability;
       const baseRecommendedProbability = Math.max(consensusOverProbability, consensusUnderProbability);
       const baseEdge = Number.isFinite(baseRecommendedProbability) ? Math.max(0, baseRecommendedProbability - 0.5) : 0;
-      const disagreementPenalty = Math.max(0.60, 1 - (disagreementScore * 0.40));
-      const conflictPenalty = Math.max(0.75, 1 - (averageConflictPenalty * 0.35));
+      const isTennisLeague = prop?.leagueID === "ATP" || prop?.leagueID === "WTA";
+      const disagreementPenalty = isTennisLeague
+        ? Math.max(0.74, 1 - (disagreementScore * 0.24))
+        : Math.max(0.60, 1 - (disagreementScore * 0.40));
+      const conflictPenalty = isTennisLeague
+        ? Math.max(0.86, 1 - (averageConflictPenalty * 0.16))
+        : Math.max(0.75, 1 - (averageConflictPenalty * 0.35));
       const coveragePenalty = 0.82 + (coverageScore * 0.18);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
