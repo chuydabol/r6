@@ -1923,8 +1923,36 @@
         groupedAfterFilter: marketFilteredRows.length
       };
       renderOddsSummary();
-      oddsVisibleProps = [...enrichedRows].sort((a, b) => b.rankedValuePercent - a.rankedValuePercent);
+      oddsVisibleProps = [...enrichedRows].sort(compareOddsRowsByFinalValue);
       renderOddsProps(oddsVisibleProps);
+    }
+
+    function compareOddsRowsByFinalValue(a, b) {
+      const aValuePercent = safeNumeric(a?.valuePercent);
+      const bValuePercent = safeNumeric(b?.valuePercent);
+      const aHasValue = Number.isFinite(aValuePercent);
+      const bHasValue = Number.isFinite(bValuePercent);
+      if (aHasValue && bHasValue && aValuePercent !== bValuePercent) return bValuePercent - aValuePercent;
+      if (aHasValue !== bHasValue) return aHasValue ? -1 : 1;
+
+      // Secondary sort for ties: fair-odds strength (recommendedProbability), then total book weight.
+      const aFairOddsStrength = safeNumeric(a?.recommendedProbability);
+      const bFairOddsStrength = safeNumeric(b?.recommendedProbability);
+      const aHasFairOddsStrength = Number.isFinite(aFairOddsStrength);
+      const bHasFairOddsStrength = Number.isFinite(bFairOddsStrength);
+      if (aHasFairOddsStrength && bHasFairOddsStrength && aFairOddsStrength !== bFairOddsStrength) {
+        return bFairOddsStrength - aFairOddsStrength;
+      }
+      if (aHasFairOddsStrength !== bHasFairOddsStrength) return aHasFairOddsStrength ? -1 : 1;
+
+      const aBookWeight = safeNumeric(a?.totalAvailableWeight);
+      const bBookWeight = safeNumeric(b?.totalAvailableWeight);
+      const aHasBookWeight = Number.isFinite(aBookWeight);
+      const bHasBookWeight = Number.isFinite(bBookWeight);
+      if (aHasBookWeight && bHasBookWeight && aBookWeight !== bBookWeight) return bBookWeight - aBookWeight;
+      if (aHasBookWeight !== bHasBookWeight) return aHasBookWeight ? -1 : 1;
+
+      return safeNumeric(a?.originalOrder) - safeNumeric(b?.originalOrder);
     }
 
     function renderOddsProps(rows) {
@@ -1949,7 +1977,7 @@
                 <th>Bet Details</th>
                 <th>Value %</th>
                 <th>Fair Odds</th>
-                <th>Confidence</th>
+                <th>Coverage</th>
                 <th>FanDuel</th>
                 <th>DraftKings</th>
                 <th>Pinnacle</th>
@@ -1970,9 +1998,9 @@
                   <td>${escapeHtml(row.recommendedSideLabel)} ${escapeHtml(formatAmericanOdds(row.fairOdds))}</td>
                   <td>
                     <div class="confidence-pill">
-                      ${escapeHtml(row.confidenceLabel)}
+                      Coverage: ${escapeHtml(row.coverageLabel)}
                       <br/>
-                      <span class="muted">${Math.round(row.confidenceScore * 100)}%</span>
+                      <span class="muted">Market Coverage: ${Math.round(row.marketCoveragePercent)}%</span>
                     </div>
                   </td>
                   <td>${renderCoreBookCell(row.coreBooks.fanduel)}</td>
@@ -2022,8 +2050,8 @@
         .reduce((sum, item) => sum + item.config.weight, 0);
       const topTierWeightRatio = TOTAL_TOP_TIER_WEIGHT > 0 ? topTierWeightPresent / TOTAL_TOP_TIER_WEIGHT : 0;
       const totalWeightRatio = TOTAL_BOOK_WEIGHT > 0 ? totalWeight / TOTAL_BOOK_WEIGHT : 0;
-      const confidenceScore = Math.max(0, Math.min(1, (topTierWeightRatio * 0.65) + (totalWeightRatio * 0.35)));
-      const confidenceLabel = confidenceScore >= 0.72 ? "High" : confidenceScore >= 0.48 ? "Medium" : "Low";
+      const coverageScore = Math.max(0, Math.min(1, (topTierWeightRatio * 0.65) + (totalWeightRatio * 0.35)));
+      const coverageLabel = coverageScore >= 0.72 ? "High" : coverageScore >= 0.48 ? "Medium" : "Low";
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
       if (totalWeight > 0) {
@@ -2069,8 +2097,9 @@
         totalAvailableWeight: totalWeight,
         topTierWeightPresent,
         topTierWeightRatio,
-        confidenceScore,
-        confidenceLabel,
+        coverageScore,
+        coverageLabel,
+        marketCoveragePercent: totalWeightRatio * 100,
         weightedOverProbability,
         weightedUnderProbability,
         recommendedSideLabel: recommendedSide,
@@ -2078,7 +2107,6 @@
         fairOdds,
         averageCoreLine,
         lineDiffAbs,
-        rankedValuePercent: (recommendedProbability * 100) * (0.7 + (confidenceScore * 0.3)),
         valuePercent: recommendedProbability * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
       };
