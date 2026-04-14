@@ -1173,7 +1173,7 @@
         <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
           <option value="all">All markets</option>
         </select>
-        <div class="timestamp-pill" style="display:flex;align-items:center;">Core books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
+        <div class="timestamp-pill" style="display:flex;align-items:center;">Weighted books: Pinnacle, Bet365, FanDuel, DraftKings, Caesars, Underdog, BetOnline, BetRivers, ESPN Bet, BetMGM</div>
       </div>
 
       <div id="oddsSummary" class="muted" style="margin-bottom:10px;">
@@ -1348,12 +1348,29 @@
       break_points_home: ["breakpoints", "break_points"],
       break_points_away: ["breakpoints", "break_points"]
     };
-    const CORE_BOOKS = [
-      { key: "fanduel", label: "FanDuel", weight: 0.25, aliases: ["fanduel"] },
-      { key: "draftkings", label: "DraftKings", weight: 0.25, aliases: ["draftkings"] },
-      { key: "pinnacle", label: "Pinnacle", weight: 0.35, aliases: ["pinnacle"] },
-      { key: "betonline", label: "BetOnline", weight: 0.15, aliases: ["betonline", "betonlineag"] }
+    const GLOBAL_BOOK_WEIGHTS = [
+      { key: "pinnacle", label: "Pinnacle", weight: 0.32, tier: 1, aliases: ["pinnacle"] },
+      { key: "bet365", label: "Bet365", weight: 0.28, tier: 1, aliases: ["bet365"] },
+      { key: "fanduel", label: "FanDuel", weight: 0.18, tier: 2, aliases: ["fanduel"] },
+      { key: "draftkings", label: "DraftKings", weight: 0.18, tier: 2, aliases: ["draftkings"] },
+      { key: "caesars", label: "Caesars", weight: 0.12, tier: 3, aliases: ["caesars", "williamhill_us"] },
+      { key: "underdog", label: "Underdog", weight: 0.12, tier: 3, aliases: ["underdog"] },
+      { key: "betonline", label: "BetOnline", weight: 0.10, tier: 3, aliases: ["betonline", "betonlineag"] },
+      { key: "betrivers", label: "BetRivers", weight: 0.09, tier: 3, aliases: ["betrivers", "sugarhouse"] },
+      { key: "espnbet", label: "ESPN Bet", weight: 0.08, tier: 3, aliases: ["espnbet"] },
+      { key: "betmgm", label: "BetMGM", weight: 0.08, tier: 3, aliases: ["betmgm", "mgm"] }
     ];
+    const DISPLAY_CORE_BOOKS = [
+      { key: "fanduel", label: "FanDuel", aliases: ["fanduel"] },
+      { key: "draftkings", label: "DraftKings", aliases: ["draftkings"] },
+      { key: "pinnacle", label: "Pinnacle", aliases: ["pinnacle"] },
+      { key: "betonline", label: "BetOnline", aliases: ["betonline", "betonlineag"] }
+    ];
+    const TOTAL_BOOK_WEIGHT = GLOBAL_BOOK_WEIGHTS.reduce((sum, book) => sum + book.weight, 0);
+    const TOTAL_TOP_TIER_WEIGHT = GLOBAL_BOOK_WEIGHTS
+      .filter(book => book.tier === 1)
+      .reduce((sum, book) => sum + book.weight, 0);
+    const MIN_REQUIRED_WEIGHT_TO_SHOW = 0.22;
     const LINE_SHIFT_PER_HALF = 0.035;
     const SOCCER_SHIFT_PER_1 = {
       shots: 0.12,
@@ -1862,7 +1879,7 @@
     function passesOddsLaunchFilters(row) {
       if (!Number.isFinite(row?.valuePercent)) return false;
       if (!Number.isFinite(row?.prizePicksLine)) return false;
-      if ((row?.availableCoreBooks || 0) < 2) return false;
+      if (!Number.isFinite(row?.totalAvailableWeight) || row.totalAvailableWeight < MIN_REQUIRED_WEIGHT_TO_SHOW) return false;
       if ((row?.recommendedProbability || 0) < 0.54) return false;
       if (row?.leagueID === "MLB") {
         if (!row?.isMLBSupportedStat || !row?.isMLBLaunchVisibleStat) return false;
@@ -1906,7 +1923,7 @@
         groupedAfterFilter: marketFilteredRows.length
       };
       renderOddsSummary();
-      oddsVisibleProps = [...enrichedRows].sort((a, b) => b.valuePercent - a.valuePercent);
+      oddsVisibleProps = [...enrichedRows].sort((a, b) => b.rankedValuePercent - a.rankedValuePercent);
       renderOddsProps(oddsVisibleProps);
     }
 
@@ -1932,6 +1949,7 @@
                 <th>Bet Details</th>
                 <th>Value %</th>
                 <th>Fair Odds</th>
+                <th>Confidence</th>
                 <th>FanDuel</th>
                 <th>DraftKings</th>
                 <th>Pinnacle</th>
@@ -1950,6 +1968,13 @@
                   <td>${escapeHtml(row.betDetails)}</td>
                   <td class="${row.valuePercent >= 57 ? "value-strong" : "value-moderate"}">${formatPercent(row.valuePercent)}</td>
                   <td>${escapeHtml(row.recommendedSideLabel)} ${escapeHtml(formatAmericanOdds(row.fairOdds))}</td>
+                  <td>
+                    <div class="confidence-pill">
+                      ${escapeHtml(row.confidenceLabel)}
+                      <br/>
+                      <span class="muted">${Math.round(row.confidenceScore * 100)}%</span>
+                    </div>
+                  </td>
                   <td>${renderCoreBookCell(row.coreBooks.fanduel)}</td>
                   <td>${renderCoreBookCell(row.coreBooks.draftkings)}</td>
                   <td>${renderCoreBookCell(row.coreBooks.pinnacle)}</td>
@@ -1980,15 +2005,25 @@
       const isTennisSupportedMarket = TENNIS_MARKET_WHITELIST.has(tennisMarketID);
       const isTennisLaunchVisibleMarket = TENNIS_VISIBLE_LAUNCH_MARKETS.has(tennisMarketID);
       const coreBooks = {};
-      CORE_BOOKS.forEach(book => {
-        coreBooks[book.key] = findCoreBookLine(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
+      DISPLAY_CORE_BOOKS.forEach(book => {
+        coreBooks[book.key] = findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
       });
 
-      const weightedParts = CORE_BOOKS
-        .map(book => ({ config: book, line: coreBooks[book.key] }))
+      const weightedParts = GLOBAL_BOOK_WEIGHTS
+        .map(book => ({
+          config: book,
+          line: findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
+        }))
         .filter(item => item.line && Number.isFinite(item.line.adjustedOverProbability) && Number.isFinite(item.line.adjustedUnderProbability));
 
       const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
+      const topTierWeightPresent = weightedParts
+        .filter(item => item.config.tier === 1)
+        .reduce((sum, item) => sum + item.config.weight, 0);
+      const topTierWeightRatio = TOTAL_TOP_TIER_WEIGHT > 0 ? topTierWeightPresent / TOTAL_TOP_TIER_WEIGHT : 0;
+      const totalWeightRatio = TOTAL_BOOK_WEIGHT > 0 ? totalWeight / TOTAL_BOOK_WEIGHT : 0;
+      const confidenceScore = Math.max(0, Math.min(1, (topTierWeightRatio * 0.65) + (totalWeightRatio * 0.35)));
+      const confidenceLabel = confidenceScore >= 0.72 ? "High" : confidenceScore >= 0.48 ? "Medium" : "Low";
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
       if (totalWeight > 0) {
@@ -2031,6 +2066,11 @@
         isTennisLaunchVisibleMarket,
         coreBooks,
         availableCoreBooks: weightedParts.length,
+        totalAvailableWeight: totalWeight,
+        topTierWeightPresent,
+        topTierWeightRatio,
+        confidenceScore,
+        confidenceLabel,
         weightedOverProbability,
         weightedUnderProbability,
         recommendedSideLabel: recommendedSide,
@@ -2038,12 +2078,13 @@
         fairOdds,
         averageCoreLine,
         lineDiffAbs,
+        rankedValuePercent: (recommendedProbability * 100) * (0.7 + (confidenceScore * 0.3)),
         valuePercent: recommendedProbability * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
       };
     }
 
-    function findCoreBookLine(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID) {
+    function findBookLineByConfig(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID) {
       const book = (books || []).find(item => {
         const id = String(item?.bookmakerID || "").toLowerCase();
         return coreBookConfig.aliases.some(alias => id.includes(alias));
