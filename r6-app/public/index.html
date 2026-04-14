@@ -1461,7 +1461,9 @@
       maxLineEdgeBoost: 0.095,
       maxJuiceEdgeBoost: 0.072,
       maxConsensusBoost: 0.01,
-      maxConsensusInflationPenalty: 0.06
+      maxConsensusInflationPenalty: 0.06,
+      mixedSignalEdgePenaltyFloor: 0.40,
+      mixedSignalProbDragMax: 0.035
     };
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
@@ -2111,8 +2113,12 @@
         const agreementStrength = safeNumeric(row?.agreementStrength);
         const weightedLineDiffAbs = safeNumeric(row?.weightedLineDiffAbs);
         const favoredJuiceStrength = safeNumeric(row?.favoredJuiceStrength);
+        const mixedSignalSeverity = safeNumeric(row?.mixedSignalSeverity);
+        const hasCoreConflict = Boolean(row?.hasCoreConflict);
         if (!Number.isFinite(availableBooks) || availableBooks < NBA_FILTER_PROFILE.coverage.minBooksToShow) return false;
         if (!Number.isFinite(recommendedProbability)) return false;
+        if (hasCoreConflict && recommendedProbability < 0.54) return false;
+        if (Number.isFinite(mixedSignalSeverity) && mixedSignalSeverity >= 0.45 && recommendedProbability < 0.535) return false;
         if (availableBooks >= 4) {
           return recommendedProbability >= 0.512
             || (Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.35)
@@ -2171,12 +2177,16 @@
         const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
         const weightedLineDiffAbs = safeNumeric(row?.weightedLineDiffAbs);
         const favoredJuiceStrength = safeNumeric(row?.favoredJuiceStrength);
+        const mixedSignalSeverity = safeNumeric(row?.mixedSignalSeverity);
+        const hasCoreConflict = Boolean(row?.hasCoreConflict);
         const strongTwoBookSignal = Number.isFinite(availableBooks)
           && availableBooks === 2
           && Number.isFinite(qualityWeightRatio)
           && qualityWeightRatio >= NBA_FILTER_PROFILE.final.twoBookStrongMinQuality
           && Number.isFinite(agreementStrength)
           && agreementStrength >= NBA_FILTER_PROFILE.final.twoBookStrongMinAgreement;
+        if (hasCoreConflict && valuePercent < 54.2) return false;
+        if (Number.isFinite(mixedSignalSeverity) && mixedSignalSeverity >= 0.5 && valuePercent < 53.4) return false;
         if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
         if (strongTwoBookSignal && valuePercent >= NBA_FILTER_PROFILE.final.twoBookStrongMinValuePercent) return true;
         const hasMeaningfulEdgeSignal = (Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.35)
@@ -2352,6 +2362,9 @@
         const weightedLineDiffAbs = safeNumeric(row?.weightedLineDiffAbs);
         const favoredJuiceStrength = safeNumeric(row?.favoredJuiceStrength);
         const isConsensusAtPrizePicksLine = Boolean(row?.isConsensusAtPrizePicksLine);
+        const mixedSignalSeverity = safeNumeric(row?.mixedSignalSeverity);
+        const hasCoreConflict = Boolean(row?.hasCoreConflict);
+        const anchorLineSpread = safeNumeric(row?.anchorLineSpread);
         const normalizedStatID = normalizeStatIDKey(row?.normalizedStatID || row?.statID || row?.marketKey);
         let score = valuePercent;
         if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 4.2;
@@ -2371,6 +2384,9 @@
         if (Number.isFinite(qualityWeightRatio)) score += Math.max(0, qualityWeightRatio - 0.18) * 1.1;
         if (Number.isFinite(agreementStrength)) score += Math.max(0, agreementStrength - 0.80) * 0.30;
         if (isConsensusAtPrizePicksLine) score -= 2.1;
+        if (Number.isFinite(mixedSignalSeverity)) score -= mixedSignalSeverity * 3.8;
+        if (hasCoreConflict) score -= 2.6;
+        if (Number.isFinite(anchorLineSpread) && anchorLineSpread >= 0.75) score -= 0.9;
         if (
           Number.isFinite(availableBooks) && availableBooks <= 2
           && Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.5
@@ -2574,6 +2590,7 @@
       const averageConflictPenalty = weightedParts.length
         ? weightedParts.reduce((sum, item) => sum + (safeNumeric(item.line.signalConflictPenalty) || 0), 0) / weightedParts.length
         : 0;
+      const mixedSignalMetrics = calculateMixedSignalMetrics(weightedParts, coreBooks);
       const consensusOverProbability = blendProbabilities(weightedFairOverProbability, weightedOverProbability, 0.35);
       const consensusUnderProbability = 1 - consensusOverProbability;
       const baseRecommendedProbability = Math.max(consensusOverProbability, consensusUnderProbability);
@@ -2592,7 +2609,13 @@
           ? 0.94 + (coverageScore * 0.04)
           : 0.84 + (coverageScore * 0.16);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
-      const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
+      const mixedSignalEdgePenalty = isNBALeague
+        ? Math.max(
+          NBA_EDGE_PROFILE.mixedSignalEdgePenaltyFloor,
+          1 - (safeNumeric(mixedSignalMetrics.mixedSignalSeverity) * 0.62)
+        )
+        : 1;
+      const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty * mixedSignalEdgePenalty;
       const weightedLineDiffAbs = weightedParts.length
         ? weightedParts.reduce((sum, item) => {
           return sum + (Math.abs(safeNumeric(item.line?.lineDiff)) * (item.config.weight / totalWeight));
@@ -2670,13 +2693,29 @@
         recommendedProbability = 0.5 + ((recommendedProbability - 0.5) * lowCoverageDampening);
       }
       if (isNBALeagueForEdgeModel) {
+        const mixedSignalProbDrag = Math.min(
+          NBA_EDGE_PROFILE.mixedSignalProbDragMax,
+          safeNumeric(mixedSignalMetrics.mixedSignalSeverity) * NBA_EDGE_PROFILE.mixedSignalProbDragMax
+        );
+        recommendedProbability = 0.5 + ((recommendedProbability - 0.5) * (1 - (safeNumeric(mixedSignalMetrics.mixedSignalSeverity) * 0.55)));
+        recommendedProbability = Math.max(0.5, recommendedProbability - mixedSignalProbDrag);
+      }
+      if (isNBALeagueForEdgeModel) {
         const topEndCap = hasExceptionalBookSupport
           ? 0.74
           : hasMultipleStrongBooks && (hasMeaningfulLineGap || hasStrongJuiceConfirmation)
             ? 0.695
             : 0.67;
         const lowCoverageCap = hasExceptionalBookSupport ? 0.695 : 0.648;
-        const finalTopCap = isLowCoverageNBA ? Math.min(topEndCap, lowCoverageCap) : topEndCap;
+        const mixedSignalCap = mixedSignalMetrics.hasCoreConflict
+          ? 0.565
+          : mixedSignalMetrics.mixedSignalSeverity >= 0.42
+            ? 0.585
+            : 0.67;
+        const finalTopCap = Math.min(
+          isLowCoverageNBA ? Math.min(topEndCap, lowCoverageCap) : topEndCap,
+          mixedSignalCap
+        );
         recommendedProbability = Math.min(finalTopCap, Math.max(0.5, recommendedProbability));
       }
       const recommendedSide = consensusOverProbability >= consensusUnderProbability ? "Over" : "Under";
@@ -2737,6 +2776,10 @@
         favoredJuiceStrength,
         edgeBlendSignal,
         isConsensusAtPrizePicksLine,
+        mixedSignalSeverity: safeNumeric(mixedSignalMetrics.mixedSignalSeverity),
+        mixedSignalPenalty: safeNumeric(mixedSignalMetrics.mixedSignalPenalty),
+        hasCoreConflict: Boolean(mixedSignalMetrics.hasCoreConflict),
+        anchorLineSpread: safeNumeric(mixedSignalMetrics.anchorLineSpread),
         prizePicksIsCurrent,
         valuePercent: recommendedProbability * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
@@ -2863,6 +2906,40 @@
       const lineSpread = lineValues.length > 1 ? Math.max(...lineValues) - Math.min(...lineValues) : 0;
       const lineSpreadPenalty = Math.min(1, lineSpread / 2.5);
       return ((1 - weightedMajority) * 0.7) + (lineSpreadPenalty * 0.3);
+    }
+
+    function calculateMixedSignalMetrics(weightedParts, coreBooks) {
+      if (!Array.isArray(weightedParts) || !weightedParts.length) {
+        return { mixedSignalSeverity: 1, mixedSignalPenalty: 0.4, hasCoreConflict: false, anchorLineSpread: Number.NaN };
+      }
+      const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
+      if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
+        return { mixedSignalSeverity: 1, mixedSignalPenalty: 0.4, hasCoreConflict: false, anchorLineSpread: Number.NaN };
+      }
+      const overWeight = weightedParts.reduce((sum, item) => {
+        const isOverLean = safeNumeric(item.line.adjustedOverProbability) >= safeNumeric(item.line.adjustedUnderProbability);
+        return sum + (isOverLean ? item.config.weight : 0);
+      }, 0);
+      const majorityRatio = Math.max(overWeight, totalWeight - overWeight) / totalWeight;
+      const directionalConflict = 1 - majorityRatio;
+
+      const fd = coreBooks?.fanduel;
+      const dk = coreBooks?.draftkings;
+      const fdLean = fd ? (safeNumeric(fd.adjustedOverProbability) >= safeNumeric(fd.adjustedUnderProbability) ? "over" : "under") : null;
+      const dkLean = dk ? (safeNumeric(dk.adjustedOverProbability) >= safeNumeric(dk.adjustedUnderProbability) ? "over" : "under") : null;
+      const hasCoreConflict = Boolean(fd && dk && fdLean && dkLean && fdLean !== dkLean);
+      const anchorLineSpread = (Number.isFinite(safeNumeric(fd?.line)) && Number.isFinite(safeNumeric(dk?.line)))
+        ? Math.abs(safeNumeric(fd.line) - safeNumeric(dk.line))
+        : Number.NaN;
+      const anchorConflict = Number.isFinite(anchorLineSpread) ? Math.max(0, Math.min(1, anchorLineSpread / 1.0)) : 0;
+      const coreConflictBoost = hasCoreConflict ? 0.22 : 0;
+      const mixedSignalSeverity = Math.max(0, Math.min(1, (directionalConflict * 0.62) + (anchorConflict * 0.16) + coreConflictBoost));
+      return {
+        mixedSignalSeverity,
+        mixedSignalPenalty: Math.max(0.4, 1 - (mixedSignalSeverity * 0.62)),
+        hasCoreConflict,
+        anchorLineSpread
+      };
     }
 
     function renderCoreBookCell(book) {
