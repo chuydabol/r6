@@ -282,6 +282,10 @@ function probabilityToAmericanOdds(probability) {
 
 const NON_PLAYER_ENTITIES = new Set(["all", "home", "away"]);
 const PLAYER_SIDE_MAP = { over: "over", under: "under" };
+const PRIZEPICKS_STALE_MINUTES = Number.isFinite(Number(process.env.PRIZEPICKS_STALE_MINUTES))
+  ? Number(process.env.PRIZEPICKS_STALE_MINUTES)
+  : 20;
+const PRIZEPICKS_STALE_MS = PRIZEPICKS_STALE_MINUTES * 60 * 1000;
 const SUPPORTED_LEAGUE_IDS = new Set([
   "NBA",
   "NFL",
@@ -530,6 +534,34 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toTimestamp(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPrizePicksLastUpdatedAt(bookmakerNode) {
+  if (!bookmakerNode || typeof bookmakerNode !== "object") return null;
+  const lastUpdatedCandidates = [
+    bookmakerNode.lastUpdatedAt,
+    bookmakerNode.last_updated_at,
+    bookmakerNode.lastUpdated,
+    bookmakerNode.last_update,
+    bookmakerNode.updatedAt,
+    bookmakerNode.updated_at
+  ];
+  for (const candidate of lastUpdatedCandidates) {
+    const parsed = toTimestamp(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function getBookmakerOdds(bookmakerNode) {
   if (!bookmakerNode || typeof bookmakerNode !== "object") return null;
   const oddsCandidates = [bookmakerNode.odds, bookmakerNode.price, bookmakerNode.americanOdds];
@@ -590,6 +622,7 @@ function normalizePrizePicksRawEntry(bookmakerNode, meta) {
     odds: getBookmakerOdds(bookmakerNode),
     overUnder: getBookmakerLine(bookmakerNode),
     available: bookmakerNode?.available !== false,
+    lastUpdatedAt: getPrizePicksLastUpdatedAt(bookmakerNode),
     deeplink: String(bookmakerNode?.deeplink || bookmakerNode?.deepLink || "").trim() || null,
     oddID: meta.oddID || null,
     statID: meta.statID || null,
@@ -613,6 +646,7 @@ function buildPrizePicksFromRawEntries(entries) {
         overOdds: null,
         underOdds: null,
         available: entry?.available !== false,
+        lastUpdatedAt: Number.isFinite(entry?.lastUpdatedAt) ? entry.lastUpdatedAt : null,
         deeplink: entry?.deeplink || null
       });
     }
@@ -623,6 +657,11 @@ function buildPrizePicksFromRawEntries(entries) {
     if (side === "over" && Number.isFinite(odds)) merged.overOdds = odds;
     if (side === "under" && Number.isFinite(odds)) merged.underOdds = odds;
     if (entry?.available === false) merged.available = false;
+    if (Number.isFinite(entry?.lastUpdatedAt)) {
+      merged.lastUpdatedAt = Number.isFinite(merged.lastUpdatedAt)
+        ? Math.max(merged.lastUpdatedAt, entry.lastUpdatedAt)
+        : entry.lastUpdatedAt;
+    }
     if (!merged.deeplink && entry?.deeplink) merged.deeplink = entry.deeplink;
   });
 
@@ -905,6 +944,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         overOdds: pair.overOdds,
         underOdds: pair.underOdds,
         available: true,
+        lastUpdatedAt: null,
         deeplink: null
       };
     }
@@ -952,7 +992,7 @@ function normalizeSportsGameOddsResponse(events, options) {
     });
   });
 
-  const groupedStandardProps = Array.from(groupedMap.values()).map(group => {
+  const allGroupedStandardProps = Array.from(groupedMap.values()).map(group => {
     const standardKey = buildPrizePicksMatchKey(group);
     const trace = prizePicksTraceByGroup.get(standardKey) || {
       ppSupported: false,
@@ -971,6 +1011,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         group.prizepicks = rawPrizePicksValue;
       } else if (group.prizepicks && rawPrizePicksValue) {
         group.prizepicks.available = rawPrizePicksValue.available;
+        group.prizepicks.lastUpdatedAt = Number.isFinite(rawPrizePicksValue.lastUpdatedAt) ? rawPrizePicksValue.lastUpdatedAt : null;
         group.prizepicks.deeplink = rawPrizePicksValue.deeplink;
       }
     }
@@ -1049,6 +1090,8 @@ function normalizeSportsGameOddsResponse(events, options) {
     });
     const bestAltOpportunity = altCandidates.sort((a, b) => b.deltaFromConsensus - a.deltaFromConsensus)[0] || null;
 
+    const prizepicksLastUpdatedAt = Number.isFinite(group.prizepicks?.lastUpdatedAt) ? group.prizepicks.lastUpdatedAt : null;
+    const prizepicksAgeMs = Number.isFinite(prizepicksLastUpdatedAt) ? Math.max(0, Date.now() - prizepicksLastUpdatedAt) : null;
     return {
       ...group,
       booksCount,
@@ -1081,12 +1124,16 @@ function normalizeSportsGameOddsResponse(events, options) {
       prizepicksStatus: trace.ppSupported
         ? (trace.rawPrizePicksFound ? "line" : "not_returned_by_api")
         : "unsupported_market",
+      prizepicksLastUpdatedAt,
+      prizepicksAgeMs,
       prizepicksDebug: (trace.rawOddsFound || trace.rawPrizePicksEntries?.length || trace.pairedPrizePicksFound || trace.groupedPrizePicksFound)
         ? {
           rawOddsFound: trace.rawOddsFound,
           ppSupported: trace.ppSupported,
           parsedStatID: trace.parsedStatID,
           parsedPeriodID: trace.parsedPeriodID,
+          prizepicksLastUpdatedAt,
+          prizepicksAgeMs,
           rawPrizePicksEntries: trace.rawPrizePicksEntries
         }
         : null,
@@ -1098,6 +1145,40 @@ function normalizeSportsGameOddsResponse(events, options) {
       consensusFairUnderOdds: probabilityToAmericanOdds(consensusFairUnderProbability)
     };
   });
+
+  const stalePrizePicksDebug = {
+    staleThresholdMinutes: PRIZEPICKS_STALE_MINUTES,
+    rowsEvaluated: allGroupedStandardProps.length,
+    rowsKept: 0,
+    rowsRemoved: 0,
+    removedBecauseMissing: 0,
+    removedBecauseUnavailable: 0,
+    removedBecauseLastUpdatedTooOld: 0
+  };
+
+  const groupedStandardProps = allGroupedStandardProps.filter(group => {
+    const staleReasons = {
+      missing: !group.prizepicks || !group.rawPrizePicksFound,
+      unavailable: group.prizepicks?.available === false,
+      lastUpdatedTooOld: Number.isFinite(group.prizepicksLastUpdatedAt)
+        ? (Date.now() - group.prizepicksLastUpdatedAt) > PRIZEPICKS_STALE_MS
+        : false
+    };
+    const removeRow = staleReasons.missing || staleReasons.unavailable || staleReasons.lastUpdatedTooOld;
+    group.prizepicksStaleReasons = staleReasons;
+    group.prizepicksIsLive = !removeRow;
+    if (removeRow) {
+      stalePrizePicksDebug.rowsRemoved += 1;
+      if (staleReasons.missing) stalePrizePicksDebug.removedBecauseMissing += 1;
+      if (staleReasons.unavailable) stalePrizePicksDebug.removedBecauseUnavailable += 1;
+      if (staleReasons.lastUpdatedTooOld) stalePrizePicksDebug.removedBecauseLastUpdatedTooOld += 1;
+    } else {
+      stalePrizePicksDebug.rowsKept += 1;
+    }
+    return !removeRow;
+  });
+
+  console.log("PRIZEPICKS_STALE_FILTER_DEBUG", stalePrizePicksDebug);
 
   const groupedAlternateProps = Array.from(alternateMap.values()).map(group => {
     const books = Array.from(group.booksMap.values()).map(book => ({
@@ -1133,6 +1214,7 @@ function normalizeSportsGameOddsResponse(events, options) {
   return {
     rawPlayerPropRecords,
     pairedBookProps,
+    stalePrizePicksDebug,
     groupedStandardProps,
     groupedAlternateProps,
     uniqueBookmakers: Array.from(uniqueBookmakers, ([bookmakerID, bookmakerTitle]) => ({ bookmakerID, bookmakerTitle }))
@@ -1222,6 +1304,7 @@ app.get("/api/odds-comparison", async (req, res) => {
       debug: {
         sentParams,
         eventsReturned: events.length,
+        stalePrizePicks: normalized.stalePrizePicksDebug,
         rawPrizePicks: {
           ...rawPrizePicksDebug,
           rawPrizePicksExists: rawPrizePicksDebug.rawPrizePicksOddsFound > 0
