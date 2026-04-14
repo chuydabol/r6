@@ -1875,6 +1875,9 @@
           rawFetchedProps: Number(data?.debug?.rawPrizePicks?.rawOddsScanned) || 0,
           stalePrizePicks: data?.debug?.stalePrizePicks || null
         };
+        if (leagueID === "MLB" && data?.debug?.mlbBookMatching) {
+          console.log("MLB_BOOK_MATCHING_GROUPING_DEBUG", data.debug.mlbBookMatching);
+        }
         oddsLastUpdatedAt = Date.now();
 
         renderOddsSummary();
@@ -2250,6 +2253,9 @@
       if (leagueID !== "MLB") return valuePercent;
       const coverageScore = safeNumeric(row?.coverageScore);
       const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+      const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
+      const availableCoreBookCount = safeNumeric(row?.availableCoreBookCount);
+      const normalizedStatID = normalizeStatIDKey(row?.statID || row?.marketKey);
       let score = valuePercent;
       if (
         !Number.isFinite(coreBookWeightPresent)
@@ -2264,6 +2270,21 @@
       ) score -= MLB_FILTER_PROFILE.rankingPenalty.veryLowCoveragePenalty;
       else if (coverageScore < MLB_FILTER_PROFILE.rankingPenalty.lowCoverageCutoff) {
         score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoveragePenalty;
+      }
+      if (
+        !Number.isFinite(availableCoreBookCount)
+        || availableCoreBookCount <= 1
+      ) {
+        score -= 5;
+      }
+      if (!Number.isFinite(totalAvailableWeight) || totalAvailableWeight < 0.18) {
+        score -= 3;
+      }
+      if (
+        normalizedStatID === "battingtotalbases"
+        && (!Number.isFinite(availableCoreBookCount) || availableCoreBookCount <= 1)
+      ) {
+        score -= 2;
       }
       return score;
     }
