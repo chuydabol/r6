@@ -1454,14 +1454,14 @@
       }
     };
     const NBA_EDGE_PROFILE = {
-      lineDiffHalfPointTarget: 0.8,
-      lineDiffSignalWeight: 0.52,
-      juiceSignalWeight: 0.34,
-      agreementSignalWeight: 0.08,
-      maxLineEdgeBoost: 0.08,
-      maxJuiceEdgeBoost: 0.07,
-      maxConsensusBoost: 0.02,
-      maxConsensusInflationPenalty: 0.05
+      lineDiffHalfPointTarget: 0.72,
+      lineDiffSignalWeight: 0.62,
+      juiceSignalWeight: 0.33,
+      agreementSignalWeight: 0.03,
+      maxLineEdgeBoost: 0.095,
+      maxJuiceEdgeBoost: 0.072,
+      maxConsensusBoost: 0.01,
+      maxConsensusInflationPenalty: 0.06
     };
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
@@ -2352,25 +2352,33 @@
         const weightedLineDiffAbs = safeNumeric(row?.weightedLineDiffAbs);
         const favoredJuiceStrength = safeNumeric(row?.favoredJuiceStrength);
         const isConsensusAtPrizePicksLine = Boolean(row?.isConsensusAtPrizePicksLine);
+        const normalizedStatID = normalizeStatIDKey(row?.normalizedStatID || row?.statID || row?.marketKey);
         let score = valuePercent;
         if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 4.2;
         else if (availableBooks === 2) {
           const strongTwoBookSignal = Number.isFinite(coreBookWeightPresent) && coreBookWeightPresent >= 0.24
             && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
             && Number.isFinite(agreementStrength) && agreementStrength >= 0.78;
-          score -= strongTwoBookSignal ? 0.12 : 0.72;
-          if (strongTwoBookSignal) score += 0.42;
+          score -= strongTwoBookSignal ? 0.06 : 0.58;
+          if (strongTwoBookSignal) score += 0.62;
         } else if (availableBooks === 3) {
-          score -= 0.08;
+          score -= 0.04;
         }
-        if (!Number.isFinite(coverageScore) || coverageScore < 0.16) score -= 0.45;
-        else if (coverageScore < 0.24) score -= 0.2;
-        if (Number.isFinite(weightedLineDiffAbs)) score += Math.min(2.8, Math.tanh(weightedLineDiffAbs / 0.5) * 3.2);
-        if (Number.isFinite(favoredJuiceStrength)) score += Math.min(2.0, Math.max(0, favoredJuiceStrength - 0.055) * 20);
+        if (!Number.isFinite(coverageScore) || coverageScore < 0.16) score -= 0.3;
+        else if (coverageScore < 0.24) score -= 0.12;
+        if (Number.isFinite(weightedLineDiffAbs)) score += Math.min(3.7, Math.tanh(weightedLineDiffAbs / 0.44) * 4.05);
+        if (Number.isFinite(favoredJuiceStrength)) score += Math.min(2.25, Math.max(0, favoredJuiceStrength - 0.05) * 21);
         if (Number.isFinite(qualityWeightRatio)) score += Math.max(0, qualityWeightRatio - 0.18) * 1.1;
-        if (Number.isFinite(agreementStrength)) score += Math.max(0, agreementStrength - 0.78) * 0.65;
-        if (isConsensusAtPrizePicksLine) score -= 1.6;
-        if (Number.isFinite(availableBooks) && availableBooks >= 4) score += 0.02;
+        if (Number.isFinite(agreementStrength)) score += Math.max(0, agreementStrength - 0.80) * 0.30;
+        if (isConsensusAtPrizePicksLine) score -= 2.1;
+        if (
+          Number.isFinite(availableBooks) && availableBooks <= 2
+          && Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.5
+          && Number.isFinite(favoredJuiceStrength) && favoredJuiceStrength >= 0.07
+        ) score += 0.95;
+        if (normalizedStatID === "rebounds" && Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs < 0.45) score -= 0.28;
+        if ((normalizedStatID === "points" || normalizedStatID === "assists") && Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.45) score += 0.2;
+        if (Number.isFinite(availableBooks) && availableBooks >= 4) score += 0.01;
         return score;
       }
       if (leagueID !== "MLB") return valuePercent;
@@ -2581,7 +2589,7 @@
       const coveragePenalty = isMLBLeague
         ? 0.90 + (coverageScore * 0.10)
         : isNBALeague
-          ? 0.92 + (coverageScore * 0.08)
+          ? 0.94 + (coverageScore * 0.04)
           : 0.84 + (coverageScore * 0.16);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
@@ -2655,7 +2663,7 @@
         ? Math.max(0, Math.min(1, (0.42 - coverageScore) / 0.42))
         : 0;
       const lowCoverageDampening = isLowCoverageNBA
-        ? Math.max(0.5, 1 - (coverageDeficitRatio * 0.65))
+        ? Math.max(0.72, 1 - (coverageDeficitRatio * 0.35))
         : 1;
       let recommendedProbability = initialRecommendedProbability;
       if (isNBALeagueForEdgeModel && isLowCoverageNBA) {
