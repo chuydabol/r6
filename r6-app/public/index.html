@@ -1288,7 +1288,17 @@
         { value: "assists", label: "Assists" },
         { value: "threes", label: "3PT Made" },
         { value: "pra", label: "PRA" },
-        { value: "fantasy_points", label: "Fantasy Points" }
+        { value: "pa", label: "Points + Assists" },
+        { value: "pr", label: "Points + Rebounds" },
+        { value: "ra", label: "Rebounds + Assists" },
+        { value: "fantasy_points", label: "Fantasy Points" },
+        { value: "turnovers", label: "Turnovers" },
+        { value: "steals", label: "Steals" },
+        { value: "blocks", label: "Blocks" },
+        { value: "blocks+steals", label: "Blocks + Steals" },
+        { value: "fieldGoalsMade", label: "Field Goals Made" },
+        { value: "freeThrowsMade", label: "Free Throws Made" },
+        { value: "freeThrowsAttempted", label: "Free Throws Attempted" }
       ],
       MLB: [
         { value: "pitching_strikeouts", label: "Pitcher Strikeouts" },
@@ -1309,6 +1319,16 @@
         { value: "assists", label: "Assists" },
         { value: "threes", label: "3PT Made" },
         { value: "pra", label: "PRA" },
+        { value: "pa", label: "Points + Assists" },
+        { value: "pr", label: "Points + Rebounds" },
+        { value: "ra", label: "Rebounds + Assists" },
+        { value: "turnovers", label: "Turnovers" },
+        { value: "steals", label: "Steals" },
+        { value: "blocks", label: "Blocks" },
+        { value: "blocks+steals", label: "Blocks + Steals" },
+        { value: "fieldGoalsMade", label: "Field Goals Made" },
+        { value: "freeThrowsMade", label: "Free Throws Made" },
+        { value: "freeThrowsAttempted", label: "Free Throws Attempted" },
         { value: "pitching_strikeouts", label: "Pitcher Strikeouts" },
         { value: "pitching_hits", label: "Hits Allowed" },
         { value: "pitching_outs", label: "Outs" },
@@ -1365,7 +1385,17 @@
       assists: ["assists"],
       threes: ["threepointersmade"],
       pra: ["points+rebounds+assists"],
+      pa: ["points+assists"],
+      pr: ["points+rebounds"],
+      ra: ["rebounds+assists"],
       fantasy_points: ["fantasyscore"],
+      turnovers: ["turnovers"],
+      steals: ["steals"],
+      blocks: ["blocks"],
+      "blocks+steals": ["blocks+steals"],
+      fieldgoalsmade: ["fieldgoalsmade"],
+      freethrowsmade: ["freethrowsmade"],
+      freethrowsattempted: ["freethrowsattempted"],
       shots: ["shots"],
       shots_ongoal: ["shotsongoal", "shots_on_goal", "shotsongoal"],
       "goals+assists": ["goals+assists", "goals_assists"],
@@ -1485,6 +1515,28 @@
         strongestBookSignal: 0.32,
         agreementStrength: 0.12
       }
+    };
+    const NBA_MARKET_WEIGHT_BY_STAT = {
+      points: 1.0,
+      rebounds: 1.0,
+      assists: 1.0,
+      threepointersmade: 1.0,
+      "points+rebounds+assists": 0.97,
+      "points+rebounds": 0.97,
+      "points+assists": 0.97,
+      "rebounds+assists": 0.97,
+      fantasyscore: 0.93,
+      turnovers: 0.93,
+      blocks: 0.93,
+      steals: 0.93,
+      "blocks+steals": 0.93
+    };
+    const NBA_PERIOD_WEIGHT_BY_PERIOD = {
+      game: 1.0,
+      "1h": 0.92,
+      "2h": 0.92,
+      "1q": 0.85,
+      "4q": 0.85
     };
     const LINE_SHIFT_PER_HALF = 0.035;
     const LINE_SIGNAL_MAX_SHIFT = 0.09;
@@ -2114,6 +2166,20 @@
       return Number.isFinite(SOCCER_MIN_LINE_DIFF[normalized]) ? SOCCER_MIN_LINE_DIFF[normalized] : 0;
     }
 
+    function getNBAMarketWeight(statID) {
+      const normalizedStat = normalizeStatIDKey(statID);
+      return Number.isFinite(NBA_MARKET_WEIGHT_BY_STAT[normalizedStat])
+        ? NBA_MARKET_WEIGHT_BY_STAT[normalizedStat]
+        : 0.9;
+    }
+
+    function getNBAPeriodWeight(periodID) {
+      const normalizedPeriod = String(periodID || "game").trim().toLowerCase();
+      return Number.isFinite(NBA_PERIOD_WEIGHT_BY_PERIOD[normalizedPeriod])
+        ? NBA_PERIOD_WEIGHT_BY_PERIOD[normalizedPeriod]
+        : 1.0;
+    }
+
     function filterOddsRowsBySelectedMarket(rows, selectedMarket) {
       if (selectedMarket === "all") return rows;
       const targetStatIDs = (ODDS_MARKET_TO_STAT_ID[selectedMarket] || [selectedMarket]).map(normalizeStatIDKey);
@@ -2553,6 +2619,9 @@
         const hasCoreConflict = Boolean(row?.hasCoreConflict);
         const coverageScore = safeNumeric(row?.coverageScore);
         const blend = NBA_EDGE_PROFILE.rankingBlend;
+        const periodWeight = getNBAPeriodWeight(row?.periodID);
+        const periodIsSegment = periodWeight < 1;
+        const valueEdgeOverCoinFlip = Math.max(0, (valuePercent / 100) - 0.5);
         const finalRankScore = (
           (weightedMarketValue * blend.weightedMarketValue)
           + (strongestBookSignal * blend.strongestBookSignal)
@@ -2565,6 +2634,8 @@
         if (Number.isFinite(coverageScore) && coverageScore < 0.18) score -= 1.0;
         if (Number.isFinite(mixedSignalSeverity)) score -= mixedSignalSeverity * 6.5;
         if (hasCoreConflict) score -= 4.0;
+        if (periodIsSegment && valueEdgeOverCoinFlip < 0.055) score -= 3.5;
+        else if (periodIsSegment && valueEdgeOverCoinFlip < 0.075) score -= 1.5;
         return score;
       }
       if (leagueID !== "MLB") return valuePercent;
@@ -2893,6 +2964,16 @@
       const prizePicksIsCurrent = !Number.isFinite(prizePicksAgeMs)
         || !Number.isFinite(staleThresholdMs)
         || prizePicksAgeMs <= (staleThresholdMs * 2);
+      const rawValue = Number.isFinite(recommendedProbability) ? recommendedProbability : Number.NaN;
+      const coverageMultiplier = 0.80 + (Math.max(0, Math.min(1, coverageScore)) * 0.20);
+      const marketWeight = isNBALeagueForEdgeModel ? getNBAMarketWeight(prop?.statID) : 1.0;
+      const periodWeight = isNBALeagueForEdgeModel ? getNBAPeriodWeight(prop?.periodID) : 1.0;
+      const weightedFinalValue = Number.isFinite(rawValue)
+        ? (rawValue * coverageMultiplier * marketWeight * periodWeight)
+        : Number.NaN;
+      const finalValue = Number.isFinite(weightedFinalValue)
+        ? Math.max(0.5, weightedFinalValue)
+        : Number.NaN;
 
       return {
         ...prop,
@@ -2952,7 +3033,12 @@
         hasCoreConflict: Boolean(mixedSignalMetrics.hasCoreConflict),
         anchorLineSpread: safeNumeric(mixedSignalMetrics.anchorLineSpread),
         prizePicksIsCurrent,
-        valuePercent: recommendedProbability * 100,
+        rawValue,
+        coverageMultiplier,
+        marketWeight,
+        periodWeight,
+        finalValue,
+        valuePercent: (Number.isFinite(finalValue) ? finalValue : recommendedProbability) * 100,
         betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
       };
     }
@@ -3361,12 +3447,26 @@
         pra: "PRA",
         "points+rebounds+assists": "PRA",
         pointsreboundsassists: "PRA",
+        "points+assists": "Points + Assists",
+        pointsassists: "Points + Assists",
+        "points+rebounds": "Points + Rebounds",
+        pointsrebounds: "Points + Rebounds",
+        "rebounds+assists": "Rebounds + Assists",
+        reboundsassists: "Rebounds + Assists",
         playerpoints: "Points",
         playerrebounds: "Rebounds",
         playerassists: "Assists",
         playerpointsreboundsassists: "PRA",
         fantasyscore: "Fantasy Points",
         fantasypoints: "Fantasy Points",
+        turnovers: "Turnovers",
+        steals: "Steals",
+        blocks: "Blocks",
+        "blocks+steals": "Blocks + Steals",
+        blockssteals: "Blocks + Steals",
+        fieldgoalsmade: "Field Goals Made",
+        freethrowsmade: "Free Throws Made",
+        freethrowsattempted: "Free Throws Attempted",
         shots: "Shots",
         shotsongoal: "Shots on Goal",
         "goals+assists": "Goals + Assists",

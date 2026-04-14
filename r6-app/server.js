@@ -366,29 +366,87 @@ const NBA_PRIZEPICKS_SUPPORT_MAP = {
     "points+assists",
     "points+rebounds",
     "rebounds+assists",
-    "blocks",
-    "steals",
+    "fantasyscore",
     "turnovers",
+    "steals",
+    "blocks",
     "blocks+steals",
     "fieldgoalsmade",
-    "freethrowsattempted",
     "freethrowsmade",
-    "fantasyscore"
-  ]),
-  "1q": new Set([
-    "assists",
-    "points",
-    "rebounds",
-    "threepointersmade"
+    "freethrowsattempted"
   ]),
   "1h": new Set([
-    "fantasyscore",
-    "points+rebounds+assists",
     "points",
-    "threepointersmade"
+    "rebounds",
+    "assists",
+    "threepointersmade",
+    "points+rebounds+assists",
+    "points+assists",
+    "points+rebounds",
+    "rebounds+assists",
+    "fantasyscore",
+    "turnovers",
+    "steals",
+    "blocks",
+    "blocks+steals",
+    "fieldgoalsmade",
+    "freethrowsmade",
+    "freethrowsattempted"
   ]),
-  "2h": new Set(["fantasyscore"]),
-  "4q": new Set(["fantasyscore"])
+  "2h": new Set([
+    "points",
+    "rebounds",
+    "assists",
+    "threepointersmade",
+    "points+rebounds+assists",
+    "points+assists",
+    "points+rebounds",
+    "rebounds+assists",
+    "fantasyscore",
+    "turnovers",
+    "steals",
+    "blocks",
+    "blocks+steals",
+    "fieldgoalsmade",
+    "freethrowsmade",
+    "freethrowsattempted"
+  ]),
+  "1q": new Set([
+    "points",
+    "rebounds",
+    "assists",
+    "threepointersmade",
+    "points+rebounds+assists",
+    "points+assists",
+    "points+rebounds",
+    "rebounds+assists",
+    "fantasyscore",
+    "turnovers",
+    "steals",
+    "blocks",
+    "blocks+steals",
+    "fieldgoalsmade",
+    "freethrowsmade",
+    "freethrowsattempted"
+  ]),
+  "4q": new Set([
+    "points",
+    "rebounds",
+    "assists",
+    "threepointersmade",
+    "points+rebounds+assists",
+    "points+assists",
+    "points+rebounds",
+    "rebounds+assists",
+    "fantasyscore",
+    "turnovers",
+    "steals",
+    "blocks",
+    "blocks+steals",
+    "fieldgoalsmade",
+    "freethrowsmade",
+    "freethrowsattempted"
+  ])
 };
 const SOCCER_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "shots",
@@ -634,7 +692,17 @@ function getDisplayMarketLabel(statID, marketKey) {
     assists: "Assists",
     threepointersmade: "3PT Made",
     "points+rebounds+assists": "PRA",
+    "points+assists": "Points + Assists",
+    "points+rebounds": "Points + Rebounds",
+    "rebounds+assists": "Rebounds + Assists",
     fantasyscore: "Fantasy Points",
+    turnovers: "Turnovers",
+    steals: "Steals",
+    blocks: "Blocks",
+    "blocks+steals": "Blocks + Steals",
+    fieldgoalsmade: "Field Goals Made",
+    freethrowsmade: "Free Throws Made",
+    freethrowsattempted: "Free Throws Attempted",
     pitchingstrikeouts: "Pitcher Strikeouts",
     pitchinghits: "Hits Allowed",
     pitchingouts: "Outs",
@@ -649,11 +717,20 @@ function getDisplayMarketLabel(statID, marketKey) {
 }
 
 function buildPlayerGroupKey(meta) {
-  return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || ""].join("|");
+  return [meta.playerIDRaw || "", meta.statID || "", meta.periodID || ""].join("|");
 }
 
 function buildPrizePicksMatchKey(meta) {
   return [meta.eventID || "", meta.playerIDRaw || "", meta.statID || "", meta.periodID || "", meta.betTypeID || ""].join("|");
+}
+
+function buildOddMarketID(meta) {
+  return [
+    meta.statID || "",
+    meta.statEntityID || "",
+    meta.periodID || "",
+    meta.betTypeID || ""
+  ].join("-");
 }
 
 function canonicalizeMLBPlayerID(statEntityID) {
@@ -836,6 +913,7 @@ function scanRawPrizePicksOdds(events) {
 
 function normalizeSportsGameOddsResponse(events, options) {
   const rawPlayerPropRecords = [];
+  const rawRecordDedupSet = new Set();
   const uniqueBookmakers = new Map();
   const prizePicksRawByGroup = new Map();
   const prizePicksTraceByGroup = new Map();
@@ -922,6 +1000,23 @@ function normalizeSportsGameOddsResponse(events, options) {
         const odds = getBookmakerOdds(bookmakerNode);
         const available = bookmakerNode?.available !== false;
         if (!Number.isFinite(line) || !Number.isFinite(odds)) return;
+        const normalizedOddMarketID = buildOddMarketID({
+          statID,
+          statEntityID,
+          periodID,
+          betTypeID
+        });
+        const dedupKey = [
+          eventID,
+          bookmakerID,
+          oddID,
+          normalizedOddMarketID,
+          sideID,
+          line,
+          odds
+        ].join("|");
+        if (rawRecordDedupSet.has(dedupKey)) return;
+        rawRecordDedupSet.add(dedupKey);
         const altLinesRaw = Array.isArray(bookmakerNode?.altLines) ? bookmakerNode.altLines : [];
         const altLines = altLinesRaw.map(item => ({
           line: getBookmakerLine(item),
@@ -957,7 +1052,8 @@ function normalizeSportsGameOddsResponse(events, options) {
           odds,
           available,
           altLines,
-          oddID
+          oddID,
+          oddMarketID: normalizedOddMarketID
         });
       });
     });
@@ -1027,7 +1123,7 @@ function normalizeSportsGameOddsResponse(events, options) {
   const alternateMap = new Map();
 
   pairedBookProps.forEach(pair => {
-    const standardKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID, pair.betTypeID].join("|");
+    const standardKey = buildPlayerGroupKey(pair);
     if (!groupedMap.has(standardKey)) {
       groupedMap.set(standardKey, {
         leagueID: pair.leagueID,
@@ -1063,7 +1159,7 @@ function normalizeSportsGameOddsResponse(events, options) {
       };
     }
 
-    const altKey = [pair.eventID, pair.playerIDRaw, pair.statID, pair.periodID].join("|");
+    const altKey = buildPlayerGroupKey(pair);
     if (!alternateMap.has(altKey)) {
       alternateMap.set(altKey, {
         eventID: pair.eventID,
@@ -1209,6 +1305,36 @@ function normalizeSportsGameOddsResponse(events, options) {
     return {
       ...group,
       booksCount,
+      normalizedProps: group.books.map(book => ([
+        {
+          playerId: group.playerIDRaw,
+          stat: group.statID,
+          period: group.periodID,
+          side: "over",
+          line: book.line,
+          sportsbook: {
+            bookmakerID: book.bookmakerID,
+            bookmakerTitle: book.bookmakerTitle,
+            odds: book.overOdds,
+            available: true,
+            oddID: book.oddIDOver || null
+          }
+        },
+        {
+          playerId: group.playerIDRaw,
+          stat: group.statID,
+          period: group.periodID,
+          side: "under",
+          line: book.line,
+          sportsbook: {
+            bookmakerID: book.bookmakerID,
+            bookmakerTitle: book.bookmakerTitle,
+            odds: book.underOdds,
+            available: true,
+            oddID: book.oddIDUnder || null
+          }
+        }
+      ])).flat(),
       consensusLineMean: meanLine,
       consensusLineMedian: medianLine,
       minLine,
