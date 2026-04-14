@@ -670,33 +670,48 @@ function normalizePlayerEntityIDForLeague(leagueID, statEntityID) {
   return canonicalizeMLBPlayerID(statEntityID);
 }
 
-function postProcessMLBGroupedStandardProps(groups) {
-  const weakBookmakers = new Set(["prizepicks", "underdog", "fliff", "hotstreak", "pick6"]);
-  const bookmakerQualityWeights = {
-    pinnacle: 1.0,
-    bet365: 0.98,
-    fanduel: 0.95,
-    draftkings: 0.95,
-    betonline: 0.90,
-    caesars: 0.84,
-    betrivers: 0.80,
-    espnbet: 0.78,
-    betmgm: 0.78
-  };
+const CORE_SHARP_BOOK_IDS = ["fanduel", "draftkings", "pinnacle", "betonline"];
+const CORE_SHARP_BOOK_QUALITY_WEIGHTS = {
+  pinnacle: 1.2,
+  betonline: 1.15,
+  fanduel: 1.0,
+  draftkings: 1.0
+};
+
+function postProcessCoreGroupedStandardProps(groups, leagueID) {
   const normalizedBookQualityWeight = (bookmakerID) => {
     const normalized = String(bookmakerID || "").toLowerCase();
     if (!normalized) return 0;
-    const directWeight = bookmakerQualityWeights[normalized];
+    const directWeight = CORE_SHARP_BOOK_QUALITY_WEIGHTS[normalized];
     if (Number.isFinite(directWeight)) return directWeight;
-    const matchedAlias = Object.entries(bookmakerQualityWeights).find(([bookID]) => normalized.includes(bookID));
+    const matchedAlias = Object.entries(CORE_SHARP_BOOK_QUALITY_WEIGHTS).find(([bookID]) => normalized.includes(bookID));
     if (matchedAlias) return matchedAlias[1];
-    return weakBookmakers.has(normalized) ? 0 : 0.72;
+    return 0;
   };
+  const hasCoreSharpBook = (bookmakerID) => {
+    const normalized = String(bookmakerID || "").toLowerCase();
+    return CORE_SHARP_BOOK_IDS.some(bookID => normalized.includes(bookID));
+  };
+
+  const coverageDebug = { atLeast1: 0, atLeast2: 0, atLeast3: 0, all4: 0, zero: 0 };
   const filtered = groups.filter(group => {
     const bookIDs = group.books.map(book => String(book.bookmakerID || "").toLowerCase());
-    const strongBooks = bookIDs.filter(bookID => !weakBookmakers.has(bookID));
-    if (group.booksCount <= 1) return false;
-    return strongBooks.length >= 1;
+    const coreSharpBookCount = bookIDs.filter(bookID => hasCoreSharpBook(bookID)).length;
+    if (coreSharpBookCount >= 1) coverageDebug.atLeast1 += 1;
+    else coverageDebug.zero += 1;
+    if (coreSharpBookCount >= 2) coverageDebug.atLeast2 += 1;
+    if (coreSharpBookCount >= 3) coverageDebug.atLeast3 += 1;
+    if (coreSharpBookCount >= 4) coverageDebug.all4 += 1;
+    return coreSharpBookCount >= 1;
+  });
+  console.log("CORE_BOOK_GROUP_FILTER_DEBUG", {
+    leagueID,
+    groupedRowsEvaluated: groups.length,
+    rowsWithAtLeastOneCoreBook: coverageDebug.atLeast1,
+    rowsWithAtLeastTwoCoreBooks: coverageDebug.atLeast2,
+    rowsWithAtLeastThreeCoreBooks: coverageDebug.atLeast3,
+    rowsWithAllFourCoreBooks: coverageDebug.all4,
+    rowsRemovedForZeroCoreBooks: coverageDebug.zero
   });
 
   return filtered.sort((a, b) => {
@@ -1278,8 +1293,8 @@ function normalizeSportsGameOddsResponse(events, options) {
   });
 
   console.log("PRIZEPICKS_STALE_FILTER_DEBUG", stalePrizePicksDebug);
-  const groupedStandardProps = options.leagueID === "MLB"
-    ? postProcessMLBGroupedStandardProps(groupedStandardPropsFiltered)
+  const groupedStandardProps = (options.leagueID === "MLB" || options.leagueID === "NBA")
+    ? postProcessCoreGroupedStandardProps(groupedStandardPropsFiltered, options.leagueID)
     : groupedStandardPropsFiltered;
 
   const groupedAlternateProps = Array.from(alternateMap.values()).map(group => {
