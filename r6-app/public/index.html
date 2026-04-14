@@ -1398,6 +1398,11 @@
     const TOTAL_TOP_TIER_WEIGHT = GLOBAL_BOOK_WEIGHTS
       .filter(book => book.tier === 1)
       .reduce((sum, book) => sum + book.weight, 0);
+    const BOOK_TIER_QUALITY_MULTIPLIER = { 1: 1.00, 2: 0.94, 3: 0.80 };
+    const TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT = GLOBAL_BOOK_WEIGHTS.reduce((sum, book) => {
+      const qualityMultiplier = BOOK_TIER_QUALITY_MULTIPLIER[book.tier] ?? 0.75;
+      return sum + (book.weight * qualityMultiplier);
+    }, 0);
     const MIN_REQUIRED_WEIGHT_TO_SHOW = 0.16;
     const FINAL_DISPLAY_MIN_PERCENT = 53.0;
     const FINAL_SOLID_MIN_PERCENT = 54.0;
@@ -1409,25 +1414,25 @@
         minRecommendedProbabilityFallback: 0.522
       },
       coverage: {
-        strongMinCoverage: 0.24,
+        strongMinCoverage: 0.20,
         strongMinWeight: 0.16,
-        weakMinWeight: 0.12,
-        weakMinRecommendedProbability: 0.525,
-        noCoreBooksMinRecommendedProbability: 0.535
+        weakMinWeight: 0.10,
+        weakMinRecommendedProbability: 0.522,
+        noCoreBooksMinRecommendedProbability: 0.54
       },
       final: {
         minDisplayPercent: 52.2,
         premiumPercent: FINAL_TOP_TIER_MIN_PERCENT
       },
       rankingPenalty: {
-        veryLowCoverageCutoff: 0.24,
-        lowCoverageCutoff: 0.32,
-        veryLowCoveragePenalty: 3,
-        lowCoveragePenalty: 1.25,
+        veryLowCoverageCutoff: 0.18,
+        lowCoverageCutoff: 0.26,
+        veryLowCoveragePenalty: 1.15,
+        lowCoveragePenalty: 0.5,
         veryLowCoreWeightCutoff: 0.10,
         lowCoreWeightCutoff: 0.16,
-        veryLowCoreWeightPenalty: 4,
-        lowCoreWeightPenalty: 2
+        veryLowCoreWeightPenalty: 2.1,
+        lowCoreWeightPenalty: 0.95
       }
     };
     const LINE_SHIFT_PER_HALF = 0.035;
@@ -2048,13 +2053,21 @@
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
       const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
       const coreBookCount = safeNumeric(row?.availableCoreBookCount);
+      const availableBooks = safeNumeric(row?.availableCoreBooks);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
       if (leagueID === "MLB") {
         const recommendedProbability = safeNumeric(row?.recommendedProbability);
+        if (!Number.isFinite(availableBooks) || availableBooks <= 1) return false;
         if (
           coverageScore >= MLB_FILTER_PROFILE.coverage.strongMinCoverage
           && totalAvailableWeight >= MLB_FILTER_PROFILE.coverage.strongMinWeight
+        ) return true;
+        if (
+          Number.isFinite(coreBookWeightPresent)
+          && coreBookWeightPresent >= 0.30
+          && Number.isFinite(recommendedProbability)
+          && recommendedProbability >= 0.518
         ) return true;
         if (!Number.isFinite(recommendedProbability)) return false;
         if (!Number.isFinite(coreBookCount) || coreBookCount < 1) {
@@ -2250,7 +2263,19 @@
       if (leagueID !== "MLB") return valuePercent;
       const coverageScore = safeNumeric(row?.coverageScore);
       const coreBookWeightPresent = safeNumeric(row?.coreBookWeightPresent);
+      const availableBooks = safeNumeric(row?.availableCoreBooks);
+      const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
+      const agreementStrength = safeNumeric(row?.agreementStrength);
       let score = valuePercent;
+      if (!Number.isFinite(availableBooks) || availableBooks <= 1) score -= 3.6;
+      else if (availableBooks === 2) {
+        const strongTwoBookSignal = Number.isFinite(coreBookWeightPresent) && coreBookWeightPresent >= 0.30
+          && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.20
+          && Number.isFinite(agreementStrength) && agreementStrength >= 0.78;
+        score -= strongTwoBookSignal ? 0.2 : 0.95;
+      } else if (availableBooks === 3) {
+        score -= 0.2;
+      }
       if (
         !Number.isFinite(coreBookWeightPresent)
         || coreBookWeightPresent < MLB_FILTER_PROFILE.rankingPenalty.veryLowCoreWeightCutoff
@@ -2265,6 +2290,11 @@
       else if (coverageScore < MLB_FILTER_PROFILE.rankingPenalty.lowCoverageCutoff) {
         score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoveragePenalty;
       }
+      if (
+        Number.isFinite(availableBooks) && availableBooks === 2
+        && Number.isFinite(agreementStrength) && agreementStrength >= 0.80
+        && Number.isFinite(qualityWeightRatio) && qualityWeightRatio >= 0.21
+      ) score += 0.35;
       return score;
     }
 
@@ -2369,12 +2399,17 @@
         );
 
       const totalWeight = weightedParts.reduce((sum, item) => sum + item.config.weight, 0);
+      const qualityAdjustedWeight = weightedParts.reduce((sum, item) => {
+        const qualityMultiplier = BOOK_TIER_QUALITY_MULTIPLIER[item.config.tier] ?? 0.75;
+        return sum + (item.config.weight * qualityMultiplier);
+      }, 0);
       const topTierWeightPresent = weightedParts
         .filter(item => item.config.tier === 1)
         .reduce((sum, item) => sum + item.config.weight, 0);
       const topTierWeightRatio = TOTAL_TOP_TIER_WEIGHT > 0 ? topTierWeightPresent / TOTAL_TOP_TIER_WEIGHT : 0;
       const totalWeightRatio = TOTAL_BOOK_WEIGHT > 0 ? totalWeight / TOTAL_BOOK_WEIGHT : 0;
-      const coverageScore = Math.max(0, Math.min(1, (topTierWeightRatio * 0.65) + (totalWeightRatio * 0.35)));
+      const qualityWeightRatio = TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT > 0 ? qualityAdjustedWeight / TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT : 0;
+      const coverageScore = Math.max(0, Math.min(1, (qualityWeightRatio * 0.75) + (totalWeightRatio * 0.25)));
       const isMLBLeague = String(prop?.leagueID || "").trim().toUpperCase() === "MLB";
       const coverageLabel = isMLBLeague
         ? coverageScore >= 0.72
@@ -2429,7 +2464,9 @@
       const conflictPenalty = isTennisLeague
         ? Math.max(0.86, 1 - (averageConflictPenalty * 0.16))
         : Math.max(0.75, 1 - (averageConflictPenalty * 0.35));
-      const coveragePenalty = 0.82 + (coverageScore * 0.18);
+      const coveragePenalty = isMLBLeague
+        ? 0.90 + (coverageScore * 0.10)
+        : 0.84 + (coverageScore * 0.16);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const conservativeEdge = baseEdge * disagreementPenalty * conflictPenalty * coveragePenalty * sharpBookPenalty;
       const recommendedProbability = 0.5 + conservativeEdge;
@@ -2465,6 +2502,8 @@
         coreBookWeightPresent,
         availableCoreBooks: weightedParts.length,
         totalAvailableWeight: totalWeight,
+        qualityAdjustedWeight,
+        qualityWeightRatio,
         topTierWeightPresent,
         topTierWeightRatio,
         coverageScore,
@@ -2475,6 +2514,7 @@
         weightedFairOverProbability,
         weightedFairUnderProbability,
         disagreementScore,
+        agreementStrength: Math.max(0, 1 - disagreementScore),
         averageConflictPenalty,
         disagreementPenalty,
         conflictPenalty,
