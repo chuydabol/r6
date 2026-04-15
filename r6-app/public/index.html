@@ -2281,20 +2281,21 @@
       return recommendedProbability >= 0.535;
     }
 
-    function passesCoverageStage(row) {
+    function evaluateCoverageStage(row) {
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
-      const availableBooks = safeNumeric(row?.availableCoreBooks);
+      const availableCoreBookCount = safeNumeric(row?.availableCoreBookCount);
+      const availableBooks = Number.isFinite(availableCoreBookCount)
+        ? availableCoreBookCount
+        : safeNumeric(row?.availableCoreBooks);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
-      if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) return false;
+      if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) {
+        return { pass: false, reason: "missing-coverage-metrics", availableBooks };
+      }
       if (leagueID === "MLB") {
-        const recommendedProbability = safeNumeric(row?.recommendedProbability);
-        if (!Number.isFinite(availableBooks) || availableBooks < 1) return false;
-        if (!Number.isFinite(recommendedProbability)) return false;
-        if (availableBooks >= 4) return true;
-        if (availableBooks === 3) return recommendedProbability >= 0.514;
-        if (availableBooks === 2) return recommendedProbability >= 0.522;
-        return recommendedProbability >= 0.538;
+        if (!Number.isFinite(availableBooks)) return { pass: false, reason: "missing-core-book-count", availableBooks };
+        if (availableBooks < 1) return { pass: false, reason: "zero-core-books", availableBooks };
+        return { pass: true, reason: "core>=1", availableBooks };
       }
       if (leagueID === "NBA") {
         const recommendedProbability = safeNumeric(row?.recommendedProbability);
@@ -2304,31 +2305,61 @@
         const favoredJuiceStrength = safeNumeric(row?.favoredJuiceStrength);
         const mixedSignalSeverity = safeNumeric(row?.mixedSignalSeverity);
         const hasCoreConflict = Boolean(row?.hasCoreConflict);
-        if (!Number.isFinite(availableBooks) || availableBooks < NBA_FILTER_PROFILE.coverage.minBooksToShow) return false;
-        if (!Number.isFinite(recommendedProbability)) return false;
-        if (availableBooks === 1) return recommendedProbability >= NBA_FILTER_PROFILE.coverage.oneBookMinRecommendedProbability;
-        if (hasCoreConflict && recommendedProbability < 0.54) return false;
-        if (Number.isFinite(mixedSignalSeverity) && mixedSignalSeverity >= 0.45 && recommendedProbability < 0.535) return false;
+        if (!Number.isFinite(availableBooks) || availableBooks < NBA_FILTER_PROFILE.coverage.minBooksToShow) return { pass: false, reason: "nba-min-books", availableBooks };
+        if (!Number.isFinite(recommendedProbability)) return { pass: false, reason: "nba-missing-recommended-probability", availableBooks };
+        if (availableBooks === 1) {
+          return {
+            pass: recommendedProbability >= NBA_FILTER_PROFILE.coverage.oneBookMinRecommendedProbability,
+            reason: "nba-one-book-threshold",
+            availableBooks
+          };
+        }
+        if (hasCoreConflict && recommendedProbability < 0.54) return { pass: false, reason: "nba-core-conflict", availableBooks };
+        if (Number.isFinite(mixedSignalSeverity) && mixedSignalSeverity >= 0.45 && recommendedProbability < 0.535) return { pass: false, reason: "nba-mixed-signal", availableBooks };
         if (availableBooks >= 4) {
-          return recommendedProbability >= 0.512
+          return {
+            pass: recommendedProbability >= 0.512
             || (Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.35)
-            || (Number.isFinite(favoredJuiceStrength) && favoredJuiceStrength >= 0.075);
+            || (Number.isFinite(favoredJuiceStrength) && favoredJuiceStrength >= 0.075),
+            reason: "nba-four-book-threshold",
+            availableBooks
+          };
         }
         if (availableBooks === 3) {
-          if (coverageScore >= NBA_FILTER_PROFILE.coverage.threeBookMinCoverage) return true;
-          return recommendedProbability >= NBA_FILTER_PROFILE.coverage.threeBookMinRecommendedProbability;
+          if (coverageScore >= NBA_FILTER_PROFILE.coverage.threeBookMinCoverage) return { pass: true, reason: "nba-three-book-coverage", availableBooks };
+          return {
+            pass: recommendedProbability >= NBA_FILTER_PROFILE.coverage.threeBookMinRecommendedProbability,
+            reason: "nba-three-book-recommended-probability",
+            availableBooks
+          };
         }
         const strongTwoBookSignal = Number.isFinite(qualityWeightRatio)
           && qualityWeightRatio >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinQuality
           && Number.isFinite(agreementStrength)
           && agreementStrength >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinAgreement;
         if (strongTwoBookSignal) {
-          return recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinRecommendedProbability;
+          return {
+            pass: recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookStrongMinRecommendedProbability,
+            reason: "nba-two-book-strong",
+            availableBooks
+          };
         }
-        return recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookMinRecommendedProbability;
+        return {
+          pass: recommendedProbability >= NBA_FILTER_PROFILE.coverage.twoBookMinRecommendedProbability,
+          reason: "nba-two-book-base",
+          availableBooks
+        };
       }
-      if (coverageScore >= 0.30) return true;
-      return totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54);
+      if (coverageScore >= 0.30) return { pass: true, reason: "default-coverage-score", availableBooks };
+      return {
+        pass: totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54),
+        reason: "default-fallback-threshold",
+        availableBooks
+      };
+    }
+
+    function passesCoverageStage(row) {
+      return evaluateCoverageStage(row).pass;
     }
 
     function passesFinalDisplayThreshold(row) {
@@ -2432,7 +2463,13 @@
         .map(buildWeightedOddsRow)
         .filter(row => passesOddsLaunchPrerequisites(row));
       const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row));
-      const rowsAfterCoveragePenalty = rowsAfterLineJuiceConflict.filter(row => passesCoverageStage(row));
+      const coverageEvaluations = rowsAfterLineJuiceConflict.map(row => ({
+        row,
+        result: evaluateCoverageStage(row)
+      }));
+      const rowsAfterCoveragePenalty = coverageEvaluations
+        .filter(item => item.result.pass)
+        .map(item => item.row);
       const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
       const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
@@ -2540,6 +2577,39 @@
         rowsWithAllFourCoreBooks: coreCoverageStats.allFour,
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       });
+      const mlbCoverageRows = coverageEvaluations.filter(item => String(item?.row?.leagueID || "").trim().toUpperCase() === "MLB");
+      if (mlbCoverageRows.length) {
+        const mlbCoverageCounts = mlbCoverageRows.reduce((acc, item) => {
+          const coreBooks = safeNumeric(item?.row?.availableCoreBookCount);
+          if (!Number.isFinite(coreBooks) || coreBooks < 1) acc.zero += 1;
+          else if (coreBooks >= 4) acc.four += 1;
+          else if (coreBooks >= 3) acc.three += 1;
+          else if (coreBooks >= 2) acc.two += 1;
+          else acc.one += 1;
+          if (!item?.result?.pass) {
+            const reason = String(item?.result?.reason || "unknown");
+            acc.droppedByReason[reason] = (acc.droppedByReason[reason] || 0) + 1;
+          }
+          return acc;
+        }, {
+          zero: 0,
+          one: 0,
+          two: 0,
+          three: 0,
+          four: 0,
+          droppedByReason: {}
+        });
+        console.log("MLB_COVERAGE_STAGE_DEBUG", {
+          rowsEnteringCoverage: mlbCoverageRows.length,
+          rowsWith0CoreBooks: mlbCoverageCounts.zero,
+          rowsWith1CoreBook: mlbCoverageCounts.one,
+          rowsWith2CoreBooks: mlbCoverageCounts.two,
+          rowsWith3CoreBooks: mlbCoverageCounts.three,
+          rowsWith4CoreBooks: mlbCoverageCounts.four,
+          rowsDroppedByCoverageConditions: mlbCoverageCounts.droppedByReason,
+          rowsAfterCoverage: mlbCoverageRows.length - Object.values(mlbCoverageCounts.droppedByReason).reduce((sum, count) => sum + count, 0)
+        });
+      }
       renderOddsSummary();
       const { adjustments, medians } = isCombinedMode
         ? computeSportValueCalibration(rowsAfterFinalThresholdWithFallback)
