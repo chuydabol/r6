@@ -923,79 +923,82 @@ function normalizeSportsGameOddsResponse(events, options) {
   events.forEach(event => {
     if (!matchesLeague(event?.leagueID || event?.league || event?.sportID, options.leagueID)) return;
     const oddsNode = event?.odds && typeof event.odds === "object" ? event.odds : {};
-    Object.entries(oddsNode).forEach(([oddID, oddNode]) => {
-      const parsedOddID = parseOddID(oddID);
-      const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
-      const statEntityKey = statEntityID.toLowerCase();
-      const isTennisLeague = options.leagueID === "ATP" || options.leagueID === "WTA";
-      if (!statEntityID) return;
-      if (!isTennisLeague && NON_PLAYER_ENTITIES.has(statEntityKey)) return;
+    Object.entries(oddsNode).forEach(([oddID, oddContainer]) => {
+      const oddObjects = Array.isArray(oddContainer) ? oddContainer : [oddContainer];
+      oddObjects.forEach(oddNode => {
+        if (!oddNode || typeof oddNode !== "object") return;
+        const parsedOddID = parseOddID(oddID);
+        const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim();
+        const statEntityKey = statEntityID.toLowerCase();
+        const isTennisLeague = options.leagueID === "ATP" || options.leagueID === "WTA";
+        if (!statEntityID) return;
+        if (!isTennisLeague && NON_PLAYER_ENTITIES.has(statEntityKey)) return;
 
-      const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
-      const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
-      const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
-      const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
-      const statMatches = options.leagueID === "MLB"
-        ? matchesMLBStatID(statID, requestedStatIDs)
-        : matchesStatID(statID, requestedStatIDs);
-      if (!statMatches) return;
-      if (betTypeID !== "ou") return;
-      if (!PLAYER_SIDE_MAP[sideID]) return;
-      const eventID = String(event?.eventID || event?.id || "");
-      const normalizedPlayerID = normalizePlayerEntityIDForLeague(options.leagueID, statEntityID);
-      const ppSupported = options.leagueID === "NBA"
-        ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
-        : options.leagueID === "MLB"
-          ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, normalizedPlayerID)
-        : (options.leagueID === "ATP" || options.leagueID === "WTA")
-          ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
-        : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
-          ? isPrizePicksSupportedSoccer(statID, betTypeID)
-          : false;
-      const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: normalizedPlayerID, statID, periodID, betTypeID });
-      if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
-        prizePicksTraceByGroup.set(prizePicksMatchKey, {
-          eventID,
-          playerIDRaw: normalizedPlayerID,
-          statID,
-          periodID,
-          betTypeID,
-          marketKey: buildMarketKey({ statID, periodID, betTypeID }),
-          ppSupported,
-          rawOddsFound: 0,
-          rawPrizePicksFound: false,
-          pairedPrizePicksFound: false,
-          groupedPrizePicksFound: false,
-          parsedStatID: parsedOddID.statID || null,
-          parsedPeriodID: parsedOddID.periodID || null,
-          rawPrizePicksEntries: []
-        });
-      }
-      const trace = prizePicksTraceByGroup.get(prizePicksMatchKey);
-      trace.rawOddsFound += 1;
-
-      const isAlternateLine = Boolean(oddNode?.isAlternateLine) || Number.isFinite(toNumber(oddNode?.altLineIndex));
-      if (mode === "standard" && isAlternateLine) return;
-
-      const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
-      const rawPrizePicksBook = byBookmaker?.prizepicks;
-      if (ppSupported && rawPrizePicksBook && typeof rawPrizePicksBook === "object") {
-        trace.rawPrizePicksFound = true;
-        const rawPrizePicksEntry = normalizePrizePicksRawEntry(rawPrizePicksBook, {
-          oddID,
-          statID,
-          statEntityID,
-          periodID,
-          sideID
-        });
-        trace.rawPrizePicksEntries.push(rawPrizePicksEntry);
-        if (!prizePicksRawByGroup.has(prizePicksMatchKey)) {
-          prizePicksRawByGroup.set(prizePicksMatchKey, []);
+        const statID = String(oddNode?.statID || parsedOddID.statID || "").trim();
+        const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim();
+        const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
+        const sideID = String(oddNode?.sideID || parsedOddID.sideID || "").trim().toLowerCase();
+        const statMatches = options.leagueID === "MLB"
+          ? matchesMLBStatID(statID, requestedStatIDs)
+          : matchesStatID(statID, requestedStatIDs);
+        if (!statMatches) return;
+        if (betTypeID !== "ou") return;
+        if (!PLAYER_SIDE_MAP[sideID]) return;
+        const eventID = String(event?.eventID || event?.id || "");
+        const normalizedPlayerID = normalizePlayerEntityIDForLeague(options.leagueID, statEntityID);
+        const ppSupported = options.leagueID === "NBA"
+          ? isPrizePicksSupportedNBA(statID, periodID, betTypeID)
+          : options.leagueID === "MLB"
+            ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, normalizedPlayerID)
+          : (options.leagueID === "ATP" || options.leagueID === "WTA")
+            ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
+          : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
+            ? isPrizePicksSupportedSoccer(statID, betTypeID)
+            : false;
+        const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: normalizedPlayerID, statID, periodID, betTypeID });
+        if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
+          prizePicksTraceByGroup.set(prizePicksMatchKey, {
+            eventID,
+            playerIDRaw: normalizedPlayerID,
+            statID,
+            periodID,
+            betTypeID,
+            marketKey: buildMarketKey({ statID, periodID, betTypeID }),
+            ppSupported,
+            rawOddsFound: 0,
+            rawPrizePicksFound: false,
+            pairedPrizePicksFound: false,
+            groupedPrizePicksFound: false,
+            parsedStatID: parsedOddID.statID || null,
+            parsedPeriodID: parsedOddID.periodID || null,
+            rawPrizePicksEntries: []
+          });
         }
-        prizePicksRawByGroup.get(prizePicksMatchKey).push(rawPrizePicksEntry);
-      }
+        const trace = prizePicksTraceByGroup.get(prizePicksMatchKey);
+        trace.rawOddsFound += 1;
 
-      Object.entries(byBookmaker).forEach(([bookmakerID, bookmakerNode]) => {
+        const isAlternateLine = Boolean(oddNode?.isAlternateLine) || Number.isFinite(toNumber(oddNode?.altLineIndex));
+        if (mode === "standard" && isAlternateLine) return;
+
+        const byBookmaker = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
+        const rawPrizePicksBook = byBookmaker?.prizepicks;
+        if (ppSupported && rawPrizePicksBook && typeof rawPrizePicksBook === "object") {
+          trace.rawPrizePicksFound = true;
+          const rawPrizePicksEntry = normalizePrizePicksRawEntry(rawPrizePicksBook, {
+            oddID,
+            statID,
+            statEntityID,
+            periodID,
+            sideID
+          });
+          trace.rawPrizePicksEntries.push(rawPrizePicksEntry);
+          if (!prizePicksRawByGroup.has(prizePicksMatchKey)) {
+            prizePicksRawByGroup.set(prizePicksMatchKey, []);
+          }
+          prizePicksRawByGroup.get(prizePicksMatchKey).push(rawPrizePicksEntry);
+        }
+
+        Object.entries(byBookmaker).forEach(([bookmakerID, bookmakerNode]) => {
         const line = getBookmakerLine(bookmakerNode);
         const odds = getBookmakerOdds(bookmakerNode);
         const available = bookmakerNode?.available !== false;
@@ -1054,6 +1057,7 @@ function normalizeSportsGameOddsResponse(events, options) {
           altLines,
           oddID,
           oddMarketID: normalizedOddMarketID
+        });
         });
       });
     });
