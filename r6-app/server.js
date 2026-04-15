@@ -295,6 +295,24 @@ const SUPPORTED_LEAGUE_IDS = new Set([
   "WTA",
   "EPL",
   "UEFA_CHAMPIONS_LEAGUE",
+  "MLS",
+  "INTERNATIONAL_SOCCER",
+  "UEFA_EUROPA_LEAGUE",
+  "BUNDESLIGA",
+  "EREDIVISIE",
+  "AR_LPF",
+  "BR_SERIE_A",
+  "EFL_CUP",
+  "FR_LIGUE_1",
+  "IT_SERIE_A",
+  "LA_LIGA",
+  "LIGA_MX",
+  "PRIMERA_A",
+  "LA_LIGA_2",
+  "IT_SERIE_B",
+  "FR_LIGUE_2",
+  "PE_LIGA_1",
+  "GOLF",
   "NCAAB",
   "NCAAF"
 ]);
@@ -310,6 +328,26 @@ const EXPLICIT_LEAGUE_ID_MAP = {
   UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
   UEFA_CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
   CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+  MLS: "MLS",
+  INTERNATIONALSOCCER: "INTERNATIONAL_SOCCER",
+  UEFA_EUROPA_LEAGUE: "UEFA_EUROPA_LEAGUE",
+  UEFA_EUROPALEAGUE: "UEFA_EUROPA_LEAGUE",
+  EUROPALEAGUE: "UEFA_EUROPA_LEAGUE",
+  BUNDESLIGA: "BUNDESLIGA",
+  EREDIVISIE: "EREDIVISIE",
+  AR_LPF: "AR_LPF",
+  BR_SERIE_A: "BR_SERIE_A",
+  EFL_CUP: "EFL_CUP",
+  FR_LIGUE_1: "FR_LIGUE_1",
+  IT_SERIE_A: "IT_SERIE_A",
+  LA_LIGA: "LA_LIGA",
+  LIGA_MX: "LIGA_MX",
+  PRIMERA_A: "PRIMERA_A",
+  LA_LIGA_2: "LA_LIGA_2",
+  IT_SERIE_B: "IT_SERIE_B",
+  FR_LIGUE_2: "FR_LIGUE_2",
+  PE_LIGA_1: "PE_LIGA_1",
+  GOLF: "GOLF",
   NCAAB: "NCAAB",
   NCAAF: "NCAAF",
   BASKETBALL_NBA: "NBA",
@@ -324,6 +362,24 @@ const LEAGUE_ALIAS_MAP = {
   WTA: ["WTA"],
   EPL: ["EPL", "PREMIER LEAGUE"],
   UEFA_CHAMPIONS_LEAGUE: ["UEFA_CHAMPIONS_LEAGUE", "UEFA CHAMPIONS LEAGUE", "CHAMPIONS LEAGUE"],
+  MLS: ["MLS", "MAJOR LEAGUE SOCCER"],
+  INTERNATIONAL_SOCCER: ["INTERNATIONAL_SOCCER", "INTERNATIONAL SOCCER"],
+  UEFA_EUROPA_LEAGUE: ["UEFA_EUROPA_LEAGUE", "UEFA EUROPA LEAGUE", "EUROPA LEAGUE"],
+  BUNDESLIGA: ["BUNDESLIGA"],
+  EREDIVISIE: ["EREDIVISIE"],
+  AR_LPF: ["AR_LPF", "LIGA PROFESIONAL"],
+  BR_SERIE_A: ["BR_SERIE_A", "BRASILEIRO SERIE A"],
+  EFL_CUP: ["EFL_CUP", "EFL CUP"],
+  FR_LIGUE_1: ["FR_LIGUE_1", "LIGUE 1"],
+  IT_SERIE_A: ["IT_SERIE_A", "SERIE A"],
+  LA_LIGA: ["LA_LIGA", "LA LIGA"],
+  LIGA_MX: ["LIGA_MX", "LIGA MX"],
+  PRIMERA_A: ["PRIMERA_A", "PRIMERA A"],
+  LA_LIGA_2: ["LA_LIGA_2", "LA LIGA SEGUNDA"],
+  IT_SERIE_B: ["IT_SERIE_B", "SERIE B"],
+  FR_LIGUE_2: ["FR_LIGUE_2", "LIGUE 2"],
+  PE_LIGA_1: ["PE_LIGA_1", "LIGA 1"],
+  GOLF: ["GOLF"],
   NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"],
   NCAAF: ["NCAAF", "NCAA_FOOTBALL"]
 };
@@ -359,7 +415,10 @@ const STAT_ALIAS_MAP = {
   pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
   walks_allowed: ["walks_allowed", "walksallowed", "pitcher_walks_allowed"],
   fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
-  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"]
+  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
+  birdiesorbetter: ["birdiesOrBetter", "birdies_or_better", "birdiesorbetter"],
+  parsorbetter: ["parsOrBetter", "pars_or_better", "parsorbetter"],
+  strokes: ["strokes"]
 };
 const MLB_STAT_ALIAS_MAP = {
   pitcher_strikeouts: ["pitching_strikeouts", "pitchingstrikeouts", "pitcher_strikeouts", "pitcherstrikeouts", "strikeouts", "pitcher_ks"],
@@ -379,7 +438,10 @@ const MLB_STAT_ALIAS_MAP = {
   pitching_outs: ["pitching_outs", "pitchingouts", "outs"],
   walks_allowed: ["walks_allowed", "walksallowed", "pitcher_walks_allowed"],
   fantasy_score: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
-  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"]
+  fantasyscore: ["fantasy_score", "fantasyscore", "fantasypoints", "fantasyScore"],
+  birdiesorbetter: ["birdiesOrBetter", "birdies_or_better", "birdiesorbetter"],
+  parsorbetter: ["parsOrBetter", "pars_or_better", "parsorbetter"],
+  strokes: ["strokes"]
 };
 const NBA_PRIZEPICKS_SUPPORT_MAP = {
   game: new Set([
@@ -482,6 +544,33 @@ const SOCCER_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "clearances",
   "goaliesaves",
   "goaliegoalsagainst"
+]);
+const SOCCER_LEAGUE_IDS = new Set([
+  "EPL",
+  "MLS",
+  "UEFA_CHAMPIONS_LEAGUE",
+  "INTERNATIONAL_SOCCER",
+  "UEFA_EUROPA_LEAGUE",
+  "BUNDESLIGA",
+  "EREDIVISIE",
+  "AR_LPF",
+  "BR_SERIE_A",
+  "EFL_CUP",
+  "FR_LIGUE_1",
+  "IT_SERIE_A",
+  "LA_LIGA",
+  "LIGA_MX",
+  "PRIMERA_A",
+  "LA_LIGA_2",
+  "IT_SERIE_B",
+  "FR_LIGUE_2",
+  "PE_LIGA_1"
+]);
+const GOLF_PRIZEPICKS_SUPPORTED_STATS = new Set([
+  "points",
+  "birdiesorbetter",
+  "parsorbetter",
+  "strokes"
 ]);
 const MLB_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "points",
@@ -616,6 +705,17 @@ function isPrizePicksSupportedMLB(statID, periodID, betTypeID, statEntityID) {
   return MLB_PRIZEPICKS_SUPPORTED_STATS.has(normalized);
 }
 
+function isPrizePicksSupportedGolf(statID, periodID, betTypeID, statEntityID) {
+  const betTypeKey = String(betTypeID || "").trim().toLowerCase();
+  const periodKey = String(periodID || "").trim().toLowerCase();
+  const statEntityKey = String(statEntityID || "").trim().toLowerCase();
+  if (betTypeKey !== "ou") return false;
+  if (periodKey && periodKey !== "game") return false;
+  if (!statEntityKey || NON_PLAYER_ENTITIES.has(statEntityKey)) return false;
+  const normalized = normalizePrizePicksStatKey(statID).replace(/_/g, "");
+  return GOLF_PRIZEPICKS_SUPPORTED_STATS.has(normalized);
+}
+
 function isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID) {
   const betTypeKey = String(betTypeID || "").trim().toLowerCase();
   const periodKey = String(periodID || "").trim().toLowerCase();
@@ -654,6 +754,14 @@ function resolvePlayerName(event, statEntityID) {
   const directName = eventPlayers?.[rawPlayerID]?.name;
   if (typeof directName === "string" && directName.trim()) return directName.trim();
   return formatPlayerName(rawPlayerID);
+}
+
+function getEventDisplayName(event) {
+  const tournamentName = String(event?.tournament?.name || event?.tournamentName || "").trim();
+  if (tournamentName) return tournamentName;
+  const eventName = String(event?.name || event?.eventName || "").trim();
+  if (eventName) return eventName;
+  return "Unknown event";
 }
 
 function getTeamShortName(teamNode, fallback) {
@@ -746,7 +854,10 @@ function getDisplayMarketLabel(statID, marketKey) {
     "battinghits+runs+rbi": "Hits + Runs + RBIs",
     battingtotalbases: "Total Bases",
     battingbasesonballs: "Batter Walks",
-    battingrbi: "Runs Batted In"
+    battingrbi: "Runs Batted In",
+    birdiesorbetter: "Birdies or Better",
+    parsorbetter: "Pars or Better",
+    strokes: "Strokes"
   };
   return labels[key] || String(marketKey || statID || "Stat");
 }
@@ -987,8 +1098,10 @@ function normalizeSportsGameOddsResponse(events, options) {
             ? isPrizePicksSupportedMLB(statID, periodID, betTypeID, normalizedPlayerID)
           : (options.leagueID === "ATP" || options.leagueID === "WTA")
             ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
-          : (options.leagueID === "EPL" || options.leagueID === "UEFA_CHAMPIONS_LEAGUE")
+           : SOCCER_LEAGUE_IDS.has(options.leagueID)
             ? isPrizePicksSupportedSoccer(statID, betTypeID)
+          : options.leagueID === "GOLF"
+            ? isPrizePicksSupportedGolf(statID, periodID, betTypeID, normalizedPlayerID)
             : false;
         const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: normalizedPlayerID, statID, periodID, betTypeID });
         if (!prizePicksTraceByGroup.has(prizePicksMatchKey)) {
@@ -1075,6 +1188,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         uniqueBookmakers.set(bookmakerID, bookmakerTitle);
         const awayTeam = getTeamShortName(event?.teams?.away, event?.awayTeam || event?.away);
         const homeTeam = getTeamShortName(event?.teams?.home, event?.homeTeam || event?.home);
+        const eventName = getEventDisplayName(event);
 
         rawPlayerPropRecords.push({
           leagueID: options.leagueID,
@@ -1082,7 +1196,8 @@ function normalizeSportsGameOddsResponse(events, options) {
           commenceTime: event?.commenceTime || event?.startTime || null,
           homeTeam,
           awayTeam,
-          matchup: awayTeam && homeTeam ? `${awayTeam} @ ${homeTeam}` : "Unknown matchup",
+          matchup: awayTeam && homeTeam ? `${awayTeam} @ ${homeTeam}` : eventName,
+          eventName,
           playerIDRaw: normalizedPlayerID,
           playerIDOriginal: statEntityID,
           playerName: resolvePlayerName(event, statEntityID),
@@ -1117,6 +1232,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         homeTeam: record.homeTeam,
         awayTeam: record.awayTeam,
         matchup: record.matchup,
+        eventName: record.eventName,
         playerIDRaw: record.playerIDRaw,
         playerName: record.playerName,
         statID: record.statID,
@@ -1179,6 +1295,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         homeTeam: pair.homeTeam,
         awayTeam: pair.awayTeam,
         matchup: pair.matchup,
+        eventName: pair.eventName,
         playerIDRaw: pair.playerIDRaw,
         playerName: pair.playerName,
         statID: pair.statID,
@@ -1220,6 +1337,7 @@ function normalizeSportsGameOddsResponse(events, options) {
         homeTeam: pair.homeTeam,
         awayTeam: pair.awayTeam,
         matchup: pair.matchup,
+        eventName: pair.eventName,
         booksMap: new Map()
       });
     }
@@ -1514,6 +1632,7 @@ function normalizeSportsGameOddsResponse(events, options) {
 function normalizeGameLinesMarket(value) {
   const normalized = String(value || "sp").trim().toLowerCase();
   if (normalized === "ml") return "ml";
+  if (normalized === "ml3way") return "ml3way";
   if (normalized === "ou") return "ou";
   return "sp";
 }
@@ -1527,6 +1646,7 @@ function normalizeGameLineSide(marketType, sideID) {
   }
   if (side === "away") return "away";
   if (side === "home") return "home";
+  if (marketType === "ml3way" && side === "draw") return "draw";
   return null;
 }
 
@@ -1617,7 +1737,8 @@ function normalizeGameLinesResponse(events, options) {
               away: null,
               home: null,
               over: null,
-              under: null
+              under: null,
+              draw: null
             });
           }
           const book = eventGroup.booksMap.get(bookmakerID);
@@ -1630,12 +1751,19 @@ function normalizeGameLinesResponse(events, options) {
   const eventsOut = Array.from(groupedByEvent.values()).map(eventGroup => {
     const rows = Array.from(eventGroup.booksMap.values()).filter(row => {
       if (marketType === "ou") return row.over || row.under;
+      if (marketType === "ml3way") return row.away || row.home || row.draw;
       return row.away || row.home;
     });
     const best = marketType === "ou"
       ? {
         over: buildBestGameLine(rows, "over"),
         under: buildBestGameLine(rows, "under")
+      }
+      : marketType === "ml3way"
+      ? {
+        away: buildBestGameLine(rows, "away"),
+        draw: buildBestGameLine(rows, "draw"),
+        home: buildBestGameLine(rows, "home")
       }
       : {
         away: buildBestGameLine(rows, "away"),
@@ -1673,7 +1801,25 @@ app.get("/api/odds-comparison", async (req, res) => {
     MLB: "MLB",
     NHL: "NHL",
     EPL: "EPL",
+    MLS: "MLS",
     UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+    INTERNATIONAL_SOCCER: "INTERNATIONAL_SOCCER",
+    UEFA_EUROPA_LEAGUE: "UEFA_EUROPA_LEAGUE",
+    BUNDESLIGA: "BUNDESLIGA",
+    EREDIVISIE: "EREDIVISIE",
+    AR_LPF: "AR_LPF",
+    BR_SERIE_A: "BR_SERIE_A",
+    EFL_CUP: "EFL_CUP",
+    FR_LIGUE_1: "FR_LIGUE_1",
+    IT_SERIE_A: "IT_SERIE_A",
+    LA_LIGA: "LA_LIGA",
+    LIGA_MX: "LIGA_MX",
+    PRIMERA_A: "PRIMERA_A",
+    LA_LIGA_2: "LA_LIGA_2",
+    IT_SERIE_B: "IT_SERIE_B",
+    FR_LIGUE_2: "FR_LIGUE_2",
+    PE_LIGA_1: "PE_LIGA_1",
+    GOLF: "GOLF",
     ATP: "ATP",
     WTA: "WTA",
     NCAAB: "NCAAB",
@@ -1779,7 +1925,25 @@ app.get("/api/game-lines", async (req, res) => {
     MLB: "MLB",
     NHL: "NHL",
     EPL: "EPL",
+    MLS: "MLS",
     UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+    INTERNATIONAL_SOCCER: "INTERNATIONAL_SOCCER",
+    UEFA_EUROPA_LEAGUE: "UEFA_EUROPA_LEAGUE",
+    BUNDESLIGA: "BUNDESLIGA",
+    EREDIVISIE: "EREDIVISIE",
+    AR_LPF: "AR_LPF",
+    BR_SERIE_A: "BR_SERIE_A",
+    EFL_CUP: "EFL_CUP",
+    FR_LIGUE_1: "FR_LIGUE_1",
+    IT_SERIE_A: "IT_SERIE_A",
+    LA_LIGA: "LA_LIGA",
+    LIGA_MX: "LIGA_MX",
+    PRIMERA_A: "PRIMERA_A",
+    LA_LIGA_2: "LA_LIGA_2",
+    IT_SERIE_B: "IT_SERIE_B",
+    FR_LIGUE_2: "FR_LIGUE_2",
+    PE_LIGA_1: "PE_LIGA_1",
+    GOLF: "GOLF",
     ATP: "ATP",
     WTA: "WTA",
     NCAAB: "NCAAB",

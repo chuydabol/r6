@@ -1181,8 +1181,26 @@
           <option value="NHL">NHL</option>
           <option value="ATP">ATP</option>
           <option value="WTA">WTA</option>
+          <option value="GOLF">GOLF</option>
           <option value="EPL">Premier League</option>
-          <option value="UEFA_CHAMPIONS_LEAGUE">UEFA Champions League</option>
+          <option value="MLS">MLS</option>
+          <option value="UEFA_CHAMPIONS_LEAGUE">Champions League</option>
+          <option value="INTERNATIONAL_SOCCER">International Soccer</option>
+          <option value="UEFA_EUROPA_LEAGUE">Europa League</option>
+          <option value="BUNDESLIGA">Bundesliga</option>
+          <option value="EREDIVISIE">Eredivisie</option>
+          <option value="AR_LPF">Liga Profesional</option>
+          <option value="BR_SERIE_A">Brasileiro Serie A</option>
+          <option value="EFL_CUP">EFL Cup</option>
+          <option value="FR_LIGUE_1">Ligue 1</option>
+          <option value="IT_SERIE_A">Serie A</option>
+          <option value="LA_LIGA">La Liga</option>
+          <option value="LIGA_MX">Liga MX</option>
+          <option value="PRIMERA_A">Primera A</option>
+          <option value="LA_LIGA_2">La Liga Segunda</option>
+          <option value="IT_SERIE_B">Serie B</option>
+          <option value="FR_LIGUE_2">Ligue 2</option>
+          <option value="PE_LIGA_1">Liga 1</option>
           <option value="NCAAB">NCAAB</option>
           <option value="NCAAF">NCAAF</option>
         </select>
@@ -1192,6 +1210,7 @@
         <select id="gameLinesMarketSelect" onchange="setGameLinesSelectedMarket(this.value)" style="display:none;">
           <option value="sp">Spread</option>
           <option value="ml">Moneyline</option>
+          <option value="ml3way">Moneyline 3-Way</option>
           <option value="ou">Totals</option>
         </select>
         <div class="timestamp-pill" style="display:flex;align-items:center;">Core sharp books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
@@ -1306,6 +1325,16 @@
       stageCounts: {}
     };
     let selectedPlayerRequestToken = 0;
+    const SOCCER_ODDS_MARKET_OPTIONS = [
+      { value: "shots", label: "Shots" },
+      { value: "shots_ongoal", label: "Shots on Goal" },
+      { value: "goals+assists", label: "Goals + Assists" },
+      { value: "tackles", label: "Tackles" },
+      { value: "passes_attempted", label: "Passes Attempted" },
+      { value: "clearances", label: "Clearances" },
+      { value: "goalie_saves", label: "Saves" },
+      { value: "goalie_goalsagainst", label: "Goals Against" }
+    ];
     const ODDS_MARKET_OPTIONS_BY_LEAGUE = {
       NBA: [
         { value: "points", label: "Points" },
@@ -1383,26 +1412,31 @@
         { value: "break_points_home", label: "Home Player Break Points Won" },
         { value: "break_points_away", label: "Away Player Break Points Won" }
       ],
-      EPL: [
-        { value: "shots", label: "Shots" },
-        { value: "shots_ongoal", label: "Shots on Goal" },
-        { value: "goals+assists", label: "Goals + Assists" },
-        { value: "tackles", label: "Tackles" },
-        { value: "passes_attempted", label: "Passes Attempted" },
-        { value: "clearances", label: "Clearances" },
-        { value: "goalie_saves", label: "Saves" },
-        { value: "goalie_goalsagainst", label: "Goals Against" }
+      GOLF: [
+        { value: "points", label: "To Par" },
+        { value: "birdiesOrBetter", label: "Birdies or Better" },
+        { value: "parsOrBetter", label: "Pars or Better" },
+        { value: "strokes", label: "Strokes" }
       ],
-      UEFA_CHAMPIONS_LEAGUE: [
-        { value: "shots", label: "Shots" },
-        { value: "shots_ongoal", label: "Shots on Goal" },
-        { value: "goals+assists", label: "Goals + Assists" },
-        { value: "tackles", label: "Tackles" },
-        { value: "passes_attempted", label: "Passes Attempted" },
-        { value: "clearances", label: "Clearances" },
-        { value: "goalie_saves", label: "Saves" },
-        { value: "goalie_goalsagainst", label: "Goals Against" }
-      ]
+      EPL: SOCCER_ODDS_MARKET_OPTIONS,
+      MLS: SOCCER_ODDS_MARKET_OPTIONS,
+      UEFA_CHAMPIONS_LEAGUE: SOCCER_ODDS_MARKET_OPTIONS,
+      INTERNATIONAL_SOCCER: SOCCER_ODDS_MARKET_OPTIONS,
+      UEFA_EUROPA_LEAGUE: SOCCER_ODDS_MARKET_OPTIONS,
+      BUNDESLIGA: SOCCER_ODDS_MARKET_OPTIONS,
+      EREDIVISIE: SOCCER_ODDS_MARKET_OPTIONS,
+      AR_LPF: SOCCER_ODDS_MARKET_OPTIONS,
+      BR_SERIE_A: SOCCER_ODDS_MARKET_OPTIONS,
+      EFL_CUP: SOCCER_ODDS_MARKET_OPTIONS,
+      FR_LIGUE_1: SOCCER_ODDS_MARKET_OPTIONS,
+      IT_SERIE_A: SOCCER_ODDS_MARKET_OPTIONS,
+      LA_LIGA: SOCCER_ODDS_MARKET_OPTIONS,
+      LIGA_MX: SOCCER_ODDS_MARKET_OPTIONS,
+      PRIMERA_A: SOCCER_ODDS_MARKET_OPTIONS,
+      LA_LIGA_2: SOCCER_ODDS_MARKET_OPTIONS,
+      IT_SERIE_B: SOCCER_ODDS_MARKET_OPTIONS,
+      FR_LIGUE_2: SOCCER_ODDS_MARKET_OPTIONS,
+      PE_LIGA_1: SOCCER_ODDS_MARKET_OPTIONS
     };
     const ODDS_MARKET_TO_STAT_ID = {
       points: ["points", "player_points", "playerpoints", "pts"],
@@ -1451,7 +1485,10 @@
       serving_aces_home: ["serving_aces", "servingaces"],
       serving_aces_away: ["serving_aces", "servingaces"],
       break_points_home: ["breakpoints", "break_points"],
-      break_points_away: ["breakpoints", "break_points"]
+      break_points_away: ["breakpoints", "break_points"],
+      birdiesorbetter: ["birdiesorbetter", "birdies_or_better", "birdiesOrBetter"],
+      parsorbetter: ["parsorbetter", "pars_or_better", "parsOrBetter"],
+      strokes: ["strokes"]
     };
     const GLOBAL_BOOK_WEIGHTS = [
       { key: "pinnacle", label: "Pinnacle", weight: 1.20, tier: 1, aliases: ["pinnacle"] },
@@ -1716,9 +1753,48 @@
       "WTA",
       "EPL",
       "UEFA_CHAMPIONS_LEAGUE",
+      "MLS",
+      "INTERNATIONAL_SOCCER",
+      "UEFA_EUROPA_LEAGUE",
+      "BUNDESLIGA",
+      "EREDIVISIE",
+      "AR_LPF",
+      "BR_SERIE_A",
+      "EFL_CUP",
+      "FR_LIGUE_1",
+      "IT_SERIE_A",
+      "LA_LIGA",
+      "LIGA_MX",
+      "PRIMERA_A",
+      "LA_LIGA_2",
+      "IT_SERIE_B",
+      "FR_LIGUE_2",
+      "PE_LIGA_1",
+      "GOLF",
       "NCAAB",
       "NCAAF"
     ]);
+    const SOCCER_DISPLAY_NAME_TO_LEAGUE_ID = {
+      "premier league": "EPL",
+      "mls": "MLS",
+      "champions league": "UEFA_CHAMPIONS_LEAGUE",
+      "international soccer": "INTERNATIONAL_SOCCER",
+      "europa league": "UEFA_EUROPA_LEAGUE",
+      "bundesliga": "BUNDESLIGA",
+      "eredivisie": "EREDIVISIE",
+      "liga profesional": "AR_LPF",
+      "brasileiro serie a": "BR_SERIE_A",
+      "efl cup": "EFL_CUP",
+      "ligue 1": "FR_LIGUE_1",
+      "serie a": "IT_SERIE_A",
+      "la liga": "LA_LIGA",
+      "liga mx": "LIGA_MX",
+      "primera a": "PRIMERA_A",
+      "la liga segunda": "LA_LIGA_2",
+      "serie b": "IT_SERIE_B",
+      "ligue 2": "FR_LIGUE_2",
+      "liga 1": "PE_LIGA_1"
+    };
     const EXPLICIT_ODDS_LEAGUE_ID_MAP = {
       NBA: "NBA",
       NFL: "NFL",
@@ -1732,6 +1808,26 @@
       UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
       UEFA_CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
       CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+      MLS: "MLS",
+      INTERNATIONALSOCCER: "INTERNATIONAL_SOCCER",
+      UEFA_EUROPA_LEAGUE: "UEFA_EUROPA_LEAGUE",
+      UEFA_EUROPALEAGUE: "UEFA_EUROPA_LEAGUE",
+      EUROPALEAGUE: "UEFA_EUROPA_LEAGUE",
+      BUNDESLIGA: "BUNDESLIGA",
+      EREDIVISIE: "EREDIVISIE",
+      AR_LPF: "AR_LPF",
+      BR_SERIE_A: "BR_SERIE_A",
+      EFL_CUP: "EFL_CUP",
+      FR_LIGUE_1: "FR_LIGUE_1",
+      IT_SERIE_A: "IT_SERIE_A",
+      LA_LIGA: "LA_LIGA",
+      LIGA_MX: "LIGA_MX",
+      PRIMERA_A: "PRIMERA_A",
+      LA_LIGA_2: "LA_LIGA_2",
+      IT_SERIE_B: "IT_SERIE_B",
+      FR_LIGUE_2: "FR_LIGUE_2",
+      PE_LIGA_1: "PE_LIGA_1",
+      GOLF: "GOLF",
       NCAAB: "NCAAB",
       NCAAF: "NCAAF"
     };
@@ -1806,7 +1902,7 @@
 
     function setGameLinesSelectedMarket(value) {
       const normalized = String(value || "sp").trim().toLowerCase();
-      gameLinesSelectedMarket = normalized === "ml" || normalized === "ou" ? normalized : "sp";
+      gameLinesSelectedMarket = normalized === "ml" || normalized === "ml3way" || normalized === "ou" ? normalized : "sp";
       gameLinesMarketSelect.value = gameLinesSelectedMarket;
       if (oddsBoardMode === "gameLines") {
         renderGameLinesBoard(gameLinesEvents);
@@ -1857,6 +1953,10 @@
     function normalizeOddsLeagueID(value) {
       const raw = String(value || "").trim();
       if (!raw) return null;
+      const displayKey = raw.toLowerCase().replace(/\s+/g, " ").trim();
+      if (SOCCER_DISPLAY_NAME_TO_LEAGUE_ID[displayKey]) {
+        return SOCCER_DISPLAY_NAME_TO_LEAGUE_ID[displayKey];
+      }
       const compactKey = raw.toUpperCase().replace(/[\s-]+/g, "");
       const underscoredKey = raw.toUpperCase().replace(/[\s-]+/g, "_");
       return EXPLICIT_ODDS_LEAGUE_ID_MAP[compactKey]
@@ -2204,8 +2304,10 @@
             ? "No MLB props available yet for this selection."
             : leagueID === COMBINED_LEAGUE_ID
               ? "No NBA + MLB props available yet for this selection."
-            : (leagueID === "ATP" || leagueID === "WTA")
+             : (leagueID === "ATP" || leagueID === "WTA")
               ? "No tennis props available yet for this selection."
+            : leagueID === "GOLF"
+              ? "No golf props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
           oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         }
@@ -3070,11 +3172,13 @@
         const rows = Array.isArray(event.rows) ? event.rows : [];
         const isTotals = marketType === "ou";
         const isMoneyline = marketType === "ml";
+        const isThreeWayMoneyline = marketType === "ml3way";
         const colAHeader = isTotals ? "Over" : "Away";
         const colBHeader = isTotals ? "Under" : "Home";
         const bestA = isTotals ? event?.best?.over : event?.best?.away;
         const bestB = isTotals ? event?.best?.under : event?.best?.home;
-        const showLine = !isMoneyline;
+        const bestDraw = isThreeWayMoneyline ? event?.best?.draw : null;
+        const showLine = !isMoneyline && !isThreeWayMoneyline;
 
         return `
           <div class="odds-card" style="margin-bottom:10px;">
@@ -3089,19 +3193,23 @@
                     <th>Bookmaker</th>
                     <th>${escapeHtml(colAHeader)}${showLine ? " line / odds" : " odds"}</th>
                     <th>${escapeHtml(colBHeader)}${showLine ? " line / odds" : " odds"}</th>
+                    ${isThreeWayMoneyline ? `<th>Draw odds</th>` : ""}
                   </tr>
                 </thead>
                 <tbody>
                   ${rows.map(row => {
                     const sideA = isTotals ? row.over : row.away;
                     const sideB = isTotals ? row.under : row.home;
+                    const sideDraw = isThreeWayMoneyline ? row.draw : null;
                     const sideAClass = isBestSelection(sideA, bestA) ? "best-cell" : "";
                     const sideBClass = isBestSelection(sideB, bestB) ? "best-cell" : "";
+                    const sideDrawClass = isBestSelection(sideDraw, bestDraw) ? "best-cell" : "";
                     return `
                       <tr>
                         <td>${escapeHtml(row.bookmakerTitle || row.bookmakerID || "Unknown")}</td>
                         <td class="${sideAClass}">${formatLineAndOdds(sideA, showLine)}</td>
                         <td class="${sideBClass}">${formatLineAndOdds(sideB, showLine)}</td>
+                        ${isThreeWayMoneyline ? `<td class="${sideDrawClass}">${formatLineAndOdds(sideDraw, showLine)}</td>` : ""}
                       </tr>
                     `;
                   }).join("")}
@@ -3111,6 +3219,7 @@
             <div class="best-summary">
               ${renderBestSummaryEntry(isTotals ? "Best Over" : "Best Away", bestA, showLine)}
               ${renderBestSummaryEntry(isTotals ? "Best Under" : "Best Home", bestB, showLine)}
+              ${isThreeWayMoneyline ? renderBestSummaryEntry("Best Draw", bestDraw, showLine) : ""}
             </div>
           </div>
         `;
@@ -3124,8 +3233,10 @@
           ? "No MLB props available yet for this selection."
           : leagueID === COMBINED_LEAGUE_ID
             ? "No NBA + MLB props available yet for this selection."
-          : (leagueID === "ATP" || leagueID === "WTA")
+           : (leagueID === "ATP" || leagueID === "WTA")
             ? "No tennis props available yet for this selection."
+          : leagueID === "GOLF"
+            ? "No golf props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
         oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
         return;
@@ -3157,7 +3268,7 @@
                   <td><span class="pill">${escapeHtml(String(row.sport || row.leagueID || "N/A").toUpperCase())}</span></td>
                   <td>
                     <div><strong>${escapeHtml(row.playerName || "Unknown Player")}</strong></div>
-                    <div class="muted">${escapeHtml(row.matchup || "Unknown matchup")}</div>
+                    <div class="muted">${escapeHtml(row.matchup || row.eventName || "Unknown matchup")}</div>
                   </td>
                   <td>${escapeHtml(row.betDetails)}</td>
                   <td class="${(safeNumeric(row.finalValuePercent) || row.valuePercent) >= FINAL_TOP_TIER_MIN_PERCENT ? "value-strong" : "value-moderate"}">${formatPercent(Number.isFinite(safeNumeric(row.finalValuePercent)) ? row.finalValuePercent : row.valuePercent)}</td>
@@ -4010,7 +4121,10 @@
         hits: "Hits",
         totalbases: "Total Bases",
         hitsallowed: "Hits Allowed",
-        earnedruns: "Earned Runs"
+        earnedruns: "Earned Runs",
+        birdiesorbetter: "Birdies or Better",
+        parsorbetter: "Pars or Better",
+        strokes: "Strokes"
       };
       if (String(leagueID || "").trim().toUpperCase() === "MLB") {
         if (key === "points") return "Runs";
