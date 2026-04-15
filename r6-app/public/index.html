@@ -2663,16 +2663,16 @@
     }
 
     function compareMergedOddsRowsByFinalValue(a, b) {
-      const aRankScore = getOddsRowRankScore(a);
-      const bRankScore = getOddsRowRankScore(b);
-      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) return bRankScore - aRankScore;
-      if (Number.isFinite(aRankScore) !== Number.isFinite(bRankScore)) return Number.isFinite(aRankScore) ? -1 : 1;
       const aFinal = safeNumeric(a?.finalValuePercent);
       const bFinal = safeNumeric(b?.finalValuePercent);
       const aHas = Number.isFinite(aFinal);
       const bHas = Number.isFinite(bFinal);
       if (aHas && bHas && aFinal !== bFinal) return bFinal - aFinal;
       if (aHas !== bHas) return aHas ? -1 : 1;
+      const aRankScore = getOddsRowRankScore(a);
+      const bRankScore = getOddsRowRankScore(b);
+      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) return bRankScore - aRankScore;
+      if (Number.isFinite(aRankScore) !== Number.isFinite(bRankScore)) return Number.isFinite(aRankScore) ? -1 : 1;
       const aFairStrength = safeNumeric(a?.recommendedProbability);
       const bFairStrength = safeNumeric(b?.recommendedProbability);
       if (Number.isFinite(aFairStrength) && Number.isFinite(bFairStrength) && aFairStrength !== bFairStrength) return bFairStrength - aFairStrength;
@@ -2689,17 +2689,18 @@
     }
 
     function compareOddsRowsByFinalValue(a, b) {
-      const aRankScore = getOddsRowRankScore(a);
-      const bRankScore = getOddsRowRankScore(b);
-      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) {
-        return bRankScore - aRankScore;
-      }
       const aValuePercent = safeNumeric(a?.valuePercent);
       const bValuePercent = safeNumeric(b?.valuePercent);
       const aHasValue = Number.isFinite(aValuePercent);
       const bHasValue = Number.isFinite(bValuePercent);
       if (aHasValue && bHasValue && aValuePercent !== bValuePercent) return bValuePercent - aValuePercent;
       if (aHasValue !== bHasValue) return aHasValue ? -1 : 1;
+      const aRankScore = getOddsRowRankScore(a);
+      const bRankScore = getOddsRowRankScore(b);
+      if (Number.isFinite(aRankScore) && Number.isFinite(bRankScore) && aRankScore !== bRankScore) {
+        return bRankScore - aRankScore;
+      }
+      if (Number.isFinite(aRankScore) !== Number.isFinite(bRankScore)) return Number.isFinite(aRankScore) ? -1 : 1;
 
       // Secondary sort for ties: fair-odds strength (recommendedProbability), then total book weight.
       const aFairOddsStrength = safeNumeric(a?.recommendedProbability);
