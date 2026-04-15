@@ -1511,6 +1511,157 @@ function normalizeSportsGameOddsResponse(events, options) {
   };
 }
 
+function normalizeGameLinesMarket(value) {
+  const normalized = String(value || "sp").trim().toLowerCase();
+  if (normalized === "ml") return "ml";
+  if (normalized === "ou") return "ou";
+  return "sp";
+}
+
+function normalizeGameLineSide(marketType, sideID) {
+  const side = String(sideID || "").trim().toLowerCase();
+  if (marketType === "ou") {
+    if (side === "over") return "over";
+    if (side === "under") return "under";
+    return null;
+  }
+  if (side === "away") return "away";
+  if (side === "home") return "home";
+  return null;
+}
+
+function upsertGameLineSelection(book, key, candidate) {
+  if (!book || !key || !candidate) return;
+  if (!Number.isFinite(candidate.odds)) return;
+  if (!book[key]) {
+    book[key] = candidate;
+    return;
+  }
+  if (candidate.odds > book[key].odds) {
+    book[key] = candidate;
+  }
+}
+
+function buildBestGameLine(rows, sideKey) {
+  return rows.reduce((best, row) => {
+    const candidate = row?.[sideKey];
+    if (!candidate || !Number.isFinite(candidate.odds)) return best;
+    if (!best || candidate.odds > best.odds) {
+      return {
+        ...candidate,
+        bookmakerID: row.bookmakerID,
+        bookmakerTitle: row.bookmakerTitle
+      };
+    }
+    return best;
+  }, null);
+}
+
+function normalizeGameLinesResponse(events, options) {
+  const marketType = normalizeGameLinesMarket(options.marketType);
+  const groupedByEvent = new Map();
+  const uniqueBookmakers = new Map();
+  let rawMarketRows = 0;
+
+  events.forEach(event => {
+    if (!matchesLeague(event?.leagueID || event?.league || event?.sportID, options.leagueID)) return;
+    const eventID = String(event?.eventID || event?.id || "").trim();
+    if (!eventID) return;
+    const awayTeam = getTeamShortName(event?.teams?.away, event?.awayTeam || event?.away);
+    const homeTeam = getTeamShortName(event?.teams?.home, event?.homeTeam || event?.home);
+    const oddsNode = event?.odds && typeof event.odds === "object" ? event.odds : {};
+
+    if (!groupedByEvent.has(eventID)) {
+      groupedByEvent.set(eventID, {
+        eventID,
+        leagueID: options.leagueID,
+        awayTeam,
+        homeTeam,
+        matchup: awayTeam && homeTeam ? `${awayTeam} @ ${homeTeam}` : "Unknown matchup",
+        commenceTime: event?.commenceTime || event?.startTime || null,
+        booksMap: new Map()
+      });
+    }
+
+    Object.entries(oddsNode).forEach(([oddID, oddContainer]) => {
+      const oddObjects = Array.isArray(oddContainer) ? oddContainer : [oddContainer];
+      oddObjects.forEach(oddNode => {
+        if (!oddNode || typeof oddNode !== "object") return;
+        const parsedOddID = parseOddID(oddID);
+        const betTypeID = String(oddNode?.betTypeID || parsedOddID.betTypeID || "").trim().toLowerCase();
+        const periodID = String(oddNode?.periodID || parsedOddID.periodID || "").trim().toLowerCase();
+        const statEntityID = String(oddNode?.statEntityID || parsedOddID.statEntityID || "").trim().toLowerCase();
+        if (betTypeID !== marketType) return;
+        if (periodID !== "game") return;
+        if (marketType === "ou" && statEntityID !== "all") return;
+
+        const side = normalizeGameLineSide(marketType, oddNode?.sideID || parsedOddID.sideID || "");
+        if (!side) return;
+        const byBookmakerRaw = oddNode?.byBookmaker && typeof oddNode.byBookmaker === "object" ? oddNode.byBookmaker : {};
+        rawMarketRows += 1;
+
+        Object.entries(byBookmakerRaw).forEach(([bookmakerIDRaw, bookmakerNode]) => {
+          const bookmakerID = normalizeBookmakerID(bookmakerIDRaw);
+          if (!bookmakerID || !bookmakerNode || typeof bookmakerNode !== "object") return;
+          const odds = toNumber(getBookmakerOdds(bookmakerNode));
+          if (!Number.isFinite(odds)) return;
+          const line = toNumber(getBookmakerLine(bookmakerNode));
+          const bookmakerTitle = String(bookmakerNode?.bookmakerTitle || bookmakerNode?.title || bookmakerID || "Unknown Bookmaker");
+          uniqueBookmakers.set(bookmakerID, bookmakerTitle);
+
+          const eventGroup = groupedByEvent.get(eventID);
+          if (!eventGroup.booksMap.has(bookmakerID)) {
+            eventGroup.booksMap.set(bookmakerID, {
+              bookmakerID,
+              bookmakerTitle,
+              away: null,
+              home: null,
+              over: null,
+              under: null
+            });
+          }
+          const book = eventGroup.booksMap.get(bookmakerID);
+          upsertGameLineSelection(book, side, { line: Number.isFinite(line) ? line : null, odds });
+        });
+      });
+    });
+  });
+
+  const eventsOut = Array.from(groupedByEvent.values()).map(eventGroup => {
+    const rows = Array.from(eventGroup.booksMap.values()).filter(row => {
+      if (marketType === "ou") return row.over || row.under;
+      return row.away || row.home;
+    });
+    const best = marketType === "ou"
+      ? {
+        over: buildBestGameLine(rows, "over"),
+        under: buildBestGameLine(rows, "under")
+      }
+      : {
+        away: buildBestGameLine(rows, "away"),
+        home: buildBestGameLine(rows, "home")
+      };
+    return {
+      eventID: eventGroup.eventID,
+      leagueID: eventGroup.leagueID,
+      awayTeam: eventGroup.awayTeam,
+      homeTeam: eventGroup.homeTeam,
+      matchup: eventGroup.matchup,
+      commenceTime: eventGroup.commenceTime,
+      marketType,
+      rows: rows.sort((a, b) => String(a.bookmakerTitle || "").localeCompare(String(b.bookmakerTitle || ""))),
+      best
+    };
+  }).filter(event => event.rows.length > 0)
+    .sort((a, b) => (toTimestamp(a.commenceTime) || 0) - (toTimestamp(b.commenceTime) || 0));
+
+  return {
+    events: eventsOut,
+    uniqueBookmakers: Array.from(uniqueBookmakers, ([bookmakerID, bookmakerTitle]) => ({ bookmakerID, bookmakerTitle })),
+    rawMarketRows
+  };
+}
+
 app.get("/api/odds-comparison", async (req, res) => {
   const leagueID = normalizeLeagueID(req.query.leagueID || "NBA");
   if (!leagueID) {
@@ -1611,6 +1762,94 @@ app.get("/api/odds-comparison", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to load sportsbook props",
+      message: error.message,
+      debug: { sentParams }
+    });
+  }
+});
+
+app.get("/api/game-lines", async (req, res) => {
+  const leagueID = normalizeLeagueID(req.query.leagueID || "NBA");
+  if (!leagueID) {
+    return res.status(400).json({ error: "Unsupported league for current SportsGameOdds setup" });
+  }
+  const selectedLeagueID = {
+    NBA: "NBA",
+    NFL: "NFL",
+    MLB: "MLB",
+    NHL: "NHL",
+    EPL: "EPL",
+    UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+    ATP: "ATP",
+    WTA: "WTA",
+    NCAAB: "NCAAB",
+    NCAAF: "NCAAF"
+  }[leagueID];
+  if (!selectedLeagueID) {
+    return res.status(400).json({ error: "Unsupported league for current SportsGameOdds setup" });
+  }
+  const marketType = normalizeGameLinesMarket(req.query.market || "sp");
+  const sentParams = {
+    leagueID: selectedLeagueID,
+    oddsAvailable: "true",
+    includeAltLines: "true",
+    limit: "10"
+  };
+
+  if (!SPORTSGAMEODDS_KEY) {
+    return res.status(500).json({
+      success: false,
+      error: "SPORTSGAMEODDS_KEY is not configured on the server.",
+      debug: { sentParams }
+    });
+  }
+
+  try {
+    const eventsURL = new URL(SPORTSGAMEODDS_BASE_URL);
+    Object.entries(sentParams).forEach(([key, value]) => {
+      eventsURL.searchParams.set(key, value);
+    });
+
+    const response = await fetch(eventsURL.toString(), {
+      headers: {
+        "x-api-key": SPORTSGAMEODDS_KEY,
+        "accept": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        error: "Failed to load events from SportsGameOdds",
+        message: errorText,
+        debug: { sentParams }
+      });
+    }
+
+    const payload = await response.json();
+    const events = Array.isArray(payload?.data) ? payload.data : [];
+    const normalized = normalizeGameLinesResponse(events, { leagueID, marketType });
+
+    res.json({
+      success: true,
+      provider: "sportsgameodds",
+      leagueID,
+      marketType,
+      eventsLoaded: events.length,
+      rawMarketRows: normalized.rawMarketRows,
+      uniqueBookmakers: normalized.uniqueBookmakers,
+      events: normalized.events,
+      debug: {
+        sentParams,
+        eventsReturned: events.length
+      }
+    });
+  } catch (error) {
+    console.error("SPORTSGAMEODDS GAME LINES ERROR:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to load sportsbook game lines",
       message: error.message,
       debug: { sentParams }
     });
