@@ -287,6 +287,17 @@
     .value-strong { color: #70f0ad; font-weight: 800; }
     .value-moderate { color: #b9dcff; font-weight: 700; }
     .book-missing { color: #94a3b8; }
+    .best-cell {
+      color: #70f0ad;
+      font-weight: 800;
+    }
+    .best-summary {
+      margin-top: 8px;
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: #cfe0ff;
+    }
 
     .odds-meta {
       font-size: 12px;
@@ -1158,6 +1169,10 @@
         </div>
       </div>
       <div class="odds-controls">
+        <select id="oddsBoardModeSelect" onchange="setOddsBoardMode(this.value)">
+          <option value="props">Props</option>
+          <option value="gameLines">Game Lines</option>
+        </select>
         <select id="oddsLeagueSelect">
           <option value="NBA">NBA</option>
           <option value="NFL">NFL</option>
@@ -1173,6 +1188,11 @@
         </select>
         <select id="oddsStatSelect" onchange="setOddsSelectedMarket(this.value)">
           <option value="all">All markets</option>
+        </select>
+        <select id="gameLinesMarketSelect" onchange="setGameLinesSelectedMarket(this.value)" style="display:none;">
+          <option value="sp">Spread</option>
+          <option value="ml">Moneyline</option>
+          <option value="ou">Totals</option>
         </select>
         <div class="timestamp-pill" style="display:flex;align-items:center;">Core sharp books: FanDuel, DraftKings, Pinnacle, BetOnline</div>
       </div>
@@ -1212,8 +1232,10 @@
     const oddsComparisonView = document.getElementById("oddsComparisonView");
     const viewBtnR6 = document.getElementById("viewBtnR6");
     const viewBtnOdds = document.getElementById("viewBtnOdds");
+    const oddsBoardModeSelect = document.getElementById("oddsBoardModeSelect");
     const oddsLeagueSelect = document.getElementById("oddsLeagueSelect");
     const oddsStatSelect = document.getElementById("oddsStatSelect");
+    const gameLinesMarketSelect = document.getElementById("gameLinesMarketSelect");
     const oddsSummary = document.getElementById("oddsSummary");
     const oddsResultsSection = document.getElementById("oddsResultsSection");
     const oddsLoading = document.getElementById("oddsLoading");
@@ -1257,6 +1279,9 @@
     let oddsStandardGroups = [];
     let oddsVisibleProps = [];
     let oddsSelectedMarket = "all";
+    let oddsBoardMode = "props";
+    let gameLinesSelectedMarket = "sp";
+    let gameLinesEvents = [];
     let oddsLastUpdatedAt = null;
     let isOddsLoading = false;
     let oddsAutoRefreshTimer = null;
@@ -1739,10 +1764,17 @@
       playerSearch.addEventListener("input", applyPropFilters);
       oddsLeagueSelect.value = "NBA";
       refreshOddsStatOptionsByLeague("NBA");
+      oddsBoardMode = "props";
+      oddsBoardModeSelect.value = "props";
+      gameLinesMarketSelect.value = "sp";
       oddsSelectedMarket = "all";
+      setOddsBoardMode("props");
       oddsLeagueSelect.addEventListener("change", () => {
         refreshOddsStatOptionsByLeague(oddsLeagueSelect.value || "NBA");
         updateOddsAutoRefreshMode();
+      });
+      oddsBoardModeSelect.addEventListener("change", () => {
+        setOddsBoardMode(oddsBoardModeSelect.value);
       });
       oddsAutoRefreshToggle.checked = true;
       oddsAutoRefreshToggle.addEventListener("change", () => {
@@ -1762,6 +1794,26 @@
       oddsStatSelect.value = "all";
     }
 
+    function setOddsBoardMode(value) {
+      oddsBoardMode = value === "gameLines" ? "gameLines" : "props";
+      oddsBoardModeSelect.value = oddsBoardMode;
+      const isGameLines = oddsBoardMode === "gameLines";
+      oddsStatSelect.style.display = isGameLines ? "none" : "";
+      gameLinesMarketSelect.style.display = isGameLines ? "" : "none";
+      applyOddsSummaryAndRender();
+      updateOddsAutoRefreshMode();
+    }
+
+    function setGameLinesSelectedMarket(value) {
+      const normalized = String(value || "sp").trim().toLowerCase();
+      gameLinesSelectedMarket = normalized === "ml" || normalized === "ou" ? normalized : "sp";
+      gameLinesMarketSelect.value = gameLinesSelectedMarket;
+      if (oddsBoardMode === "gameLines") {
+        renderGameLinesBoard(gameLinesEvents);
+        renderOddsSummary();
+      }
+    }
+
     function clearOddsAutoRefreshTimer() {
       if (!oddsAutoRefreshTimer) return;
       clearInterval(oddsAutoRefreshTimer);
@@ -1771,7 +1823,8 @@
     function updateOddsAutoRefreshMode() {
       clearOddsAutoRefreshTimer();
       const leagueID = normalizeOddsLeagueID(oddsLeagueSelect?.value || "");
-      const shouldRun = leagueID === COMBINED_LEAGUE_ID && Boolean(oddsAutoRefreshToggle?.checked);
+      const shouldRun = Boolean(oddsAutoRefreshToggle?.checked)
+        && (oddsBoardMode === "gameLines" || leagueID === COMBINED_LEAGUE_ID);
       if (!shouldRun) return;
       oddsAutoRefreshTimer = setInterval(() => {
         if (isOddsLoading) return;
@@ -1786,6 +1839,17 @@
       if (!res.ok) {
         const debugText = data?.debug?.sentParams ? ` Debug sentParams: ${JSON.stringify(data.debug.sentParams)}` : "";
         throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
+      }
+      return data;
+    }
+
+    async function fetchGameLinesByLeague(leagueID, marketType) {
+      const params = new URLSearchParams({ leagueID, market: marketType });
+      const res = await fetch(`/api/game-lines?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        const debugText = data?.debug?.sentParams ? ` Debug sentParams: ${JSON.stringify(data.debug.sentParams)}` : "";
+        throw new Error((data.message || data.error || "Failed to load sportsbook game lines") + debugText);
       }
       return data;
     }
@@ -2055,6 +2119,10 @@
 
     async function loadOddsComparison() {
       const leagueID = normalizeOddsLeagueID(oddsLeagueSelect.value || "NBA") || "NBA";
+      if (oddsBoardMode === "gameLines") {
+        await loadGameLinesComparison(leagueID);
+        return;
+      }
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
       if (!isCombinedMode && !SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
@@ -2168,10 +2236,73 @@
       }
     }
 
+    async function loadGameLinesComparison(leagueID) {
+      const marketType = String(gameLinesSelectedMarket || "sp").trim().toLowerCase();
+      if (!SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID) || leagueID === COMBINED_LEAGUE_ID) {
+        oddsMessage.style.display = "block";
+        oddsMessage.textContent = "Game lines do not support the NBA + MLB combined mode. Choose a single league.";
+        oddsResultsSection.innerHTML = `<div class="empty">Game lines do not support the NBA + MLB combined mode.</div>`;
+        return;
+      }
+      startOddsLoading("Loading game lines...");
+      oddsMessage.style.display = "none";
+      try {
+        const data = await fetchGameLinesByLeague(leagueID, marketType);
+        gameLinesEvents = Array.isArray(data.events) ? data.events : [];
+        oddsSummaryData = {
+          mode: "gameLines",
+          eventsLoaded: Number(data.eventsLoaded) || 0,
+          rawPlayerPropRecords: 0,
+          pairedBookProps: Number(data.rawMarketRows) || 0,
+          groupedProps: gameLinesEvents.length,
+          uniqueBookmakers: Array.isArray(data.uniqueBookmakers) ? data.uniqueBookmakers : [],
+          sentParams: data?.debug?.sentParams || null,
+          eventsReturned: Number(data?.debug?.eventsReturned) || 0,
+          rawFetchedProps: Number(data.rawMarketRows) || 0,
+          stalePrizePicks: null,
+          combinedDebug: null
+        };
+        oddsLastUpdatedAt = Date.now();
+        renderGameLinesBoard(gameLinesEvents);
+        renderOddsSummary();
+      } catch (error) {
+        gameLinesEvents = [];
+        oddsLastUpdatedAt = Date.now();
+        oddsSummaryData = {
+          eventsLoaded: 0,
+          rawPlayerPropRecords: 0,
+          pairedBookProps: 0,
+          groupedProps: 0,
+          uniqueBookmakers: [],
+          mode: "gameLines",
+          sentParams: null,
+          eventsReturned: 0,
+          rawFetchedProps: 0,
+          stalePrizePicks: null,
+          combinedDebug: null
+        };
+        renderOddsSummary();
+        oddsResultsSection.innerHTML = `<div class="empty">Failed to load sportsbook game lines.</div>`;
+        oddsMessage.style.display = "block";
+        oddsMessage.textContent = error.message || "Failed to load sportsbook game lines";
+      } finally {
+        stopOddsLoading();
+      }
+    }
+
     function setOddsSelectedMarket(value) {
       oddsSelectedMarket = normalizeSelectedMarket(value);
       oddsStatSelect.value = oddsSelectedMarket;
       applyOddsSortingAndRendering();
+    }
+
+    function applyOddsSummaryAndRender() {
+      if (oddsBoardMode === "gameLines") {
+        renderGameLinesBoard(gameLinesEvents);
+      } else {
+        applyOddsSortingAndRendering();
+      }
+      renderOddsSummary();
     }
 
     function normalizeSelectedMarket(value) {
@@ -2452,6 +2583,16 @@
       const booksText = bookTitles.length
         ? `${bookTitles.length} (${bookTitles.slice(0, 5).join(", ")}${bookTitles.length > 5 ? ", ..." : ""})`
         : "0";
+      if (oddsBoardMode === "gameLines" || oddsSummaryData.mode === "gameLines") {
+        const marketLabel = gameLinesSelectedMarket === "ml"
+          ? "Moneyline"
+          : gameLinesSelectedMarket === "ou"
+            ? "Totals"
+            : "Spread";
+        oddsSummary.textContent = `Game Lines Board • Market: ${marketLabel} • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw line rows: ${oddsSummaryData.pairedBookProps} • Visible events: ${oddsSummaryData.groupedProps} • Unique bookmakers: ${booksText}`;
+        oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
+        return;
+      }
       const stage = oddsFilterDebug.stageCounts || {};
       const stageText = [
         `raw:${stage.rawFetchedProps ?? 0}`,
@@ -2894,6 +3035,86 @@
       if (bestScore >= 0.74 && strongestSignal >= 0.56) return "Sharp-book edge";
       if (weightedScore >= 0.48 && agreement >= 0.72) return "Consensus edge";
       return "Mixed signal";
+    }
+
+    function formatLineAndOdds(selection, showLine = true) {
+      if (!selection || !Number.isFinite(safeNumeric(selection.odds))) return `<span class="book-missing">N/A</span>`;
+      const oddsText = formatAmericanOdds(selection.odds);
+      if (!showLine) return escapeHtml(oddsText);
+      const lineText = Number.isFinite(safeNumeric(selection.line)) ? Number(selection.line).toFixed(1) : "N/A";
+      return `${escapeHtml(lineText)} / ${escapeHtml(oddsText)}`;
+    }
+
+    function isBestSelection(selection, bestSelection) {
+      if (!selection || !bestSelection) return false;
+      return safeNumeric(selection.odds) === safeNumeric(bestSelection.odds)
+        && (!Number.isFinite(safeNumeric(bestSelection.line)) || safeNumeric(selection.line) === safeNumeric(bestSelection.line));
+    }
+
+    function renderBestSummaryEntry(label, bestSelection, showLine = true) {
+      if (!bestSelection) return `<div>${escapeHtml(label)}: <span class="book-missing">N/A</span></div>`;
+      const oddsText = formatAmericanOdds(bestSelection.odds);
+      const lineText = showLine && Number.isFinite(safeNumeric(bestSelection.line)) ? `${Number(bestSelection.line).toFixed(1)} / ` : "";
+      const bookText = bestSelection.bookmakerTitle || bestSelection.bookmakerID || "Unknown";
+      return `<div>${escapeHtml(label)}: <span class="best-cell">${escapeHtml(`${lineText}${oddsText}`)}</span> <span class="muted">(${escapeHtml(bookText)})</span></div>`;
+    }
+
+    function renderGameLinesBoard(events) {
+      const marketType = String(gameLinesSelectedMarket || "sp").trim().toLowerCase();
+      if (!Array.isArray(events) || !events.length) {
+        oddsResultsSection.innerHTML = `<div class="empty">No game lines available yet for this selection.</div>`;
+        return;
+      }
+
+      oddsResultsSection.innerHTML = events.map(event => {
+        const rows = Array.isArray(event.rows) ? event.rows : [];
+        const isTotals = marketType === "ou";
+        const isMoneyline = marketType === "ml";
+        const colAHeader = isTotals ? "Over" : "Away";
+        const colBHeader = isTotals ? "Under" : "Home";
+        const bestA = isTotals ? event?.best?.over : event?.best?.away;
+        const bestB = isTotals ? event?.best?.under : event?.best?.home;
+        const showLine = !isMoneyline;
+
+        return `
+          <div class="odds-card" style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+              <div><strong>${escapeHtml(event.matchup || `${event.awayTeam || "Away"} @ ${event.homeTeam || "Home"}`)}</strong></div>
+              <div class="muted">${escapeHtml(formatDate(event.commenceTime))}</div>
+            </div>
+            <div class="odds-table-wrap">
+              <table class="odds-table" style="min-width:720px;">
+                <thead>
+                  <tr>
+                    <th>Bookmaker</th>
+                    <th>${escapeHtml(colAHeader)}${showLine ? " line / odds" : " odds"}</th>
+                    <th>${escapeHtml(colBHeader)}${showLine ? " line / odds" : " odds"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows.map(row => {
+                    const sideA = isTotals ? row.over : row.away;
+                    const sideB = isTotals ? row.under : row.home;
+                    const sideAClass = isBestSelection(sideA, bestA) ? "best-cell" : "";
+                    const sideBClass = isBestSelection(sideB, bestB) ? "best-cell" : "";
+                    return `
+                      <tr>
+                        <td>${escapeHtml(row.bookmakerTitle || row.bookmakerID || "Unknown")}</td>
+                        <td class="${sideAClass}">${formatLineAndOdds(sideA, showLine)}</td>
+                        <td class="${sideBClass}">${formatLineAndOdds(sideB, showLine)}</td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+            <div class="best-summary">
+              ${renderBestSummaryEntry(isTotals ? "Best Over" : "Best Away", bestA, showLine)}
+              ${renderBestSummaryEntry(isTotals ? "Best Under" : "Best Home", bestB, showLine)}
+            </div>
+          </div>
+        `;
+      }).join("");
     }
 
     function renderOddsProps(rows) {
