@@ -1467,8 +1467,14 @@
         noCoreBooksMinRecommendedProbability: 0.54
       },
       final: {
-        minDisplayPercent: 52.2,
-        premiumPercent: FINAL_TOP_TIER_MIN_PERCENT
+        minDisplayPercent: 51.8,
+        premiumPercent: FINAL_TOP_TIER_MIN_PERCENT,
+        rankFirstTopN: {
+          baseline: 12,
+          minWhenCoverageAtLeast50: 20,
+          minWhenCoverageAtLeast100: 28,
+          minWhenCoverageAtLeast140: 30
+        }
       },
       rankingPenalty: {
         veryLowCoverageCutoff: 0.18,
@@ -2374,15 +2380,6 @@
             : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (leagueID === "MLB") {
-        const availableBooks = safeNumeric(row?.availableCoreBooks);
-        const coverageScore = safeNumeric(row?.coverageScore);
-        if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
-        if (
-          Number.isFinite(availableBooks)
-          && availableBooks >= 2
-          && Number.isFinite(coverageScore)
-          && coverageScore >= 0.38
-        ) return true;
         return Boolean(row?.prizePicksIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
       }
       if (leagueID === "NBA") {
@@ -2455,6 +2452,22 @@
       oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
+    function getMLBMinDisplayCount(coverageCount) {
+      const count = Math.max(0, Math.floor(safeNumeric(coverageCount)));
+      if (count >= 140) return MLB_FILTER_PROFILE.final.rankFirstTopN.minWhenCoverageAtLeast140;
+      if (count >= 100) return MLB_FILTER_PROFILE.final.rankFirstTopN.minWhenCoverageAtLeast100;
+      if (count >= 50) return MLB_FILTER_PROFILE.final.rankFirstTopN.minWhenCoverageAtLeast50;
+      return MLB_FILTER_PROFILE.final.rankFirstTopN.baseline;
+    }
+
+    function selectMLBRankFirstRows(rows) {
+      const sourceRows = Array.isArray(rows) ? rows : [];
+      if (!sourceRows.length) return [];
+      const sortedRows = [...sourceRows].sort(compareOddsRowsByFinalValue);
+      const topN = Math.min(sortedRows.length, getMLBMinDisplayCount(sortedRows.length));
+      return sortedRows.slice(0, topN);
+    }
+
     function applyOddsSortingAndRendering() {
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const groupedBeforeSelectedMarket = oddsStandardGroups.length;
@@ -2470,9 +2483,26 @@
       const rowsAfterCoveragePenalty = coverageEvaluations
         .filter(item => item.result.pass)
         .map(item => item.row);
-      const rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
       const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
+      const mlbRowsAfterCoverage = rowsAfterCoveragePenalty.filter(row => String(row?.leagueID || "").trim().toUpperCase() === "MLB");
+      const mlbRowsAfterRankFirstSelection = selectMLBRankFirstRows(mlbRowsAfterCoverage);
+      let rowsAfterFinalThreshold;
+      if (leagueID === "MLB") {
+        rowsAfterFinalThreshold = mlbRowsAfterRankFirstSelection;
+      } else if (isCombinedMode) {
+        const nonMLBRowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => {
+          const rowLeague = String(row?.leagueID || "").trim().toUpperCase();
+          if (rowLeague === "MLB") return false;
+          return passesFinalDisplayThreshold(row);
+        });
+        rowsAfterFinalThreshold = [
+          ...nonMLBRowsAfterFinalThreshold,
+          ...mlbRowsAfterRankFirstSelection
+        ];
+      } else {
+        rowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => passesFinalDisplayThreshold(row));
+      }
       const rowsAfterFinalThresholdWithFallback = rowsAfterFinalThreshold.length
         ? rowsAfterFinalThreshold
         : (leagueID === "MLB" || isCombinedMode)
@@ -2740,13 +2770,13 @@
       }
       if (leagueID !== "MLB") return valuePercent;
       let score = (
-        (dominantLineDiffScore * 0.56)
-        + (favoredJuiceStrength * 0.20)
-        + (strongestBookSignal * 0.12)
-        + (coreBookQuality * 0.07)
-        + (agreementStrength * 0.05)
+        (dominantLineDiffScore * 0.72)
+        + (favoredJuiceStrength * 0.14)
+        + (strongestBookSignal * 0.07)
+        + (coreBookQuality * 0.04)
+        + (agreementStrength * 0.03)
       ) * 100;
-      score += weightedMarketValue * 4.0;
+      score += weightedMarketValue * 1.8;
       if (!Number.isFinite(availableBooks) || availableBooks <= 1) {
         if (bestLineDiffScore < 0.7 || favoredJuiceStrength < 0.34) score -= 4.8;
         else score -= 1.4;
@@ -2765,7 +2795,6 @@
       else if (coverageScore < MLB_FILTER_PROFILE.rankingPenalty.lowCoverageCutoff) {
         score -= MLB_FILTER_PROFILE.rankingPenalty.lowCoveragePenalty;
       }
-      if (bestLineDiffScore < 0.52 && weightedLineDiffScore < 0.52 && agreementStrength >= 0.82) score -= 7.5;
       if (
         Number.isFinite(availableBooks) && availableBooks === 2
         && Number.isFinite(agreementStrength) && agreementStrength >= 0.80
