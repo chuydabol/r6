@@ -1166,7 +1166,7 @@
           <option value="NHL">NHL</option>
           <option value="ATP">ATP</option>
           <option value="WTA">WTA</option>
-          <option value="EPL">EPL</option>
+          <option value="EPL">Premier League</option>
           <option value="UEFA_CHAMPIONS_LEAGUE">UEFA Champions League</option>
           <option value="NCAAB">NCAAB</option>
           <option value="NCAAF">NCAAF</option>
@@ -1694,6 +1694,22 @@
       "NCAAB",
       "NCAAF"
     ]);
+    const EXPLICIT_ODDS_LEAGUE_ID_MAP = {
+      NBA: "NBA",
+      NFL: "NFL",
+      MLB: "MLB",
+      NBA_MLB: COMBINED_LEAGUE_ID,
+      NHL: "NHL",
+      ATP: "ATP",
+      WTA: "WTA",
+      EPL: "EPL",
+      PREMIERLEAGUE: "EPL",
+      UEFA_CHAMPIONS_LEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+      UEFA_CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+      CHAMPIONSLEAGUE: "UEFA_CHAMPIONS_LEAGUE",
+      NCAAB: "NCAAB",
+      NCAAF: "NCAAF"
+    };
     const PP_TO_BO3_TEAM_MAP = {
       "Team Liquid": "team-liquid-1",
       "Imperial": "imperial-esports-r6",
@@ -1738,7 +1754,7 @@
     });
 
     function refreshOddsStatOptionsByLeague(leagueID) {
-      const selectedLeague = String(leagueID || "NBA").trim().toUpperCase();
+      const selectedLeague = normalizeOddsLeagueID(leagueID) || "NBA";
       const options = ODDS_MARKET_OPTIONS_BY_LEAGUE[selectedLeague] || [];
       const allOptions = [{ value: "all", label: "All markets" }, ...options];
       oddsStatSelect.innerHTML = allOptions.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("");
@@ -1754,7 +1770,7 @@
 
     function updateOddsAutoRefreshMode() {
       clearOddsAutoRefreshTimer();
-      const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
+      const leagueID = normalizeOddsLeagueID(oddsLeagueSelect?.value || "");
       const shouldRun = leagueID === COMBINED_LEAGUE_ID && Boolean(oddsAutoRefreshToggle?.checked);
       if (!shouldRun) return;
       oddsAutoRefreshTimer = setInterval(() => {
@@ -1772,6 +1788,16 @@
         throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
       }
       return data;
+    }
+
+    function normalizeOddsLeagueID(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return null;
+      const compactKey = raw.toUpperCase().replace(/[\s-]+/g, "");
+      const underscoredKey = raw.toUpperCase().replace(/[\s-]+/g, "_");
+      return EXPLICIT_ODDS_LEAGUE_ID_MAP[compactKey]
+        || EXPLICIT_ODDS_LEAGUE_ID_MAP[underscoredKey]
+        || null;
     }
 
     function computeSportValueCalibration(rows) {
@@ -2028,7 +2054,7 @@
     }
 
     async function loadOddsComparison() {
-      const leagueID = oddsLeagueSelect.value || "NBA";
+      const leagueID = normalizeOddsLeagueID(oddsLeagueSelect.value || "NBA") || "NBA";
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
       if (!isCombinedMode && !SPORTSGAMEODDS_SUPPORTED_LEAGUES.has(leagueID)) {
