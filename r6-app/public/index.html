@@ -1181,7 +1181,9 @@
           <option value="NHL">NHL</option>
           <option value="ATP">ATP</option>
           <option value="WTA">WTA</option>
-          <option value="GOLF">GOLF</option>
+          <option value="PGA_MEN">PGA Men</option>
+          <option value="LIV_TOUR">LIV Golf</option>
+          <option value="PGA_WOMEN">PGA Women</option>
           <option value="EPL">Premier League</option>
           <option value="MLS">MLS</option>
           <option value="UEFA_CHAMPIONS_LEAGUE">Champions League</option>
@@ -1412,7 +1414,19 @@
         { value: "break_points_home", label: "Home Player Break Points Won" },
         { value: "break_points_away", label: "Away Player Break Points Won" }
       ],
-      GOLF: [
+      PGA_MEN: [
+        { value: "points", label: "To Par" },
+        { value: "birdiesOrBetter", label: "Birdies or Better" },
+        { value: "parsOrBetter", label: "Pars or Better" },
+        { value: "strokes", label: "Strokes" }
+      ],
+      LIV_TOUR: [
+        { value: "points", label: "To Par" },
+        { value: "birdiesOrBetter", label: "Birdies or Better" },
+        { value: "parsOrBetter", label: "Pars or Better" },
+        { value: "strokes", label: "Strokes" }
+      ],
+      PGA_WOMEN: [
         { value: "points", label: "To Par" },
         { value: "birdiesOrBetter", label: "Birdies or Better" },
         { value: "parsOrBetter", label: "Pars or Better" },
@@ -1770,7 +1784,9 @@
       "IT_SERIE_B",
       "FR_LIGUE_2",
       "PE_LIGA_1",
-      "GOLF",
+      "PGA_MEN",
+      "LIV_TOUR",
+      "PGA_WOMEN",
       "NCAAB",
       "NCAAF"
     ]);
@@ -1794,6 +1810,11 @@
       "serie b": "IT_SERIE_B",
       "ligue 2": "FR_LIGUE_2",
       "liga 1": "PE_LIGA_1"
+    };
+    const GOLF_DISPLAY_NAME_TO_LEAGUE_ID = {
+      "pga men": "PGA_MEN",
+      "liv golf": "LIV_TOUR",
+      "pga women": "PGA_WOMEN"
     };
     const EXPLICIT_ODDS_LEAGUE_ID_MAP = {
       NBA: "NBA",
@@ -1827,7 +1848,14 @@
       IT_SERIE_B: "IT_SERIE_B",
       FR_LIGUE_2: "FR_LIGUE_2",
       PE_LIGA_1: "PE_LIGA_1",
-      GOLF: "GOLF",
+      GOLF: "PGA_MEN",
+      PGAMEN: "PGA_MEN",
+      PGA_MEN: "PGA_MEN",
+      LIVGOLF: "LIV_TOUR",
+      LIVTOUR: "LIV_TOUR",
+      LIV_TOUR: "LIV_TOUR",
+      PGAWOMEN: "PGA_WOMEN",
+      PGA_WOMEN: "PGA_WOMEN",
       NCAAB: "NCAAB",
       NCAAF: "NCAAF"
     };
@@ -1956,6 +1984,9 @@
       const displayKey = raw.toLowerCase().replace(/\s+/g, " ").trim();
       if (SOCCER_DISPLAY_NAME_TO_LEAGUE_ID[displayKey]) {
         return SOCCER_DISPLAY_NAME_TO_LEAGUE_ID[displayKey];
+      }
+      if (GOLF_DISPLAY_NAME_TO_LEAGUE_ID[displayKey]) {
+        return GOLF_DISPLAY_NAME_TO_LEAGUE_ID[displayKey];
       }
       const compactKey = raw.toUpperCase().replace(/[\s-]+/g, "");
       const underscoredKey = raw.toUpperCase().replace(/[\s-]+/g, "_");
@@ -2306,7 +2337,7 @@
               ? "No NBA + MLB props available yet for this selection."
              : (leagueID === "ATP" || leagueID === "WTA")
               ? "No tennis props available yet for this selection."
-            : leagueID === "GOLF"
+            : (leagueID === "PGA_MEN" || leagueID === "LIV_TOUR" || leagueID === "PGA_WOMEN")
               ? "No golf props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
           oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;
@@ -3235,7 +3266,7 @@
             ? "No NBA + MLB props available yet for this selection."
            : (leagueID === "ATP" || leagueID === "WTA")
             ? "No tennis props available yet for this selection."
-          : leagueID === "GOLF"
+          : (leagueID === "PGA_MEN" || leagueID === "LIV_TOUR" || leagueID === "PGA_WOMEN")
             ? "No golf props available yet for this selection."
             : "No props available yet for this selection.<br/>Player props may appear closer to game time.";
         oddsResultsSection.innerHTML = `<div class="empty">${emptyMessage}</div>`;

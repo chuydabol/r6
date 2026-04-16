@@ -312,7 +312,9 @@ const SUPPORTED_LEAGUE_IDS = new Set([
   "IT_SERIE_B",
   "FR_LIGUE_2",
   "PE_LIGA_1",
-  "GOLF",
+  "PGA_MEN",
+  "LIV_TOUR",
+  "PGA_WOMEN",
   "NCAAB",
   "NCAAF"
 ]);
@@ -347,7 +349,14 @@ const EXPLICIT_LEAGUE_ID_MAP = {
   IT_SERIE_B: "IT_SERIE_B",
   FR_LIGUE_2: "FR_LIGUE_2",
   PE_LIGA_1: "PE_LIGA_1",
-  GOLF: "GOLF",
+  GOLF: "PGA_MEN",
+  PGAMEN: "PGA_MEN",
+  PGA_MEN: "PGA_MEN",
+  LIVGOLF: "LIV_TOUR",
+  LIVTOUR: "LIV_TOUR",
+  LIV_TOUR: "LIV_TOUR",
+  PGAWOMEN: "PGA_WOMEN",
+  PGA_WOMEN: "PGA_WOMEN",
   NCAAB: "NCAAB",
   NCAAF: "NCAAF",
   BASKETBALL_NBA: "NBA",
@@ -379,7 +388,9 @@ const LEAGUE_ALIAS_MAP = {
   IT_SERIE_B: ["IT_SERIE_B", "SERIE B"],
   FR_LIGUE_2: ["FR_LIGUE_2", "LIGUE 2"],
   PE_LIGA_1: ["PE_LIGA_1", "LIGA 1"],
-  GOLF: ["GOLF"],
+  PGA_MEN: ["PGA_MEN", "PGA MEN", "GOLF", "PGA TOUR", "PGA"],
+  LIV_TOUR: ["LIV_TOUR", "LIV TOUR", "LIV GOLF"],
+  PGA_WOMEN: ["PGA_WOMEN", "PGA WOMEN", "LPGA"],
   NCAAB: ["NCAAB", "NCAA-M", "NCAA_BASKETBALL"],
   NCAAF: ["NCAAF", "NCAA_FOOTBALL"]
 };
@@ -572,6 +583,7 @@ const GOLF_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "parsorbetter",
   "strokes"
 ]);
+const GOLF_LEAGUE_IDS = new Set(["PGA_MEN", "LIV_TOUR", "PGA_WOMEN"]);
 const MLB_PRIZEPICKS_SUPPORTED_STATS = new Set([
   "points",
   "fantasyscore",
@@ -1100,7 +1112,7 @@ function normalizeSportsGameOddsResponse(events, options) {
             ? isPrizePicksSupportedTennis(statID, periodID, betTypeID, statEntityID)
            : SOCCER_LEAGUE_IDS.has(options.leagueID)
             ? isPrizePicksSupportedSoccer(statID, betTypeID)
-          : options.leagueID === "GOLF"
+          : GOLF_LEAGUE_IDS.has(options.leagueID)
             ? isPrizePicksSupportedGolf(statID, periodID, betTypeID, normalizedPlayerID)
             : false;
         const prizePicksMatchKey = buildPrizePicksMatchKey({ eventID, playerIDRaw: normalizedPlayerID, statID, periodID, betTypeID });
@@ -1819,7 +1831,9 @@ app.get("/api/odds-comparison", async (req, res) => {
     IT_SERIE_B: "IT_SERIE_B",
     FR_LIGUE_2: "FR_LIGUE_2",
     PE_LIGA_1: "PE_LIGA_1",
-    GOLF: "GOLF",
+    PGA_MEN: "PGA_MEN",
+    LIV_TOUR: "LIV_TOUR",
+    PGA_WOMEN: "PGA_WOMEN",
     ATP: "ATP",
     WTA: "WTA",
     NCAAB: "NCAAB",
@@ -1943,7 +1957,9 @@ app.get("/api/game-lines", async (req, res) => {
     IT_SERIE_B: "IT_SERIE_B",
     FR_LIGUE_2: "FR_LIGUE_2",
     PE_LIGA_1: "PE_LIGA_1",
-    GOLF: "GOLF",
+    PGA_MEN: "PGA_MEN",
+    LIV_TOUR: "LIV_TOUR",
+    PGA_WOMEN: "PGA_WOMEN",
     ATP: "ATP",
     WTA: "WTA",
     NCAAB: "NCAAB",
