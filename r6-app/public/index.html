@@ -1510,6 +1510,13 @@
       { key: "fanduel", label: "FanDuel", weight: 1.00, tier: 2, aliases: ["fanduel"] },
       { key: "draftkings", label: "DraftKings", weight: 1.00, tier: 2, aliases: ["draftkings"] }
     ];
+    const TENNIS_BASE_BOOK_WEIGHT = 0.78;
+    const TENNIS_BOOK_WEIGHT_BONUS_BY_KEY = {
+      pinnacle: 0.20,
+      betonline: 0.16,
+      fanduel: 0.10,
+      draftkings: 0.10
+    };
     const DISPLAY_CORE_BOOKS = [
       { key: "fanduel", label: "FanDuel", aliases: ["fanduel"] },
       { key: "draftkings", label: "DraftKings", aliases: ["draftkings"] },
@@ -2646,6 +2653,14 @@
           availableBooks
         };
       }
+      if (leagueID === "ATP" || leagueID === "WTA") {
+        const availableSportsbooks = safeNumeric(row?.availableSportsbookCount);
+        return {
+          pass: Number.isFinite(availableSportsbooks) && availableSportsbooks >= 1,
+          reason: "tennis-min-one-sportsbook",
+          availableBooks: availableSportsbooks
+        };
+      }
       if (coverageScore >= 0.30) return { pass: true, reason: "default-coverage-score", availableBooks };
       return {
         pass: totalAvailableWeight >= 0.22 && (safeNumeric(row?.recommendedProbability) >= 0.54),
@@ -3108,6 +3123,21 @@
         else if (periodIsSegment && valueEdgeOverCoinFlip < 0.075) score -= 1.5;
         return score;
       }
+      if (leagueID === "ATP" || leagueID === "WTA") {
+        const lineEdgeStrength = Math.max(0, safeNumeric(row?.recommendedProbability) - 0.5);
+        const oddsSupportStrength = Math.max(0, Math.min(1, (safeNumeric(row?.strongestBookSignal) + safeNumeric(row?.agreementStrength)) / 2));
+        const qualityBonus = Math.max(0, Math.min(1, safeNumeric(row?.qualityWeightRatio)));
+        const coverageCount = safeNumeric(row?.availableSportsbookCount);
+        const softCoverageBonus = Number.isFinite(coverageCount)
+          ? Math.min(0.06, Math.max(0, (coverageCount - 1) * 0.02))
+          : 0;
+        return (
+          (lineEdgeStrength * 100)
+          + (oddsSupportStrength * 12)
+          + (qualityBonus * 4)
+          + (softCoverageBonus * 100)
+        );
+      }
       if (leagueID !== "MLB") return valuePercent;
       let score = (
         (dominantLineDiffScore * 0.42)
@@ -3295,7 +3325,7 @@
             <tbody>
               ${rows.map(row => `
                 <tr>
-                  <td>PrizePicks vs Core Books</td>
+                  <td>${(String(row?.leagueID || "").toUpperCase() === "ATP" || String(row?.leagueID || "").toUpperCase() === "WTA") ? "PrizePicks vs Sportsbooks" : "PrizePicks vs Core Books"}</td>
                   <td><span class="pill">${escapeHtml(String(row.sport || row.leagueID || "N/A").toUpperCase())}</span></td>
                   <td>
                     <div><strong>${escapeHtml(row.playerName || "Unknown Player")}</strong></div>
@@ -3309,6 +3339,8 @@
                       Coverage: ${escapeHtml(row.coverageLabel)}
                       <br/>
                       <span class="muted">Market Coverage: ${Math.round(row.marketCoveragePercent)}%</span>
+                      <br/>
+                      <span class="muted">Sportsbooks: ${Number.isFinite(safeNumeric(row.availableSportsbookCount)) ? Math.floor(safeNumeric(row.availableSportsbookCount)) : 0}</span>
                       <br/>
                       <span class="muted">Strongest: ${escapeHtml(row.strongestBookLabel || "N/A")} ${Number.isFinite(row.strongestBookLine) ? row.strongestBookLine.toFixed(1) : ""} ${escapeHtml(row.strongestBookOddsLabel || "")}</span>
                       <br/>
@@ -3350,6 +3382,7 @@
       const soccerShiftPer1 = getSoccerShiftPer1(normalizedStatID);
       const mlbShiftPer1 = getMLBShiftPer1(normalizedStatID);
       const tennisShiftPer1 = getTennisShiftPer1(normalizedStatID);
+      const isTennisLeague = prop?.leagueID === "ATP" || prop?.leagueID === "WTA";
       const isTennisSupportedMarket = TENNIS_MARKET_WHITELIST.has(tennisMarketID);
       const isTennisLaunchVisibleMarket = TENNIS_VISIBLE_LAUNCH_MARKETS.has(tennisMarketID);
       const coreBooks = {};
@@ -3362,10 +3395,10 @@
         return sum + book.weight;
       }, 0);
 
-      const weightedParts = GLOBAL_BOOK_WEIGHTS
-        .map(book => ({
-          config: book,
-          line: findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
+      const weightedParts = (isTennisLeague ? buildTennisBookConfigs(prop?.books || []) : GLOBAL_BOOK_WEIGHTS)
+        .map(bookConfig => ({
+          config: bookConfig,
+          line: findBookLineByConfig(prop?.books || [], bookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
         }))
         .filter(item =>
           item.line
@@ -3384,12 +3417,20 @@
         .filter(item => item.config.tier === 1)
         .reduce((sum, item) => sum + item.config.weight, 0);
       const topTierWeightRatio = TOTAL_TOP_TIER_WEIGHT > 0 ? topTierWeightPresent / TOTAL_TOP_TIER_WEIGHT : 0;
-      const totalWeightRatio = TOTAL_BOOK_WEIGHT > 0 ? totalWeight / TOTAL_BOOK_WEIGHT : 0;
-      const qualityWeightRatio = TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT > 0 ? qualityAdjustedWeight / TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT : 0;
+      const totalWeightDenominator = isTennisLeague
+        ? Math.max(totalWeight, TENNIS_BASE_BOOK_WEIGHT)
+        : TOTAL_BOOK_WEIGHT;
+      const qualityWeightDenominator = isTennisLeague
+        ? Math.max(qualityAdjustedWeight, TENNIS_BASE_BOOK_WEIGHT)
+        : TOTAL_QUALITY_ADJUSTED_BOOK_WEIGHT;
+      const totalWeightRatio = totalWeightDenominator > 0 ? totalWeight / totalWeightDenominator : 0;
+      const qualityWeightRatio = qualityWeightDenominator > 0 ? qualityAdjustedWeight / qualityWeightDenominator : 0;
       const coverageScore = Math.max(0, Math.min(1, (qualityWeightRatio * 0.75) + (totalWeightRatio * 0.25)));
       const isMLBLeague = String(prop?.leagueID || "").trim().toUpperCase() === "MLB";
       const coreBookCoverageRatio = DISPLAY_CORE_BOOKS.length > 0 ? availableCoreBookCount / DISPLAY_CORE_BOOKS.length : 0;
-      const coverageLabel = `${availableCoreBookCount}/${DISPLAY_CORE_BOOKS.length} core books`;
+      const coverageLabel = isTennisLeague
+        ? `${weightedParts.length} sportsbook${weightedParts.length === 1 ? "" : "s"}`
+        : `${availableCoreBookCount}/${DISPLAY_CORE_BOOKS.length} core books`;
       let weightedOverProbability = Number.NaN;
       let weightedUnderProbability = Number.NaN;
       let weightedFairOverProbability = Number.NaN;
@@ -3424,7 +3465,6 @@
       const consensusUnderProbability = 1 - consensusOverProbability;
       const baseRecommendedProbability = Math.max(consensusOverProbability, consensusUnderProbability);
       const baseEdge = Number.isFinite(baseRecommendedProbability) ? Math.max(0, baseRecommendedProbability - 0.5) : 0;
-      const isTennisLeague = prop?.leagueID === "ATP" || prop?.leagueID === "WTA";
       const disagreementPenalty = isTennisLeague
         ? Math.max(0.74, 1 - (disagreementScore * 0.24))
         : Math.max(0.60, 1 - (disagreementScore * 0.40));
@@ -3436,7 +3476,9 @@
         ? 0.90 + (coverageScore * 0.10)
         : isNBALeague
           ? 0.94 + (coverageScore * 0.04)
-          : 0.84 + (coverageScore * 0.16);
+          : isTennisLeague
+            ? 0.96 + (coverageScore * 0.04)
+            : 0.84 + (coverageScore * 0.16);
       const sharpBookPenalty = 0.65 + (Math.max(0, Math.min(1, topTierWeightRatio)) * 0.35);
       const mixedSignalEdgePenalty = isNBALeague
         ? Math.max(
@@ -3580,14 +3622,21 @@
         || prizePicksAgeMs <= (staleThresholdMs * 2);
       const rawValue = Number.isFinite(recommendedProbability) ? recommendedProbability : Number.NaN;
       const coverageMultiplier = 0.80 + (Math.max(0, Math.min(1, coverageScore)) * 0.20);
+      const tennisCoverageMultiplier = 0.96 + (Math.max(0, Math.min(1, coverageScore)) * 0.04);
       const marketWeight = isNBALeagueForEdgeModel ? getNBAMarketWeight(prop?.statID) : 1.0;
       const periodWeight = isNBALeagueForEdgeModel ? getNBAPeriodWeight(prop?.periodID) : 1.0;
       const weightedFinalValue = Number.isFinite(rawValue)
-        ? (rawValue * coverageMultiplier * marketWeight * periodWeight)
+        ? (rawValue * (isTennisLeague ? tennisCoverageMultiplier : coverageMultiplier) * marketWeight * periodWeight)
         : Number.NaN;
       const finalValue = Number.isFinite(weightedFinalValue)
         ? Math.max(0.5, weightedFinalValue)
         : Number.NaN;
+
+      const tennisSignalTypeLabel = isTennisLeague
+        ? (weightedParts.length <= 1
+          ? "Single-book edge"
+          : (safeNumeric(strongestBookMetrics.agreementCount) >= 3 ? "Consensus edge" : "Multi-book edge"))
+        : null;
 
       return {
         ...prop,
@@ -3605,6 +3654,7 @@
         availableCoreBookCount,
         coreBookWeightPresent,
         availableCoreBooks: weightedParts.length,
+        availableSportsbookCount: weightedParts.length,
         coreBookCoverageRatio,
         totalAvailableWeight: totalWeight,
         qualityAdjustedWeight,
@@ -3642,7 +3692,7 @@
         strongestBookUsedForRanking: strongestBookMetrics?.strongestBook?.bookmakerID || null,
         agreementCount: safeNumeric(strongestBookMetrics.agreementCount),
         agreementCountLabel: `${safeNumeric(strongestBookMetrics.agreementCount) || 0}/${safeNumeric(strongestBookMetrics.totalBooks) || 0} books`,
-        signalTypeLabel: strongestBookMetrics.signalType || "Mixed signal",
+        signalTypeLabel: tennisSignalTypeLabel || strongestBookMetrics.signalType || "Mixed signal",
         bestCoreLineDiffAbs: safeNumeric(strongestBookMetrics.bestLineDiffAbs),
         bestCoreBookLineEdge: safeNumeric(strongestBookMetrics.bestCoreBookLineEdge),
         blendedLineDiffAbs: weightedLineDiffAbs,
@@ -3709,6 +3759,23 @@
         adjustedUnderProbability,
         lineDiff
       };
+    }
+
+    function buildTennisBookConfigs(books) {
+      const source = Array.isArray(books) ? books : [];
+      return source.map((book, index) => {
+        const bookmakerID = String(book?.bookmakerID || "").trim().toLowerCase();
+        const key = bookmakerID || `book-${index + 1}`;
+        const label = String(book?.bookmakerTitle || bookmakerID || `Book ${index + 1}`).trim();
+        const bonus = TENNIS_BOOK_WEIGHT_BONUS_BY_KEY[bookmakerID] ?? 0;
+        return {
+          key,
+          label,
+          weight: TENNIS_BASE_BOOK_WEIGHT + bonus,
+          tier: bonus > 0.14 ? 1 : bonus > 0.08 ? 2 : 3,
+          aliases: [key]
+        };
+      });
     }
 
     function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
