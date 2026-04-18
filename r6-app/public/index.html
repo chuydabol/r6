@@ -1157,7 +1157,7 @@
     </div>
 
     <div id="oddsComparisonView" class="card hidden-section">
-      <h2>PrizePicks Prop Comparison Board</h2>
+      <h2>DFS Prop Comparison Board</h2>
       <div class="odds-topbar">
         <div id="oddsLastUpdated" class="timestamp-pill">Last updated: Never</div>
         <div class="odds-actions">
@@ -1172,6 +1172,10 @@
         <select id="oddsBoardModeSelect" onchange="setOddsBoardMode(this.value)">
           <option value="props">Props</option>
           <option value="gameLines">Game Lines</option>
+        </select>
+        <select id="oddsDfsSourceSelect" onchange="setOddsDfsSource(this.value)">
+          <option value="prizepicks">PrizePicks</option>
+          <option value="sleeper">Sleeper</option>
         </select>
         <select id="oddsLeagueSelect">
           <option value="NBA">NBA</option>
@@ -1254,6 +1258,7 @@
     const viewBtnR6 = document.getElementById("viewBtnR6");
     const viewBtnOdds = document.getElementById("viewBtnOdds");
     const oddsBoardModeSelect = document.getElementById("oddsBoardModeSelect");
+    const oddsDfsSourceSelect = document.getElementById("oddsDfsSourceSelect");
     const oddsLeagueSelect = document.getElementById("oddsLeagueSelect");
     const oddsStatSelect = document.getElementById("oddsStatSelect");
     const gameLinesMarketSelect = document.getElementById("gameLinesMarketSelect");
@@ -1300,6 +1305,7 @@
     let oddsStandardGroups = [];
     let oddsVisibleProps = [];
     let oddsSelectedMarket = "all";
+    let selectedDfsSource = "prizepicks";
     let oddsBoardMode = "props";
     let gameLinesSelectedMarket = "sp";
     let gameLinesEvents = [];
@@ -1900,6 +1906,8 @@
       refreshOddsStatOptionsByLeague("NBA");
       oddsBoardMode = "props";
       oddsBoardModeSelect.value = "props";
+      selectedDfsSource = "prizepicks";
+      oddsDfsSourceSelect.value = selectedDfsSource;
       gameLinesMarketSelect.value = "sp";
       oddsSelectedMarket = "all";
       setOddsBoardMode("props");
@@ -1909,6 +1917,9 @@
       });
       oddsBoardModeSelect.addEventListener("change", () => {
         setOddsBoardMode(oddsBoardModeSelect.value);
+      });
+      oddsDfsSourceSelect.addEventListener("change", () => {
+        setOddsDfsSource(oddsDfsSourceSelect.value);
       });
       oddsAutoRefreshToggle.checked = true;
       oddsAutoRefreshToggle.addEventListener("change", () => {
@@ -1933,9 +1944,27 @@
       oddsBoardModeSelect.value = oddsBoardMode;
       const isGameLines = oddsBoardMode === "gameLines";
       oddsStatSelect.style.display = isGameLines ? "none" : "";
+      oddsDfsSourceSelect.style.display = isGameLines ? "none" : "";
       gameLinesMarketSelect.style.display = isGameLines ? "" : "none";
       applyOddsSummaryAndRender();
       updateOddsAutoRefreshMode();
+    }
+
+    function normalizeDfsSource(value) {
+      const normalized = String(value || "prizepicks").trim().toLowerCase();
+      return normalized === "sleeper" ? "sleeper" : "prizepicks";
+    }
+
+    function getDfsSourceLabel(value) {
+      return normalizeDfsSource(value) === "sleeper" ? "Sleeper" : "PrizePicks";
+    }
+
+    function setOddsDfsSource(value) {
+      selectedDfsSource = normalizeDfsSource(value);
+      oddsDfsSourceSelect.value = selectedDfsSource;
+      if (oddsBoardMode === "props") {
+        applyOddsSortingAndRendering();
+      }
     }
 
     function setGameLinesSelectedMarket(value) {
@@ -1966,8 +1995,8 @@
       }, COMBINED_AUTO_REFRESH_MS);
     }
 
-    async function fetchOddsByLeague(leagueID) {
-      const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: "all" });
+    async function fetchOddsByLeague(leagueID, dfsSource = "prizepicks") {
+      const params = new URLSearchParams({ leagueID, marketMode: "standard", statIDs: "all", dfsSource: normalizeDfsSource(dfsSource) });
       const res = await fetch(`/api/odds-comparison?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
@@ -1975,6 +2004,14 @@
         throw new Error((data.message || data.error || "Failed to load sportsbook props") + debugText);
       }
       return data;
+    }
+
+    function fetchPrizePicksProps(leagueID) {
+      return fetchOddsByLeague(leagueID, "prizepicks");
+    }
+
+    function fetchSleeperProps(leagueID) {
+      return fetchOddsByLeague(leagueID, "sleeper");
     }
 
     async function fetchGameLinesByLeague(leagueID, marketType) {
@@ -2260,6 +2297,8 @@
 
     async function loadOddsComparison() {
       const leagueID = normalizeOddsLeagueID(oddsLeagueSelect.value || "NBA") || "NBA";
+      const activeDfsSource = normalizeDfsSource(selectedDfsSource);
+      const fetchDfsPropsByLeague = activeDfsSource === "sleeper" ? fetchSleeperProps : fetchPrizePicksProps;
       if (oddsBoardMode === "gameLines") {
         await loadGameLinesComparison(leagueID);
         return;
@@ -2279,7 +2318,7 @@
         let data;
         let combinedDebug = null;
         if (isCombinedMode) {
-          const [nbaData, mlbData] = await Promise.all([fetchOddsByLeague("NBA"), fetchOddsByLeague("MLB")]);
+          const [nbaData, mlbData] = await Promise.all([fetchDfsPropsByLeague("NBA"), fetchDfsPropsByLeague("MLB")]);
           const nbaRows = Array.isArray(nbaData.groupedStandardProps) ? nbaData.groupedStandardProps : [];
           const mlbRows = Array.isArray(mlbData.groupedStandardProps) ? mlbData.groupedStandardProps : [];
           const mergedRows = [
@@ -2313,7 +2352,7 @@
             refreshTimestamp: new Date().toISOString()
           };
         } else {
-          data = await fetchOddsByLeague(leagueID);
+          data = await fetchDfsPropsByLeague(leagueID);
         }
 
         updateOddsLoading("Parsing player props...");
@@ -2543,7 +2582,7 @@
 
     function passesOddsLaunchPrerequisites(row) {
       if (!Number.isFinite(row?.valuePercent)) return false;
-      if (!Number.isFinite(row?.prizePicksLine)) return false;
+      if (!Number.isFinite(row?.dfsLine)) return false;
       if (!Number.isFinite(row?.totalAvailableWeight) || row.totalAvailableWeight < MIN_REQUIRED_WEIGHT_TO_SHOW) return false;
       if (row?.leagueID === "MLB") {
         if (!row?.isMLBSupportedStat || !row?.isMLBLaunchVisibleStat) return false;
@@ -2688,7 +2727,7 @@
             : 52.2;
       if (!Number.isFinite(valuePercent) || valuePercent < minimumDisplayPercent) return false;
       if (leagueID === "MLB") {
-        return Boolean(row?.prizePicksIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
+        return Boolean(row?.dfsIsCurrent) && valuePercent >= MLB_FILTER_PROFILE.final.minDisplayPercent;
       }
       if (leagueID === "NBA") {
         const qualityWeightRatio = safeNumeric(row?.qualityWeightRatio);
@@ -2712,7 +2751,7 @@
         if (strongTwoBookSignal && valuePercent >= NBA_FILTER_PROFILE.final.twoBookStrongMinValuePercent) return true;
         const hasMeaningfulEdgeSignal = (Number.isFinite(weightedLineDiffAbs) && weightedLineDiffAbs >= 0.35)
           || (Number.isFinite(favoredJuiceStrength) && favoredJuiceStrength >= 0.07);
-        return Boolean(row?.prizePicksIsCurrent)
+        return Boolean(row?.dfsIsCurrent)
           && hasMeaningfulEdgeSignal
           && Number.isFinite(coverageScore)
           && coverageScore >= 0.16
@@ -2721,7 +2760,7 @@
       if (valuePercent >= FINAL_SOLID_MIN_PERCENT) return true;
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
-      return Boolean(row?.prizePicksIsCurrent)
+      return Boolean(row?.dfsIsCurrent)
         && Number.isFinite(coverageScore)
         && coverageScore >= 0.36
         && Number.isFinite(totalAvailableWeight)
@@ -2754,7 +2793,7 @@
         `core3:${stage.rowsWithAtLeastThreeCoreBooks ?? 0}`,
         `core4:${stage.rowsWithAllFourCoreBooks ?? 0}`,
         `core0-removed:${stage.rowsRemovedForZeroCoreBooks ?? 0}`,
-        `pp-fresh:${stage.rowsAfterPPFreshnessFilter ?? 0}`,
+        `dfs-live:${stage.rowsAfterDfsAvailabilityFilter ?? 0}`,
         `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
         `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
         `final:${stage.rowsAfterFinalDisplayThreshold ?? 0}`
@@ -2766,7 +2805,8 @@
       const combinedModeText = combinedDebug
         ? ` • NBA rows: ${combinedDebug.nbaFinalRows} • MLB rows: ${combinedDebug.mlbFinalRows} • Merged rows: ${combinedDebug.mergedFinalRows} • Refresh: ${formatLastUpdated(combinedDebug.refreshTimestamp)}`
         : "";
-      oddsSummary.textContent = `Weighted Sharp Board • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Stage counts ${stageText} • Unique bookmakers: ${booksText}${largestStageText}${combinedModeText}`;
+      const dfsLabel = getDfsSourceLabel(selectedDfsSource);
+      oddsSummary.textContent = `Weighted Sharp Board (${dfsLabel} vs Core Books) • Events loaded: ${oddsSummaryData.eventsLoaded} • Raw book props: ${oddsSummaryData.pairedBookProps} • Stage counts ${stageText} • Unique bookmakers: ${booksText}${largestStageText}${combinedModeText}`;
       oddsLastUpdated.textContent = `Last updated: ${formatLastUpdated(oddsLastUpdatedAt)}`;
     }
 
@@ -2860,12 +2900,12 @@
         zero: 0
       });
       const rawFetchedProps = Number(oddsSummaryData.rawFetchedProps) || 0;
-      const ppFreshnessRowsKept = marketFilteredRows.length;
+      const dfsAvailabilityRowsKept = marketFilteredRows.length;
       const stageCounts = {
         rawFetchedProps,
         groupedBeforeSelectedMarket,
         groupedAfterSelectedMarket: marketFilteredRows.length,
-        rowsAfterPPFreshnessFilter: ppFreshnessRowsKept,
+        rowsAfterDfsAvailabilityFilter: dfsAvailabilityRowsKept,
         rowsAfterLineJuiceConflictPenalty: rowsAfterLineJuiceConflict.length,
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
         rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length,
@@ -2880,7 +2920,7 @@
           selectedMarket,
           groupedBeforeSelectedMarketFilter: groupedBeforeSelectedMarket,
           groupedAfterSelectedMarketFilter: marketFilteredRows.length,
-          afterPPFresh: stageCounts.rowsAfterPPFreshnessFilter,
+          afterDfsAvailability: stageCounts.rowsAfterDfsAvailabilityFilter,
           afterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
           afterCoverage: stageCounts.rowsAfterCoveragePenalty,
           afterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
@@ -2892,12 +2932,12 @@
           removed: Math.max(0, stageCounts.groupedBeforeSelectedMarket - stageCounts.groupedAfterSelectedMarket)
         },
         {
-          stage: "PP freshness",
-          removed: Math.max(0, stageCounts.groupedAfterSelectedMarket - stageCounts.rowsAfterPPFreshnessFilter)
+          stage: "DFS availability",
+          removed: Math.max(0, stageCounts.groupedAfterSelectedMarket - stageCounts.rowsAfterDfsAvailabilityFilter)
         },
         {
           stage: "line/juice conflict",
-          removed: Math.max(0, stageCounts.rowsAfterPPFreshnessFilter - stageCounts.rowsAfterLineJuiceConflictPenalty)
+          removed: Math.max(0, stageCounts.rowsAfterDfsAvailabilityFilter - stageCounts.rowsAfterLineJuiceConflictPenalty)
         },
         {
           stage: "coverage",
@@ -3195,9 +3235,9 @@
       const weightedScore = getLineDiffPriorityScore(weightedLineDiffAbs);
       const strongestSignal = Math.max(0, Math.min(1, safeNumeric(strongestBookSignal)));
       const agreement = Math.max(0, Math.min(1, safeNumeric(agreementStrength)));
-      if (bestLineEdgeModifier >= 0.72 && strongestSignal >= 0.52) return "Favorable PP line + sharp books";
-      if (blendedLineEdgeModifier >= 0.42 && agreement >= 0.72) return "Favorable PP line consensus";
-      if (blendedLineEdgeModifier <= -0.62) return "Bad PP line drag";
+      if (bestLineEdgeModifier >= 0.72 && strongestSignal >= 0.52) return "Favorable DFS line + sharp books";
+      if (blendedLineEdgeModifier >= 0.42 && agreement >= 0.72) return "Favorable DFS line consensus";
+      if (blendedLineEdgeModifier <= -0.62) return "Bad DFS line drag";
       if (bestScore >= 0.74 && strongestSignal >= 0.56) return "Sharp-book edge";
       if (weightedScore >= 0.48 && agreement >= 0.72) return "Consensus edge";
       return "Mixed signal";
@@ -3311,7 +3351,7 @@
           <table class="odds-table">
             <thead>
               <tr>
-                <th>Site / PP</th>
+                <th>Site / DFS</th>
                 <th>Sport</th>
                 <th>Player Info</th>
                 <th>Bet Details</th>
@@ -3322,13 +3362,16 @@
                 <th>DraftKings</th>
                 <th>Pinnacle</th>
                 <th>BetOnline</th>
-                <th>PrizePicks Line</th>
+                <th>DFS Line</th>
               </tr>
             </thead>
             <tbody>
               ${rows.map(row => `
                 <tr>
-                  <td>${(String(row?.leagueID || "").toUpperCase() === "ATP" || String(row?.leagueID || "").toUpperCase() === "WTA") ? "PrizePicks vs Sportsbooks" : "PrizePicks vs Core Books"}</td>
+                  <td>
+                    ${escapeHtml(row?.dfsSourceLabel || getDfsSourceLabel(selectedDfsSource))}
+                    ${(String(row?.leagueID || "").toUpperCase() === "ATP" || String(row?.leagueID || "").toUpperCase() === "WTA") ? " vs Sportsbooks" : " vs Core Books"}
+                  </td>
                   <td><span class="pill">${escapeHtml(String(row.sport || row.leagueID || "N/A").toUpperCase())}</span></td>
                   <td>
                     <div><strong>${escapeHtml(row.playerName || "Unknown Player")}</strong></div>
@@ -3362,7 +3405,10 @@
                   <td>${renderCoreBookCell(row.coreBooks.draftkings)}</td>
                   <td>${renderCoreBookCell(row.coreBooks.pinnacle)}</td>
                   <td>${renderCoreBookCell(row.coreBooks.betonline)}</td>
-                  <td>${Number.isFinite(row.prizePicksLine) ? row.prizePicksLine.toFixed(1) : "N/A"}</td>
+                  <td>
+                    ${Number.isFinite(row.dfsLine) ? row.dfsLine.toFixed(1) : "N/A"}
+                    <div class="muted">${escapeHtml(row?.dfsSourceLabel || getDfsSourceLabel(selectedDfsSource))}</div>
+                  </td>
                 </tr>
               `).join("")}
             </tbody>
@@ -3371,8 +3417,38 @@
       `;
     }
 
+    function getNormalizedDfsOffer(prop, dfsSourceInput) {
+      const dfsSource = normalizeDfsSource(dfsSourceInput);
+      const dfsOffers = prop?.dfsOffers && typeof prop.dfsOffers === "object" ? prop.dfsOffers : {};
+      const directOffer = dfsOffers?.[dfsSource] || prop?.[dfsSource] || null;
+      const fallbackOffer = dfsSource === "prizepicks" ? (prop?.prizepicks || null) : (prop?.sleeper || null);
+      const offer = directOffer || fallbackOffer;
+      const line = safeNumeric(offer?.line);
+      const eventID = String(prop?.eventID || "").trim() || null;
+      const matchup = String(prop?.matchup || prop?.eventName || "").trim() || null;
+      const leagueID = String(prop?.leagueID || "").trim().toUpperCase() || null;
+      return {
+        dfsSource,
+        playerName: String(prop?.playerName || "").trim() || null,
+        playerID: String(prop?.playerIDRaw || "").trim() || null,
+        statID: String(prop?.statID || prop?.marketKey || "").trim() || null,
+        periodID: String(prop?.periodID || "").trim() || null,
+        betTypeID: String(prop?.betTypeID || "").trim() || null,
+        side: null,
+        line,
+        eventID,
+        matchup,
+        leagueID,
+        available: offer?.available !== false,
+        lastUpdatedAt: safeNumeric(offer?.lastUpdatedAt),
+        ageMs: safeNumeric(prop?.[`${dfsSource}AgeMs`]),
+        deeplink: offer?.deeplink || null
+      };
+    }
+
     function buildWeightedOddsRow(prop) {
-      const prizePicksLine = safeNumeric(prop?.prizepicks?.line);
+      const normalizedDfs = getNormalizedDfsOffer(prop, selectedDfsSource);
+      const dfsLine = safeNumeric(normalizedDfs?.line);
       const normalizedStatID = normalizeStatIDKey(prop?.statID || prop?.marketKey);
       const tennisMarketID = [
         String(prop?.statID || "").trim().toLowerCase(),
@@ -3390,7 +3466,7 @@
       const isTennisLaunchVisibleMarket = TENNIS_VISIBLE_LAUNCH_MARKETS.has(tennisMarketID);
       const coreBooks = {};
       DISPLAY_CORE_BOOKS.forEach(book => {
-        coreBooks[book.key] = findBookLineByConfig(prop?.books || [], book, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
+        coreBooks[book.key] = findBookLineByConfig(prop?.books || [], book, dfsLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID);
       });
       const availableCoreBookCount = Object.values(coreBooks).filter(Boolean).length;
       const coreBookWeightPresent = GLOBAL_BOOK_WEIGHTS.reduce((sum, book) => {
@@ -3401,7 +3477,7 @@
       const weightedParts = (isTennisLeague ? buildTennisBookConfigs(prop?.books || []) : GLOBAL_BOOK_WEIGHTS)
         .map(bookConfig => ({
           config: bookConfig,
-          line: findBookLineByConfig(prop?.books || [], bookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
+          line: findBookLineByConfig(prop?.books || [], bookConfig, dfsLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, prop?.leagueID)
         }))
         .filter(item =>
           item.line
@@ -3607,8 +3683,8 @@
       const averageCoreLine = weightedParts.length
         ? weightedParts.reduce((sum, item) => sum + item.line.line, 0) / weightedParts.length
         : Number.NaN;
-      const lineDiffAbs = Number.isFinite(prizePicksLine) && Number.isFinite(averageCoreLine)
-        ? Math.abs(prizePicksLine - averageCoreLine)
+      const lineDiffAbs = Number.isFinite(dfsLine) && Number.isFinite(averageCoreLine)
+        ? Math.abs(dfsLine - averageCoreLine)
         : Number.NaN;
       const rankDriverLabel = getRankDriverLabel({
         bestCoreBookLineEdge: safeNumeric(strongestBookMetrics.bestCoreBookLineEdge),
@@ -3619,10 +3695,10 @@
         agreementStrength: Math.max(0, 1 - disagreementScore)
       });
       const staleThresholdMs = safeNumeric(oddsSummaryData?.stalePrizePicks?.staleThresholdMinutes) * 60 * 1000;
-      const prizePicksAgeMs = safeNumeric(prop?.prizepicksAgeMs);
-      const prizePicksIsCurrent = !Number.isFinite(prizePicksAgeMs)
+      const dfsAgeMs = safeNumeric(normalizedDfs?.ageMs);
+      const dfsIsCurrent = !Number.isFinite(dfsAgeMs)
         || !Number.isFinite(staleThresholdMs)
-        || prizePicksAgeMs <= (staleThresholdMs * 2);
+        || dfsAgeMs <= (staleThresholdMs * 2);
       const rawValue = Number.isFinite(recommendedProbability) ? recommendedProbability : Number.NaN;
       const coverageMultiplier = 0.80 + (Math.max(0, Math.min(1, coverageScore)) * 0.20);
       const tennisCoverageMultiplier = 0.96 + (Math.max(0, Math.min(1, coverageScore)) * 0.04);
@@ -3643,7 +3719,11 @@
 
       return {
         ...prop,
-        prizePicksLine,
+        dfsSource: normalizedDfs.dfsSource,
+        dfsSourceLabel: getDfsSourceLabel(normalizedDfs.dfsSource),
+        dfsLine,
+        dfsLineAgeMs: dfsAgeMs,
+        prizePicksLine: dfsLine,
         normalizedStatID,
         isMLBSupportedStat,
         isMLBLaunchVisibleStat,
@@ -3713,18 +3793,19 @@
         mixedSignalPenalty: safeNumeric(mixedSignalMetrics.mixedSignalPenalty),
         hasCoreConflict: Boolean(mixedSignalMetrics.hasCoreConflict),
         anchorLineSpread: safeNumeric(mixedSignalMetrics.anchorLineSpread),
-        prizePicksIsCurrent,
+        prizePicksIsCurrent: dfsIsCurrent,
+        dfsIsCurrent,
         rawValue,
         coverageMultiplier,
         marketWeight,
         periodWeight,
         finalValue,
         valuePercent: (Number.isFinite(finalValue) ? finalValue : recommendedProbability) * 100,
-        betDetails: `${recommendedSide} ${Number.isFinite(prizePicksLine) ? prizePicksLine.toFixed(1) : "N/A"} ${statLabel}`
+        betDetails: `${recommendedSide} ${Number.isFinite(dfsLine) ? dfsLine.toFixed(1) : "N/A"} ${statLabel}`
       };
     }
 
-    function findBookLineByConfig(books, coreBookConfig, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID) {
+    function findBookLineByConfig(books, coreBookConfig, dfsLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID) {
       const book = (books || []).find(item => {
         const id = String(item?.bookmakerID || "").toLowerCase();
         return coreBookConfig.aliases.some(alias => id.includes(alias));
@@ -3745,7 +3826,7 @@
         fairOverProbability,
         fairUnderProbability,
         bookLine: line,
-        prizePicksLine,
+        dfsLine,
         normalizedStatID,
         soccerShiftPer1,
         mlbShiftPer1,
@@ -3781,11 +3862,11 @@
       });
     }
 
-    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, prizePicksLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
-      if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(prizePicksLine)) {
+    function adjustFairProbabilityForLine({ fairOverProbability, fairUnderProbability, bookLine, dfsLine, normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID }) {
+      if (!Number.isFinite(fairOverProbability) || !Number.isFinite(fairUnderProbability) || !Number.isFinite(bookLine) || !Number.isFinite(dfsLine)) {
         return { adjustedOverProbability: Number.NaN, adjustedUnderProbability: Number.NaN, lineDiff: Number.NaN, signalConflictPenalty: 0 };
       }
-      const lineDiff = prizePicksLine - bookLine;
+      const lineDiff = dfsLine - bookLine;
       const shiftPerUnit = resolveLineShiftPerUnit({ normalizedStatID, soccerShiftPer1, mlbShiftPer1, tennisShiftPer1, leagueID });
       const expectedSideFromLine = lineDiff > 0 ? "under" : lineDiff < 0 ? "over" : "neutral";
       const juiceSide = fairOverProbability >= fairUnderProbability ? "over" : "under";
