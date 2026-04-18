@@ -2604,7 +2604,9 @@
       return true;
     }
 
-    function passesLineJuiceConflictStage(row) {
+    function passesLineJuiceConflictStage(row, options = {}) {
+      const allowMixedSignals = Boolean(options?.allowMixedSignals);
+      if (allowMixedSignals) return true;
       const conflictPenalty = safeNumeric(row?.conflictPenalty);
       const disagreementPenalty = safeNumeric(row?.disagreementPenalty);
       const recommendedProbability = safeNumeric(row?.recommendedProbability);
@@ -2626,7 +2628,10 @@
       return recommendedProbability >= 0.535;
     }
 
-    function evaluateCoverageStage(row) {
+    function evaluateCoverageStage(row, options = {}) {
+      const coreBooksRequired = options?.coreBooksRequired !== false;
+      const minBooks = Number.isFinite(options?.minBooks) ? Math.max(0, options.minBooks) : 0;
+      const skipCoverageFilter = Boolean(options?.skipCoverageFilter);
       const coverageScore = safeNumeric(row?.coverageScore);
       const totalAvailableWeight = safeNumeric(row?.totalAvailableWeight);
       const availableCoreBookCount = safeNumeric(row?.availableCoreBookCount);
@@ -2634,12 +2639,18 @@
         ? availableCoreBookCount
         : safeNumeric(row?.availableCoreBooks);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
+      if (skipCoverageFilter) {
+        if (minBooks > 0 && Number.isFinite(availableBooks) && availableBooks < minBooks) {
+          return { pass: false, reason: "sleeper-min-books", availableBooks };
+        }
+        return { pass: true, reason: "sleeper-skip-coverage", availableBooks };
+      }
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) {
         return { pass: false, reason: "missing-coverage-metrics", availableBooks };
       }
       if (leagueID === "MLB") {
         if (!Number.isFinite(availableBooks)) return { pass: false, reason: "missing-core-book-count", availableBooks };
-        if (availableBooks < 1) return { pass: false, reason: "zero-core-books", availableBooks };
+        if (coreBooksRequired && availableBooks < Math.max(1, minBooks)) return { pass: false, reason: "zero-core-books", availableBooks };
         return { pass: true, reason: "core>=1", availableBooks };
       }
       if (leagueID === "NBA") {
@@ -2711,8 +2722,8 @@
       };
     }
 
-    function passesCoverageStage(row) {
-      return evaluateCoverageStage(row).pass;
+    function passesCoverageStage(row, options = {}) {
+      return evaluateCoverageStage(row, options).pass;
     }
 
     function passesFinalDisplayThreshold(row) {
@@ -2796,6 +2807,9 @@
         `dfs-live:${stage.rowsAfterDfsAvailabilityFilter ?? 0}`,
         `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
         `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
+        ...(normalizeDfsSource(selectedDfsSource) === "sleeper"
+          ? [`sleeper-relaxed:${stage.rowsAfterSleeperRelaxedFilters ?? 0}`]
+          : []),
         `final:${stage.rowsAfterFinalDisplayThreshold ?? 0}`
       ].join(" → ");
       const largestStageText = oddsFilterDebug.largestEliminationStage
@@ -2827,16 +2841,24 @@
     }
 
     function applyOddsSortingAndRendering() {
+      const activeDfsSource = normalizeDfsSource(selectedDfsSource);
+      const isSleeperSource = activeDfsSource === "sleeper";
+      const filteringOptions = {
+        coreBooksRequired: !isSleeperSource,
+        minBooks: isSleeperSource ? 1 : 0,
+        allowMixedSignals: isSleeperSource,
+        skipCoverageFilter: isSleeperSource
+      };
       const selectedMarket = normalizeSelectedMarket(oddsSelectedMarket || oddsStatSelect.value);
       const groupedBeforeSelectedMarket = oddsStandardGroups.length;
       const marketFilteredRows = filterOddsRowsBySelectedMarket(oddsStandardGroups, selectedMarket);
       const scoredRows = marketFilteredRows
         .map(buildWeightedOddsRow)
         .filter(row => passesOddsLaunchPrerequisites(row));
-      const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row));
+      const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row, filteringOptions));
       const coverageEvaluations = rowsAfterLineJuiceConflict.map(row => ({
         row,
-        result: evaluateCoverageStage(row)
+        result: evaluateCoverageStage(row, filteringOptions)
       }));
       const rowsAfterCoveragePenalty = coverageEvaluations
         .filter(item => item.result.pass)
@@ -2915,6 +2937,9 @@
         rowsWithAllFourCoreBooks: coreCoverageStats.allFour,
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       };
+      if (isSleeperSource) {
+        stageCounts.rowsAfterSleeperRelaxedFilters = rowsAfterCoveragePenalty.length;
+      }
       if (selectedMarket !== "all") {
         console.log("ODDS_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
           selectedMarket,
@@ -2949,6 +2974,7 @@
         }
       ].sort((a, b) => b.removed - a.removed);
       oddsFilterDebug = {
+        dfsSource: activeDfsSource,
         selectedMarket,
         groupedBeforeFilter: groupedBeforeSelectedMarket,
         groupedAfterFilter: marketFilteredRows.length,
@@ -2958,6 +2984,7 @@
       };
       console.log("ODDS_STAGE_COUNTS_DEBUG", oddsFilterDebug);
       console.log("ODDS_CORE_BOOK_COVERAGE_DEBUG", {
+        dfsSource: activeDfsSource,
         selectedMarket,
         rowsWithAtLeastOneCoreBook: coreCoverageStats.atLeastOne,
         rowsWithAtLeastTwoCoreBooks: coreCoverageStats.atLeastTwo,
@@ -2965,6 +2992,15 @@
         rowsWithAllFourCoreBooks: coreCoverageStats.allFour,
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       });
+      if (isSleeperSource) {
+        console.log("SLEEPER_RELAXED_FILTER_DEBUG", {
+          selectedMarket,
+          rowsAfterDfsAvailability: stageCounts.rowsAfterDfsAvailabilityFilter,
+          rowsAfterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
+          rowsAfterCoverage: stageCounts.rowsAfterCoveragePenalty,
+          rowsAfterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
+        });
+      }
       const mlbCoverageRows = coverageEvaluations.filter(item => String(item?.row?.leagueID || "").trim().toUpperCase() === "MLB");
       if (mlbCoverageRows.length) {
         const mlbCoverageCounts = mlbCoverageRows.reduce((acc, item) => {
