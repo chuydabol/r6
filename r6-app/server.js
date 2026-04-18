@@ -400,7 +400,8 @@ const SPORTSGAMEODDS_BOOKMAKER_ID_MAP = {
   pinnacle: "pinnacle",
   betonline: "betonline",
   betonlineag: "betonline",
-  prizepicks: "prizepicks"
+  prizepicks: "prizepicks",
+  sleeper: "sleeper"
 };
 const STAT_ALIAS_MAP = {
   points: ["points", "pts", "player_points"],
@@ -1316,7 +1317,8 @@ function normalizeSportsGameOddsResponse(events, options) {
         marketKey: pair.marketKey,
         displayMarketLabel: pair.displayMarketLabel,
         books: [],
-        prizepicks: null
+        prizepicks: null,
+        sleeper: null
       });
     }
 
@@ -1326,6 +1328,17 @@ function normalizeSportsGameOddsResponse(events, options) {
     if (pairTrace?.ppSupported && String(pair.bookmakerID || "").toLowerCase() === "prizepicks") {
       standardGroup.prizepicks = {
         bookmakerID: "prizepicks",
+        line: pair.line,
+        overOdds: pair.overOdds,
+        underOdds: pair.underOdds,
+        available: true,
+        lastUpdatedAt: null,
+        deeplink: null
+      };
+    }
+    if (String(pair.bookmakerID || "").toLowerCase() === "sleeper") {
+      standardGroup.sleeper = {
+        bookmakerID: "sleeper",
         line: pair.line,
         overOdds: pair.overOdds,
         underOdds: pair.underOdds,
@@ -1479,8 +1492,14 @@ function normalizeSportsGameOddsResponse(events, options) {
 
     const prizepicksLastUpdatedAt = Number.isFinite(group.prizepicks?.lastUpdatedAt) ? group.prizepicks.lastUpdatedAt : null;
     const prizepicksAgeMs = Number.isFinite(prizepicksLastUpdatedAt) ? Math.max(0, Date.now() - prizepicksLastUpdatedAt) : null;
+    const sleeperLastUpdatedAt = Number.isFinite(group.sleeper?.lastUpdatedAt) ? group.sleeper.lastUpdatedAt : null;
+    const sleeperAgeMs = Number.isFinite(sleeperLastUpdatedAt) ? Math.max(0, Date.now() - sleeperLastUpdatedAt) : null;
     return {
       ...group,
+      dfsOffers: {
+        prizepicks: group.prizepicks || null,
+        sleeper: group.sleeper || null
+      },
       booksCount,
       normalizedProps: group.books.map(book => ([
         {
@@ -1543,6 +1562,8 @@ function normalizeSportsGameOddsResponse(events, options) {
         : "unsupported_market",
       prizepicksLastUpdatedAt,
       prizepicksAgeMs,
+      sleeperLastUpdatedAt,
+      sleeperAgeMs,
       prizepicksDebug: (trace.rawOddsFound || trace.rawPrizePicksEntries?.length || trace.pairedPrizePicksFound || trace.groupedPrizePicksFound)
         ? {
           rawOddsFound: trace.rawOddsFound,
@@ -1574,21 +1595,32 @@ function normalizeSportsGameOddsResponse(events, options) {
   };
 
   const groupedStandardPropsFiltered = allGroupedStandardProps.filter(group => {
-    const staleReasons = {
+    const prizePicksStaleReasons = {
       missing: !group.prizepicks || !Number.isFinite(group.prizepicks?.line),
       unavailable: group.prizepicks?.available === false,
       lastUpdatedTooOld: Number.isFinite(group.prizepicksLastUpdatedAt)
         ? (Date.now() - group.prizepicksLastUpdatedAt) > PRIZEPICKS_STALE_MS
         : false
     };
-    const removeRow = staleReasons.missing || staleReasons.unavailable || staleReasons.lastUpdatedTooOld;
-    group.prizepicksStaleReasons = staleReasons;
-    group.prizepicksIsLive = !removeRow;
+    const sleeperStaleReasons = {
+      missing: !group.sleeper || !Number.isFinite(group.sleeper?.line),
+      unavailable: group.sleeper?.available === false,
+      lastUpdatedTooOld: Number.isFinite(group.sleeperLastUpdatedAt)
+        ? (Date.now() - group.sleeperLastUpdatedAt) > PRIZEPICKS_STALE_MS
+        : false
+    };
+    const prizepicksIsLive = !(prizePicksStaleReasons.missing || prizePicksStaleReasons.unavailable || prizePicksStaleReasons.lastUpdatedTooOld);
+    const sleeperIsLive = !(sleeperStaleReasons.missing || sleeperStaleReasons.unavailable || sleeperStaleReasons.lastUpdatedTooOld);
+    const removeRow = !prizepicksIsLive && !sleeperIsLive;
+    group.prizepicksStaleReasons = prizePicksStaleReasons;
+    group.sleeperStaleReasons = sleeperStaleReasons;
+    group.prizepicksIsLive = prizepicksIsLive;
+    group.sleeperIsLive = sleeperIsLive;
     if (removeRow) {
       stalePrizePicksDebug.rowsRemoved += 1;
-      if (staleReasons.missing) stalePrizePicksDebug.removedBecauseMissing += 1;
-      if (staleReasons.unavailable) stalePrizePicksDebug.removedBecauseUnavailable += 1;
-      if (staleReasons.lastUpdatedTooOld) stalePrizePicksDebug.removedBecauseLastUpdatedTooOld += 1;
+      if (prizePicksStaleReasons.missing) stalePrizePicksDebug.removedBecauseMissing += 1;
+      if (prizePicksStaleReasons.unavailable) stalePrizePicksDebug.removedBecauseUnavailable += 1;
+      if (prizePicksStaleReasons.lastUpdatedTooOld) stalePrizePicksDebug.removedBecauseLastUpdatedTooOld += 1;
     } else {
       stalePrizePicksDebug.rowsKept += 1;
     }
