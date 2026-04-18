@@ -2604,28 +2604,41 @@
       return true;
     }
 
-    function passesLineJuiceConflictStage(row, options = {}) {
+    function evaluateLineJuiceConflictStage(row, options = {}) {
+      const dfsSource = normalizeDfsSource(options?.dfsSource);
       const allowMixedSignals = Boolean(options?.allowMixedSignals);
-      if (allowMixedSignals) return true;
       const conflictPenalty = safeNumeric(row?.conflictPenalty);
       const disagreementPenalty = safeNumeric(row?.disagreementPenalty);
       const recommendedProbability = safeNumeric(row?.recommendedProbability);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       const isTennis = leagueID === "ATP" || leagueID === "WTA";
-      if (!Number.isFinite(conflictPenalty) || !Number.isFinite(disagreementPenalty)) return false;
+      if (!Number.isFinite(conflictPenalty) || !Number.isFinite(disagreementPenalty)) {
+        const isConflict = true;
+        if (dfsSource === "sleeper") {
+          return { pass: true, conflict: isConflict };
+        }
+        return { pass: false, conflict: isConflict };
+      }
+      if (allowMixedSignals) return { pass: true, conflict: false };
+      let pass = false;
       if (isTennis) {
         const severeContradiction = conflictPenalty <= 0.56 && disagreementPenalty <= 0.62 && recommendedProbability < 0.525;
-        return !severeContradiction;
-      }
-      if (leagueID === "MLB") {
+        pass = !severeContradiction;
+      } else if (leagueID === "MLB") {
         if (
           conflictPenalty >= MLB_FILTER_PROFILE.lineJuice.minConflictPenalty
           && disagreementPenalty >= MLB_FILTER_PROFILE.lineJuice.minDisagreementPenalty
-        ) return true;
-        return recommendedProbability >= MLB_FILTER_PROFILE.lineJuice.minRecommendedProbabilityFallback;
+        ) pass = true;
+        else pass = recommendedProbability >= MLB_FILTER_PROFILE.lineJuice.minRecommendedProbabilityFallback;
+      } else {
+        if (conflictPenalty >= 0.68 && disagreementPenalty >= 0.66) pass = true;
+        else pass = recommendedProbability >= 0.535;
       }
-      if (conflictPenalty >= 0.68 && disagreementPenalty >= 0.66) return true;
-      return recommendedProbability >= 0.535;
+      const isConflict = !pass;
+      if (dfsSource === "sleeper" && isConflict) {
+        return { pass: true, conflict: true };
+      }
+      return { pass, conflict: isConflict };
     }
 
     function evaluateCoverageStage(row, options = {}) {
@@ -2806,6 +2819,9 @@
         `core0-removed:${stage.rowsRemovedForZeroCoreBooks ?? 0}`,
         `dfs-live:${stage.rowsAfterDfsAvailabilityFilter ?? 0}`,
         `line/juice:${stage.rowsAfterLineJuiceConflictPenalty ?? 0}`,
+        ...(normalizeDfsSource(selectedDfsSource) === "sleeper"
+          ? [`line/juice-flagged:${stage.rowsFlaggedLineJuiceConflict ?? 0}`]
+          : []),
         `coverage:${stage.rowsAfterCoveragePenalty ?? 0}`,
         ...(normalizeDfsSource(selectedDfsSource) === "sleeper"
           ? [`sleeper-relaxed:${stage.rowsAfterSleeperRelaxedFilters ?? 0}`]
@@ -2844,6 +2860,7 @@
       const activeDfsSource = normalizeDfsSource(selectedDfsSource);
       const isSleeperSource = activeDfsSource === "sleeper";
       const filteringOptions = {
+        dfsSource: activeDfsSource,
         coreBooksRequired: !isSleeperSource,
         minBooks: isSleeperSource ? 1 : 0,
         allowMixedSignals: isSleeperSource,
@@ -2855,7 +2872,18 @@
       const scoredRows = marketFilteredRows
         .map(buildWeightedOddsRow)
         .filter(row => passesOddsLaunchPrerequisites(row));
-      const rowsAfterLineJuiceConflict = scoredRows.filter(row => passesLineJuiceConflictStage(row, filteringOptions));
+      let lineJuiceConflictFlaggedCount = 0;
+      const rowsAfterLineJuiceConflict = scoredRows.filter(row => {
+        const evaluation = evaluateLineJuiceConflictStage(row, filteringOptions);
+        if (evaluation?.conflict) {
+          if (isSleeperSource) {
+            row.flags = row.flags || {};
+            row.flags.lineJuiceConflict = true;
+          }
+          lineJuiceConflictFlaggedCount += 1;
+        }
+        return Boolean(evaluation?.pass);
+      });
       const coverageEvaluations = rowsAfterLineJuiceConflict.map(row => ({
         row,
         result: evaluateCoverageStage(row, filteringOptions)
@@ -2929,6 +2957,7 @@
         groupedAfterSelectedMarket: marketFilteredRows.length,
         rowsAfterDfsAvailabilityFilter: dfsAvailabilityRowsKept,
         rowsAfterLineJuiceConflictPenalty: rowsAfterLineJuiceConflict.length,
+        rowsFlaggedLineJuiceConflict: lineJuiceConflictFlaggedCount,
         rowsAfterCoveragePenalty: rowsAfterCoveragePenalty.length,
         rowsAfterFinalDisplayThreshold: rowsAfterFinalThresholdWithFallback.length,
         rowsWithAtLeastOneCoreBook: coreCoverageStats.atLeastOne,
@@ -2947,6 +2976,7 @@
           groupedAfterSelectedMarketFilter: marketFilteredRows.length,
           afterDfsAvailability: stageCounts.rowsAfterDfsAvailabilityFilter,
           afterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
+          lineJuiceConflictsFlagged: stageCounts.rowsFlaggedLineJuiceConflict,
           afterCoverage: stageCounts.rowsAfterCoveragePenalty,
           afterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
         });
@@ -2997,6 +3027,7 @@
           selectedMarket,
           rowsAfterDfsAvailability: stageCounts.rowsAfterDfsAvailabilityFilter,
           rowsAfterLineJuice: stageCounts.rowsAfterLineJuiceConflictPenalty,
+          rowsFlaggedLineJuiceConflict: stageCounts.rowsFlaggedLineJuiceConflict,
           rowsAfterCoverage: stageCounts.rowsAfterCoveragePenalty,
           rowsAfterFinalThreshold: stageCounts.rowsAfterFinalDisplayThreshold
         });
