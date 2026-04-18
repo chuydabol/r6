@@ -2653,9 +2653,6 @@
         : safeNumeric(row?.availableCoreBooks);
       const leagueID = String(row?.leagueID || "").trim().toUpperCase();
       if (skipCoverageFilter) {
-        if (minBooks > 0 && Number.isFinite(availableBooks) && availableBooks < minBooks) {
-          return { pass: false, reason: "sleeper-min-books", availableBooks };
-        }
         return { pass: true, reason: "sleeper-skip-coverage", availableBooks };
       }
       if (!Number.isFinite(coverageScore) || !Number.isFinite(totalAvailableWeight)) {
@@ -2884,19 +2881,24 @@
         }
         return Boolean(evaluation?.pass);
       });
-      const coverageEvaluations = rowsAfterLineJuiceConflict.map(row => ({
+      const dfsLiveRows = rowsAfterLineJuiceConflict;
+      const coverageEvaluations = dfsLiveRows.map(row => ({
         row,
         result: evaluateCoverageStage(row, filteringOptions)
       }));
-      const rowsAfterCoveragePenalty = coverageEvaluations
-        .filter(item => item.result.pass)
-        .map(item => item.row);
+      const rowsAfterCoveragePenalty = isSleeperSource
+        ? dfsLiveRows
+        : coverageEvaluations
+          .filter(item => item.result.pass)
+          .map(item => item.row);
       const leagueID = String(oddsLeagueSelect?.value || "").trim().toUpperCase();
       const isCombinedMode = leagueID === COMBINED_LEAGUE_ID;
       const mlbRowsAfterCoverage = rowsAfterCoveragePenalty.filter(row => String(row?.leagueID || "").trim().toUpperCase() === "MLB");
       const mlbRowsAfterRankFirstSelection = selectMLBRankFirstRows(mlbRowsAfterCoverage);
       let rowsAfterFinalThreshold;
-      if (leagueID === "MLB") {
+      if (isSleeperSource) {
+        rowsAfterFinalThreshold = [...rowsAfterCoveragePenalty];
+      } else if (leagueID === "MLB") {
         rowsAfterFinalThreshold = mlbRowsAfterRankFirstSelection;
       } else if (isCombinedMode) {
         const nonMLBRowsAfterFinalThreshold = rowsAfterCoveragePenalty.filter(row => {
@@ -2967,7 +2969,7 @@
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       };
       if (isSleeperSource) {
-        stageCounts.rowsAfterSleeperRelaxedFilters = rowsAfterCoveragePenalty.length;
+        stageCounts.rowsAfterSleeperRelaxedFilters = dfsLiveRows.length;
       }
       if (selectedMarket !== "all") {
         console.log("ODDS_SELECTED_MARKET_STAGE_COUNTS_DEBUG", {
@@ -3023,6 +3025,7 @@
         rowsRemovedForZeroCoreBooks: coreCoverageStats.zero
       });
       if (isSleeperSource) {
+        console.log("Sleeper rows passing:", dfsLiveRows.length);
         console.log("SLEEPER_RELAXED_FILTER_DEBUG", {
           selectedMarket,
           rowsAfterDfsAvailability: stageCounts.rowsAfterDfsAvailabilityFilter,
