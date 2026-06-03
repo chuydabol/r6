@@ -289,7 +289,7 @@ text-transform: uppercase;
 /* Dashboard Workspace Core Split Frame */
 .dashboard-grid {
 display: grid;
-grid-template-columns: 1.55fr 1fr;
+grid-template-columns: repeat(2, minmax(0, 1fr));
 gap: 24px;
 }
 
@@ -403,6 +403,21 @@ align-items: center;
 gap: 12px;
 font-weight: 600;
 color: #ffffff;
+}
+
+.team-name-stack {
+display: flex;
+flex-direction: column;
+gap: 3px;
+line-height: 1.1;
+}
+
+.team-id {
+color: #64748b;
+font-size: 0.65rem;
+font-weight: 700;
+letter-spacing: 0.7px;
+text-transform: uppercase;
 }
 
 .rank-num {
@@ -676,12 +691,15 @@ grid-template-columns: repeat(2, max-content);
 </tr>
 </thead>
 <tbody>
-<tr class="leader-row">
+<tr class="leader-row" data-team-id="1001">
 <td>
 <div class="team-cell">
 <span class="rank-num">1</span>
 <div class="mini-badge">NY</div>
+<div class="team-name-stack">
 <span>New York Empire</span>
+<span class="team-id">Club ID 1001</span>
+</div>
 </div>
 </td>
 <td class="num-col">12</td>
@@ -696,12 +714,15 @@ grid-template-columns: repeat(2, max-content);
 <div class="form-cell"><span class="form-dot win">W</span><span class="form-dot win">W</span><span class="form-dot draw">D</span></div>
 </td>
 </tr>
-<tr class="qualified-row">
+<tr class="qualified-row" data-team-id="1002">
 <td>
 <div class="team-cell">
 <span class="rank-num">2</span>
 <div class="mini-badge">MU</div>
+<div class="team-name-stack">
 <span>Miami United</span>
+<span class="team-id">Club ID 1002</span>
+</div>
 </div>
 </td>
 <td class="num-col">12</td>
@@ -716,12 +737,15 @@ grid-template-columns: repeat(2, max-content);
 <div class="form-cell"><span class="form-dot win">W</span><span class="form-dot draw">D</span><span class="form-dot win">W</span></div>
 </td>
 </tr>
-<tr>
+<tr data-team-id="1003">
 <td>
 <div class="team-cell">
 <span class="rank-num">3</span>
 <div class="mini-badge">AE</div>
+<div class="team-name-stack">
 <span>Atlanta Elite</span>
+<span class="team-id">Club ID 1003</span>
+</div>
 </div>
 </td>
 <td class="num-col">12</td>
@@ -736,12 +760,15 @@ grid-template-columns: repeat(2, max-content);
 <div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot win">W</span><span class="form-dot win">W</span></div>
 </td>
 </tr>
-<tr>
+<tr data-team-id="1004">
 <td>
 <div class="team-cell">
 <span class="rank-num">4</span>
-<div class="mini-badge">BC</div>
-<span>Boston FC</span>
+<div class="mini-badge">LK</div>
+<div class="team-name-stack">
+<span>London Kings</span>
+<span class="team-id">Club ID 1004</span>
+</div>
 </div>
 </td>
 <td class="num-col">12</td>
@@ -756,67 +783,174 @@ grid-template-columns: repeat(2, max-content);
 <div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot loss">L</span><span class="form-dot win">W</span></div>
 </td>
 </tr>
+<tr data-team-id="1005">
+<td>
+<div class="team-cell">
+<span class="rank-num">5</span>
+<div class="mini-badge">CP</div>
+<div class="team-name-stack">
+<span>Cairo Pharaohs</span>
+<span class="team-id">Club ID 1005</span>
+</div>
+</div>
+</td>
+<td class="num-col">12</td>
+<td class="num-col">3</td>
+<td class="num-col">2</td>
+<td class="num-col">7</td>
+<td class="num-col">15</td>
+<td class="num-col">28</td>
+<td class="num-col">-13</td>
+<td class="num-col" style="font-weight:700;">11</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot draw">D</span><span class="form-dot loss">L</span></div>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
 </div>
 
-<!-- Right Context Area: Scoreboard Fixture Rows -->
+<!-- Right Work Area: Western Standings Table -->
 <div class="panel">
 <div class="panel-title">
-<span>Recent Results</span>
-<span class="live-indicator">Matchday 12</span>
+<span>Western Conference Standings</span>
+<span class="live-indicator">Top 2 Qualify</span>
 </div>
-<div class="fixture-list">
-
-<div class="fixture-row">
-<div class="fixture-team">
+<div class="table-scroll">
+<table class="dense-table">
+<thead>
+<tr>
+<th>Team</th>
+<th class="num-col">PL</th>
+<th class="num-col">W</th>
+<th class="num-col">D</th>
+<th class="num-col">L</th>
+<th class="num-col">GF</th>
+<th class="num-col">GA</th>
+<th class="num-col">GD</th>
+<th class="num-col">PTS</th>
+<th class="num-col">Form</th>
+</tr>
+</thead>
+<tbody>
+<tr class="leader-row" data-team-id="2001">
+<td>
+<div class="team-cell">
+<span class="rank-num">1</span>
 <div class="mini-badge">LA</div>
+<div class="team-name-stack">
 <span>LA FC</span>
-</div>
-<div class="fixture-score-block">3 - 1</div>
-<div class="fixture-team away">
-<span>Titans</span>
-<div class="mini-badge">TT</div>
-</div>
-<div class="fixture-meta">
-<span>Western Conference • Jun 1</span>
-<span class="fixture-status">Final</span>
+<span class="team-id">Club ID 2001</span>
 </div>
 </div>
-
-<div class="fixture-row">
-<div class="fixture-team">
-<div class="mini-badge">NY</div>
-<span>NY Empire</span>
-</div>
-<div class="fixture-score-block">2 - 2</div>
-<div class="fixture-team away">
-<span>Miami U</span>
-<div class="mini-badge">MU</div>
-</div>
-<div class="fixture-meta">
-<span>Eastern Conference • Jun 1</span>
-<span class="fixture-status">Stats Verified</span>
-</div>
-</div>
-
-<div class="fixture-row">
-<div class="fixture-team">
+</td>
+<td class="num-col">12</td>
+<td class="num-col">9</td>
+<td class="num-col">2</td>
+<td class="num-col">1</td>
+<td class="num-col">31</td>
+<td class="num-col">12</td>
+<td class="num-col">+19</td>
+<td class="num-col points-col">29</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot win">W</span><span class="form-dot loss">L</span></div>
+</td>
+</tr>
+<tr class="qualified-row" data-team-id="2002">
+<td>
+<div class="team-cell">
+<span class="rank-num">2</span>
 <div class="mini-badge">SS</div>
-<span>Seattle S</span>
-</div>
-<div class="fixture-score-block">4 - 0</div>
-<div class="fixture-team away">
-<span>Vegas C</span>
-<div class="mini-badge">VC</div>
-</div>
-<div class="fixture-meta">
-<span>Western Conference • May 31</span>
-<span class="fixture-status">Final</span>
+<div class="team-name-stack">
+<span>Seattle Sounders</span>
+<span class="team-id">Club ID 2002</span>
 </div>
 </div>
-
+</td>
+<td class="num-col">12</td>
+<td class="num-col">8</td>
+<td class="num-col">2</td>
+<td class="num-col">2</td>
+<td class="num-col">27</td>
+<td class="num-col">15</td>
+<td class="num-col">+12</td>
+<td class="num-col points-col">26</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot win">W</span><span class="form-dot win">W</span></div>
+</td>
+</tr>
+<tr data-team-id="2003">
+<td>
+<div class="team-cell">
+<span class="rank-num">3</span>
+<div class="mini-badge">VV</div>
+<div class="team-name-stack">
+<span>Vegas Vipers</span>
+<span class="team-id">Club ID 2003</span>
+</div>
+</div>
+</td>
+<td class="num-col">12</td>
+<td class="num-col">6</td>
+<td class="num-col">3</td>
+<td class="num-col">3</td>
+<td class="num-col">22</td>
+<td class="num-col">18</td>
+<td class="num-col">+4</td>
+<td class="num-col" style="font-weight:700;">21</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot loss">L</span><span class="form-dot draw">D</span></div>
+</td>
+</tr>
+<tr data-team-id="2004">
+<td>
+<div class="team-cell">
+<span class="rank-num">4</span>
+<div class="mini-badge">TR</div>
+<div class="team-name-stack">
+<span>Tokyo Neo Ronin</span>
+<span class="team-id">Club ID 2004</span>
+</div>
+</div>
+</td>
+<td class="num-col">12</td>
+<td class="num-col">4</td>
+<td class="num-col">4</td>
+<td class="num-col">4</td>
+<td class="num-col">18</td>
+<td class="num-col">20</td>
+<td class="num-col">-2</td>
+<td class="num-col" style="font-weight:700;">16</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot draw">D</span><span class="form-dot loss">L</span></div>
+</td>
+</tr>
+<tr data-team-id="2005">
+<td>
+<div class="team-cell">
+<span class="rank-num">5</span>
+<div class="mini-badge">BH</div>
+<div class="team-name-stack">
+<span>Bangkok Hydras</span>
+<span class="team-id">Club ID 2005</span>
+</div>
+</div>
+</td>
+<td class="num-col">12</td>
+<td class="num-col">2</td>
+<td class="num-col">3</td>
+<td class="num-col">7</td>
+<td class="num-col">14</td>
+<td class="num-col">29</td>
+<td class="num-col">-15</td>
+<td class="num-col" style="font-weight:700;">9</td>
+<td class="num-col">
+<div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot loss">L</span><span class="form-dot draw">D</span></div>
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 
