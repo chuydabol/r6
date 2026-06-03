@@ -1,0 +1,26 @@
+{
+  "conferences": [
+    {
+      "id": "east",
+      "name": "Eastern Conference",
+      "teams": [
+        { "id": 1001, "name": "New York Empire", "shortName": "NY", "conference": "Eastern Conference" },
+        { "id": 1002, "name": "Miami United", "shortName": "MU", "conference": "Eastern Conference" },
+        { "id": 1003, "name": "Atlanta Elite", "shortName": "AE", "conference": "Eastern Conference" },
+        { "id": 1004, "name": "London Kings", "shortName": "LK", "conference": "Eastern Conference" },
+        { "id": 1005, "name": "Cairo Pharaohs", "shortName": "CP", "conference": "Eastern Conference" }
+      ]
+    },
+    {
+      "id": "west",
+      "name": "Western Conference",
+      "teams": [
+        { "id": 2001, "name": "LA FC", "shortName": "LA", "conference": "Western Conference" },
+        { "id": 2002, "name": "Seattle Sounders", "shortName": "SS", "conference": "Western Conference" },
+        { "id": 2003, "name": "Vegas Vipers", "shortName": "VV", "conference": "Western Conference" },
+        { "id": 2004, "name": "Tokyo Neo Ronin", "shortName": "TR", "conference": "Western Conference" },
+        { "id": 2005, "name": "Bangkok Hydras", "shortName": "BH", "conference": "Western Conference" }
+      ]
+    }
+  ]
+}
