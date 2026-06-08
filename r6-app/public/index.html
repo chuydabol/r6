@@ -3,1270 +3,585 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>United Pro Clubs League - Dashboard</title>
-
+<title>UPCL EAFC League Hub</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet">
-
 <style>
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-body{
-font-family:'Orbitron', sans-serif;
-background-color: #05060c;
-background-image:
-  radial-gradient(circle at 0% 35%, rgba(0, 240, 255, 0.02) 0%, transparent 46%),
-  radial-gradient(circle at 100% 28%, rgba(188, 0, 255, 0.02) 0%, transparent 48%),
-  linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
-  linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
-background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
-color: #e2e8f0;
-overflow-x:hidden;
-min-height: 100vh;
-position: relative;
+:root {
+  --bg: #05060c;
+  --panel: #0e1017;
+  --panel-soft: #11131a;
+  --line: rgba(188, 0, 255, 0.1);
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --cyan: #00f0ff;
+  --pink: #ff0077;
+  --pink-soft: #ff4f9d;
 }
 
-body::before {
-content: '';
-position: fixed;
-top: -180px;
-left: 50%;
-width: min(900px, 100vw);
-height: 420px;
-background:
-  radial-gradient(circle at 20% 0%, rgba(0, 240, 255, 0.025), transparent 64%),
-  radial-gradient(circle at 80% 0%, rgba(188, 0, 255, 0.025), transparent 68%);
-filter: blur(38px);
-transform: translateX(-50%);
-pointer-events: none;
-z-index: 0;
+body {
+  font-family: 'Orbitron', sans-serif;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 0% 30%, rgba(0, 240, 255, 0.04) 0%, transparent 45%),
+    radial-gradient(circle at 100% 15%, rgba(255, 0, 119, 0.05) 0%, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 34px 34px, 34px 34px;
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
-/* Base Wrapper Blueprint Layout */
-.app-layout {
-max-width: 1300px;
-margin: 0 auto;
-padding: 0 20px 60px 20px;
-position: relative;
-z-index: 1;
-}
-
-/* Header Navigation Bar */
 header {
-background: #0d0d12;
-border-bottom: 1px solid #1c1c27;
-position: sticky;
-top: 0;
-z-index: 100;
+  background: rgba(13, 13, 18, 0.92);
+  border-bottom: 1px solid #1c1c27;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(14px);
+}
+
+.top-nav,
+.app-layout {
+  max-width: 1300px;
+  margin: 0 auto;
 }
 
 .top-nav {
-max-width: 1300px;
-margin: auto;
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  gap: 18px;
 }
 
-/* Modern Branding Brand Row with Embedded Mini Logo Accent */
 .brand-wrapper {
-display: flex;
-align-items: center;
-gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .mini-brand-badge {
-width: 32px;
-height: 32px;
-background-image: url("image_9da815.jpg");
-background-size: scale-down;
-background-position: center;
-background-repeat: no-repeat;
-border-radius: 4px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 240, 255, 0.26);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--cyan);
+  font-weight: 900;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.12);
 }
 
 .brand {
-font-size: 1.2rem;
-font-weight: 700;
-color: #ffffff;
-text-shadow: none;
-letter-spacing: 1px;
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 1px;
 }
 
 nav {
-display: flex;
-gap: 24px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
 }
 
 nav a {
-text-decoration: none;
-color: #64748b;
-font-size: 0.85rem;
-font-weight: 600;
-transition: color .2s, text-shadow .2s;
-text-transform: uppercase;
-letter-spacing: 1px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
 }
 
 nav a:hover {
-color: white;
-text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+  color: #ffffff;
 }
 
-/* App Profile Hub Banner Frame */
+.app-layout {
+  padding: 26px 20px 60px;
+}
+
 .hub-banner {
-background-image: url("data/upclbanner.jpg") !important;
-background-size: cover;
-background-position: center center;
-background-repeat: no-repeat;
-border: 1px solid rgba(188, 0, 255, 0.08);
-border-radius: 12px;
-min-height: 240px;
-padding: 18px;
-margin-bottom: 28px;
-position: relative;
-box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-display: flex;
-align-items: flex-end;
-overflow: hidden;
+  background-image: linear-gradient(90deg, rgba(5, 6, 12, 0.86), rgba(5, 6, 12, 0.25)), url("/data/upclbanner.jpg");
+  background-size: cover;
+  background-position: center;
+  min-height: 285px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.42);
+  margin-bottom: 24px;
 }
 
-.hub-profile {
-width: 100%;
-display: grid;
-grid-template-columns: 1fr auto;
-align-items: end;
-gap: 16px;
-position: relative;
-z-index: 1;
+.hub-copy {
+  width: min(780px, 100%);
+  padding: 28px;
+}
+
+.kicker,
+.hub-pill,
+.live-indicator,
+.fixture-status,
+.player-stat-label {
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.hub-copy h1 {
+  color: #ffffff;
+  font-size: clamp(2rem, 4vw, 4rem);
+  line-height: 0.95;
+  margin: 10px 0 14px;
+  text-transform: uppercase;
+}
+
+.hub-copy p {
+  color: #cbd5e1;
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.65;
+  max-width: 650px;
+}
+
+.hub-meta,
+.sub-tabs,
+.metric-grid,
+.dashboard-grid,
+.fixtures-shell,
+.roster-grid {
+  display: grid;
+  gap: 16px;
 }
 
 .hub-meta {
-display: grid;
-grid-template-columns: repeat(4, max-content);
-gap: 8px;
-align-items: center;
-margin-bottom: 0;
+  grid-template-columns: repeat(auto-fit, minmax(155px, max-content));
+  margin-top: 20px;
 }
 
 .hub-pill,
-.matchday-badge,
-.qualify-badge {
-background: rgba(255, 0, 119, 0.09);
-border: 1px solid rgba(255, 0, 119, 0.42);
-color: #ff4f9d;
-box-shadow: inset 0 0 14px rgba(255, 0, 119, 0.05);
-border-radius: 6px;
-padding: 6px 10px;
-font-size: 0.72rem;
-font-weight: 700;
-letter-spacing: 0.7px;
-text-transform: uppercase;
+.live-indicator {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  border-radius: 999px;
+  padding: 7px 11px;
 }
 
-.hub-actions {
-display: grid;
-grid-template-columns: repeat(2, max-content);
-gap: 12px;
-align-items: center;
-justify-content: end;
-}
-
-.hub-btn {
-background: rgba(5, 6, 12, 0.76);
-color: #ffffff;
-border: 1px solid rgba(0, 240, 255, 0.24);
-padding: 8px 18px;
-border-radius: 8px;
-font-size: 0.8rem;
-font-family: inherit;
-font-weight: 600;
-cursor: pointer;
-text-decoration: none;
-transition: all 0.2s;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-}
-
-.hub-btn:hover {
-background: rgba(0, 240, 255, 0.08);
-border-color: rgba(0, 240, 255, 0.5);
-color: #ffffff;
-}
-
-/* Secondary Inline Filter Telemetry Tracker Tabs */
 .sub-tabs {
-display: flex;
-gap: 4px;
-border-bottom: 2px solid #171721;
-padding-bottom: 0;
-margin-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-bottom: 24px;
 }
 
 .tab-link {
-background: transparent;
-border: none;
-color: #64748b;
-padding: 12px 20px;
-font-family: inherit;
-font-weight: 600;
-font-size: 0.85rem;
-cursor: pointer;
-transition: all 0.2s;
-text-transform: uppercase;
-letter-spacing: 1px;
-position: relative;
-top: 2px;
-border-bottom: 2px solid transparent;
+  background: rgba(14, 16, 23, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 14px 18px;
+  text-transform: uppercase;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
+.tab-link:hover,
 .tab-link.active {
-color: #00f0ff;
-border-bottom: 2px solid #00f0ff;
-text-shadow: 0 0 10px rgba(0, 240, 255, 0.45);
+  border-color: rgba(0, 240, 255, 0.45);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
-.tab-link:hover:not(.active) {
-color: #ffffff;
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  margin-bottom: 24px;
 }
 
-/* Application Counter Metrics Block */
-.metrics-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-gap: 16px;
-margin-bottom: 32px;
+.metric-card,
+.panel,
+.match-card,
+.roster-card {
+  background: rgba(14, 16, 23, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
 }
 
 .metric-card {
-background: #0e1017;
-border: 1px solid rgba(188, 0, 255, 0.08);
-border-radius: 12px;
-padding: 20px;
-box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  padding: 20px;
 }
 
 .metric-label {
-color: #64748b;
-font-size: 0.75rem;
-font-weight: 700;
-letter-spacing: 1px;
-text-transform: uppercase;
-margin-bottom: 8px;
-display: flex;
-align-items: center;
-gap: 6px;
-}
-
-.metric-label::before {
-content: '';
-width: 5px;
-height: 5px;
-background: #64748b;
-border-radius: 50%;
-box-shadow: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 .metric-value {
-font-size: 1.9rem;
-font-weight: 700;
-color: #ffffff;
+  color: #ffffff;
+  font-size: 2.15rem;
+  font-weight: 900;
+  margin-top: 8px;
 }
 
 .metric-note {
-color: #64748b;
-font-size: 0.72rem;
-font-weight: 600;
-letter-spacing: 0.5px;
-margin-top: 6px;
-text-transform: uppercase;
+  color: var(--muted);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.85rem;
+  margin-top: 4px;
 }
 
-/* Dashboard Workspace Core Split Frame */
 .dashboard-grid {
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 24px;
 }
 
 .panel {
-background: #0e1017;
-border: 1px solid rgba(188, 0, 255, 0.08);
-border-radius: 16px;
-padding: 26px;
-box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  padding: 24px;
 }
 
 .panel-title {
-font-size: 1rem;
-font-weight: 700;
-margin-bottom: 24px;
-text-transform: uppercase;
-letter-spacing: 1px;
-color: #ffffff;
-display: flex;
-justify-content: space-between;
-align-items: center;
-border-left: 3px solid rgba(255, 255, 255, 0.12);
-padding-left: 12px;
+  align-items: center;
+  border-left: 3px solid var(--pink);
+  color: #ffffff;
+  display: flex;
+  font-size: 0.95rem;
+  font-weight: 900;
+  justify-content: space-between;
+  letter-spacing: 1px;
+  margin-bottom: 18px;
+  padding-left: 12px;
+  text-transform: uppercase;
+  gap: 14px;
 }
 
-.live-indicator {
-background: rgba(255, 0, 119, 0.12);
-color: #ff4f9d;
-font-size: 0.75rem;
-padding: 4px 10px;
-border-radius: 6px;
-border: 1px solid #ff0077;
-letter-spacing: 0.5px;
-}
-
-.panel-title .live-indicator {
-background: rgba(255, 0, 119, 0.2);
-color: #ffffff;
-border-color: #ff0077;
-text-shadow: 0 0 8px #ff0077;
-}
-
-.panel:nth-of-type(2) .panel-title .live-indicator {
-background: rgba(255, 0, 119, 0.12);
-color: #ff4f9d;
-text-shadow: none;
-}
-
-/* Standings Interface Data Views */
 .table-scroll {
-overflow-x: auto;
+  overflow-x: auto;
 }
 
 .dense-table {
-width: 100%;
-border-collapse: separate;
-border-spacing: 0 6px;
-font-size: 0.9rem;
-margin-top: -6px;
+  border-collapse: separate;
+  border-spacing: 0 7px;
+  font-size: 0.82rem;
+  min-width: 720px;
+  width: 100%;
 }
 
 .dense-table th {
-color: #64748b;
-font-weight: 600;
-padding: 0 10px 10px 10px;
-font-size: 0.75rem;
-text-transform: uppercase;
-letter-spacing: 1px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  padding: 0 10px 8px;
+  text-align: left;
+  text-transform: uppercase;
 }
 
 .dense-table td {
-padding: 12px 14px;
-background: #0e1017;
-color: #ffffff;
-border: 1px solid rgba(188, 0, 255, 0.08);
-transition: background-color 0.18s ease, border-color 0.18s ease;
+  background: var(--panel-soft);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  padding: 12px 10px;
 }
 
 .dense-table td:first-child {
-border-top-left-radius: 8px;
-border-bottom-left-radius: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px 0 0 10px;
 }
+
 .dense-table td:last-child {
-border-top-right-radius: 8px;
-border-bottom-right-radius: 8px;
+  border-radius: 0 10px 10px 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* Premium Leaderboard Accent Highlight */
-.dense-table tr.leader-row td {
-background: #0e1017;
-}
-.dense-table tr.leader-row td:first-child {
-border-left: 3px solid #ff0077;
+.qualified-row td:first-child {
+  border-left: 3px solid var(--pink);
 }
 
-.dense-table tr.qualified-row td {
-background: #0e1017;
-}
-
-.dense-table tr.qualified-row td:first-child {
-border-left: 3px solid #ff0077;
-}
-
-.dense-table tbody tr:hover td {
-background: rgba(255, 255, 255, 0.025);
-}
-
-.team-cell {
-display: flex;
-align-items: center;
-gap: 12px;
-font-weight: 600;
-color: #ffffff;
-}
-
-.team-name-stack {
-display: flex;
-flex-direction: column;
-gap: 3px;
-line-height: 1.1;
-}
-
-.team-id {
-color: #64748b;
-font-size: 0.65rem;
-font-weight: 700;
-letter-spacing: 0.7px;
-text-transform: uppercase;
+.team-cell,
+.match-team,
+.event-row,
+.roster-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
 }
 
 .rank-num {
-color: #64748b;
-font-weight: 700;
-width: 15px;
-border-left: 3px solid transparent;
-padding-left: 6px;
-}
-.leader-row .rank-num {
-color: #64748b;
-border-left-color: #ff0077;
-}
-.qualified-row .rank-num {
-border-left-color: #ff0077;
+  color: var(--muted);
+  font-weight: 900;
+  width: 20px;
 }
 
 .mini-badge {
-width: 26px;
-height: 26px;
-background: rgba(255, 255, 255, 0.035);
-border-radius: 6px;
-font-size: 0.7rem;
-display: flex;
-align-items: center;
-justify-content: center;
-color: #94a3b8;
-border: 1px solid rgba(188, 0, 255, 0.08);
-font-weight: 700;
+  align-items: center;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.24);
+  border-radius: 8px;
+  color: var(--cyan);
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  width: 34px;
+}
+
+.team-name-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.team-id {
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
 }
 
 .num-col {
-text-align: center;
-width: 55px;
+  text-align: center;
+  width: 52px;
 }
 
 .points-col {
-color: #ffffff;
-font-weight: 700;
+  color: var(--pink-soft) !important;
+  font-weight: 900;
 }
 
 .form-cell {
-display: flex;
-justify-content: center;
-gap: 4px;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
 }
 
 .form-dot {
-width: 18px;
-height: 18px;
-border-radius: 4px;
-display: inline-flex;
-align-items: center;
-justify-content: center;
-font-size: 0.62rem;
-font-weight: 800;
+  align-items: center;
+  border-radius: 5px;
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 900;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
 }
 
-.form-dot.win {
-background: rgba(0, 240, 255, 0.14);
-color: #00f0ff;
-border: 1px solid rgba(0, 240, 255, 0.38);
-}
-
-.form-dot.draw {
-background: rgba(148, 163, 184, 0.1);
-color: #cbd5e1;
-border: 1px solid rgba(148, 163, 184, 0.22);
-}
-
-.form-dot.loss {
-background: rgba(239, 68, 68, 0.1);
-color: #f87171;
-border: 1px solid rgba(239, 68, 68, 0.22);
-}
-
-/* Symmetrical Balanced Scoreboard Fixture Columns */
-.fixture-list {
-display: flex;
-flex-direction: column;
-gap: 10px;
-}
-
-.fixture-row {
-background: #0e1017;
-border: 1px solid rgba(188, 0, 255, 0.08);
-border-radius: 10px;
-padding: 12px 16px;
-display: grid;
-grid-template-columns: 1fr auto 1fr;
-align-items: center;
-transition: border-color 0.2s;
-row-gap: 10px;
-}
-
-.fixture-row:hover {
-border-color: rgba(255, 255, 255, 0.09);
-}
-
-.fixture-team {
-display: flex;
-align-items: center;
-gap: 12px;
-font-weight: 600;
-color: #ffffff;
-}
-
-.fixture-team.away {
-justify-content: flex-end;
-}
-
-.fixture-score-block {
-background: #161a24;
-padding: 6px 16px;
-border-radius: 6px;
-font-weight: 700;
-color: #ff4f9d;
-min-width: 75px;
-text-align: center;
-border: 1px solid #222230;
-border-color: #ff0077;
-letter-spacing: 1.5px;
-font-size: 0.95rem;
-text-shadow: 0 0 10px #ff0077;
-box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 0 16px rgba(255, 0, 119, 0.16);
-}
-
-.score-block {
-background: #161a24;
-padding: 6px 16px;
-border-radius: 6px;
-font-weight: 700;
-color: #ff4f9d;
-min-width: 75px;
-text-align: center;
-border: 1px solid #222230;
-border-color: #ff0077;
-letter-spacing: 1.5px;
-font-size: 0.95rem;
-text-shadow: 0 0 10px #ff0077;
-box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 0 16px rgba(255, 0, 119, 0.16);
-}
-
-.fixture-meta {
-grid-column: 1 / -1;
-display: flex;
-justify-content: space-between;
-align-items: center;
-border-top: 1px solid #1c1c27;
-padding-top: 10px;
-color: #64748b;
-font-size: 0.68rem;
-font-weight: 700;
-letter-spacing: 0.7px;
-text-transform: uppercase;
-}
-
-.fixture-status {
-color: #00f0ff;
-}
-
-/* Live Fixtures Analytics Module */
-.fixtures-tab-panel {
-margin-top: 24px;
-}
+.form-dot.win { background: rgba(0, 240, 255, 0.12); color: var(--cyan); }
+.form-dot.draw { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
+.form-dot.loss { background: rgba(255, 0, 119, 0.12); color: var(--pink-soft); }
 
 .fixtures-shell {
-display: grid;
-gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
 }
 
 .match-card {
-background: #11131a;
-border: 1px solid rgba(255,255,255,0.03);
-border-radius: 12px;
-cursor: pointer;
-overflow: hidden;
-transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .match-card:hover {
-border-color: rgba(188, 0, 255, 0.18);
-box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
-transform: translateY(-1px);
+  border-color: rgba(0, 240, 255, 0.28);
+  transform: translateY(-2px);
 }
 
 .match-main-row {
-display: grid;
-grid-template-columns: 1fr auto 1fr;
-align-items: center;
-gap: 16px;
-padding: 16px;
-}
-
-.match-team {
-display: flex;
-align-items: center;
-gap: 10px;
-min-width: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr auto 1fr;
+  padding: 18px;
+  align-items: center;
 }
 
 .match-team.away {
-justify-content: flex-end;
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .match-team-name {
-color: #ffffff;
-font-weight: 800;
-font-size: 0.9rem;
-white-space: nowrap;
-overflow: hidden;
-text-overflow: ellipsis;
-}
-
-.conf-badge {
-background: rgba(255, 0, 119, 0.1);
-border: 1px solid rgba(255, 0, 119, 0.38);
-border-radius: 6px;
-color: #ff4f9d;
-font-size: 0.62rem;
-font-weight: 800;
-letter-spacing: 0.8px;
-padding: 4px 7px;
-text-transform: uppercase;
-}
-
-.score-matrix {
-display: flex;
-flex-direction: column;
-align-items: center;
-gap: 5px;
-min-width: 112px;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
 .score-line {
-background: #161a24;
-border: 1px solid #ff0077;
-border-radius: 8px;
-box-shadow: inset 0 0 10px rgba(0,0,0,0.75), 0 0 16px rgba(255, 0, 119, 0.15);
-color: #ff4f9d;
-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-font-size: 1.35rem;
-font-weight: 800;
-letter-spacing: 1.6px;
-line-height: 1;
-padding: 9px 16px;
-text-shadow: 0 0 10px #ff0077;
+  background: #161a24;
+  border: 1px solid var(--pink);
+  border-radius: 8px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.75), 0 0 16px rgba(255, 0, 119, 0.15);
+  color: var(--pink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.3rem;
+  font-weight: 900;
+  min-width: 92px;
+  padding: 8px 12px;
+  text-align: center;
 }
 
-.time-ago {
-color: #64748b;
-font-size: 0.68rem;
-font-weight: 800;
-letter-spacing: 0.7px;
-text-transform: uppercase;
+.fixture-meta {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  display: flex;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  padding: 12px 18px;
 }
 
 .match-details-dropdown {
-background: #0b0d12;
-max-height: 0;
-overflow: hidden;
-transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #0b0d12;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
 }
 
 .match-card.is-open .match-details-dropdown {
-max-height: 520px;
+  max-height: 420px;
 }
 
 .match-details-inner {
-border-top: 1px solid rgba(188, 0, 255, 0.08);
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 18px;
-padding: 16px;
+  border-top: 1px solid rgba(188, 0, 255, 0.1);
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
 }
 
-.roster-impact-column {
-display: flex;
-flex-direction: column;
-gap: 8px;
-min-width: 0;
+.event-row {
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
 }
 
-.roster-impact-title {
-color: #64748b;
-font-size: 0.72rem;
-font-weight: 800;
-letter-spacing: 0.8px;
-text-transform: uppercase;
+.event-player {
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
-.impact-player-row {
-background: rgba(255, 255, 255, 0.025);
-border: 1px solid rgba(255, 255, 255, 0.04);
-border-radius: 8px;
-display: flex;
-align-items: center;
-justify-content: space-between;
-gap: 10px;
-padding: 9px 10px;
+.event-badges {
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
-.impact-player-name {
-color: #ffffff;
-font-size: 0.78rem;
-font-weight: 700;
-min-width: 0;
-overflow: hidden;
-text-overflow: ellipsis;
-white-space: nowrap;
+.roster-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-.impact-badges {
-display: flex;
-gap: 6px;
-flex-shrink: 0;
+.roster-card {
+  padding: 16px;
 }
 
-.impact-badge {
-border-radius: 999px;
-font-size: 0.68rem;
-font-weight: 900;
-letter-spacing: 0.4px;
-padding: 4px 7px;
+.roster-card ul {
+  color: #cbd5e1;
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.9;
+  list-style: none;
+  margin-top: 10px;
 }
 
-.impact-badge.goal {
-background: rgba(0, 240, 255, 0.1);
-border: 1px solid rgba(0, 240, 255, 0.42);
-color: #00f0ff;
+.error-state,
+.empty-state {
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  color: var(--muted);
+  font-family: Inter, system-ui, sans-serif;
+  padding: 18px;
 }
 
-.impact-badge.assist {
-background: rgba(188, 0, 255, 0.1);
-border: 1px solid rgba(188, 0, 255, 0.42);
-color: #bc00ff;
-}
-
-.empty-impact {
-border: 1px dashed rgba(255, 255, 255, 0.06);
-border-radius: 8px;
-color: #64748b;
-font-size: 0.72rem;
-font-weight: 700;
-padding: 10px;
-}
-
-/* Structural Breakpoints */
 @media (max-width: 950px) {
-.dashboard-grid {
-grid-template-columns: 1fr;
-}
-.hub-banner {
-padding: 24px;
-min-height: 220px;
-}
-.hub-profile {
-grid-template-columns: 1fr;
-align-items: end;
-}
-.hub-meta,
-.hub-actions {
-justify-content: start;
-}
-.hub-meta {
-grid-template-columns: repeat(2, max-content);
-}
-.match-main-row,
-.match-details-inner {
-grid-template-columns: 1fr;
-}
-.match-team.away {
-justify-content: flex-start;
-}
+  .dashboard-grid,
+  .match-main-row {
+    grid-template-columns: 1fr;
+  }
+
+  .match-team.away {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  nav {
+    display: none;
+  }
 }
 </style>
 </head>
 <body>
-
 <header>
-<div class="top-nav">
-<div class="brand-wrapper">
-<div class="mini-brand-badge"></div>
-<div class="brand">UPCL // LEAGUE OPS</div>
-</div>
-<nav>
-<a href="#">Hub</a>
-<a href="#">Clubs</a>
-<a href="#">Fixtures</a>
-<a href="#">Stats</a>
-</nav>
-</div>
+  <div class="top-nav">
+    <div class="brand-wrapper">
+      <div class="mini-brand-badge">FC</div>
+      <div class="brand">UPCL // EAFC LEAGUE OPS</div>
+    </div>
+    <nav>
+      <a href="#overview">Overview</a>
+      <a href="#standings">Tables</a>
+      <a href="#fixtures">Fixtures</a>
+      <a href="#clubs">Clubs</a>
+    </nav>
+  </div>
 </header>
 
-<div class="app-layout">
+<main class="app-layout">
+  <section id="overview" class="hub-banner">
+    <div class="hub-copy">
+      <div class="kicker" id="league-kicker">EA SPORTS FC Pro Clubs</div>
+      <h1 id="league-title">United Pro Clubs League</h1>
+      <p id="league-summary">A competitive EAFC esports hub for clubs, conference tables, matchday fixtures, and player impact pulled from the same league data served by the backend.</p>
+      <div class="hub-meta" id="league-meta"></div>
+    </div>
+  </section>
 
-<!-- Header App Banner Frame -->
-<div class="hub-banner">
-<div class="hub-profile">
-<div class="hub-meta">
-<span class="hub-pill">North America</span>
-<span class="hub-pill matchday-badge">Matchday 12</span>
-<span class="hub-pill">2 Conferences</span>
-<span class="hub-pill qualify-badge">Top 2 Qualify</span>
-</div>
-<div class="hub-actions">
-<a href="#" class="hub-btn">Discord</a>
-<a href="#" class="hub-btn">Website</a>
-</div>
-</div>
-</div>
+  <section class="sub-tabs" aria-label="League sections">
+    <button class="tab-link active" data-target="overview">Overview</button>
+    <button class="tab-link" data-target="standings">Standings</button>
+    <button class="tab-link" data-target="fixtures">Fixtures</button>
+    <button class="tab-link" data-target="clubs">Club Rosters</button>
+  </section>
 
-<!-- Navigation Filter Tracks -->
-<div class="sub-tabs">
-<button class="tab-link active">Overview</button>
-<button class="tab-link">Tables</button>
-<button class="tab-link">Fixtures</button>
-<button class="tab-link">Player Stats</button>
-<button class="tab-link">Team Stats</button>
-</div>
+  <section class="metric-grid" id="metrics-grid" aria-live="polite"></section>
 
-<!-- Metric Badges Counter Grid -->
-<div class="metrics-grid">
-<div class="metric-card">
-<div class="metric-label">Clubs Enrolled</div>
-<div class="metric-value">10</div>
-<div class="metric-note">5 East / 5 West</div>
-</div>
-<div class="metric-card">
-<div class="metric-label">Matches Played</div>
-<div class="metric-value">60</div>
-<div class="metric-note">Regular season</div>
-</div>
-<div class="metric-card">
-<div class="metric-label">Current Round</div>
-<div class="metric-value">12</div>
-<div class="metric-note">3 results pending</div>
-</div>
-</div>
+  <section id="standings" class="dashboard-grid" aria-live="polite"></section>
 
-<!-- Multi-Column Application Feed Workspace -->
-<div class="dashboard-grid">
+  <section id="fixtures" class="panel">
+    <div class="panel-title">
+      <span>Matchday Fixtures</span>
+      <span class="live-indicator">EAFC Results Feed</span>
+    </div>
+    <div id="fixtures-list" class="fixtures-shell"></div>
+  </section>
 
-<!-- Left Work Area: Standings Table -->
-<div class="panel">
-<div class="panel-title">
-<span>Eastern Conference Standings</span>
-<span class="live-indicator">Top 2 Qualify</span>
-</div>
-<div class="table-scroll">
-<table class="dense-table">
-<thead>
-<tr>
-<th>Team</th>
-<th class="num-col">PL</th>
-<th class="num-col">W</th>
-<th class="num-col">D</th>
-<th class="num-col">L</th>
-<th class="num-col">GF</th>
-<th class="num-col">GA</th>
-<th class="num-col">GD</th>
-<th class="num-col">PTS</th>
-<th class="num-col">Form</th>
-</tr>
-</thead>
-<tbody>
-<tr class="leader-row" data-team-id="1001">
-<td>
-<div class="team-cell">
-<span class="rank-num">1</span>
-<div class="mini-badge">NY</div>
-<div class="team-name-stack">
-<span>New York Empire</span>
-<span class="team-id">Club ID 1001</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">10</td>
-<td class="num-col">2</td>
-<td class="num-col">0</td>
-<td class="num-col">34</td>
-<td class="num-col">9</td>
-<td class="num-col">+25</td>
-<td class="num-col points-col">32</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot win">W</span><span class="form-dot draw">D</span></div>
-</td>
-</tr>
-<tr class="qualified-row" data-team-id="1002">
-<td>
-<div class="team-cell">
-<span class="rank-num">2</span>
-<div class="mini-badge">MU</div>
-<div class="team-name-stack">
-<span>Miami United</span>
-<span class="team-id">Club ID 1002</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">8</td>
-<td class="num-col">3</td>
-<td class="num-col">1</td>
-<td class="num-col">28</td>
-<td class="num-col">13</td>
-<td class="num-col">+15</td>
-<td class="num-col points-col">27</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot draw">D</span><span class="form-dot win">W</span></div>
-</td>
-</tr>
-<tr data-team-id="1003">
-<td>
-<div class="team-cell">
-<span class="rank-num">3</span>
-<div class="mini-badge">AE</div>
-<div class="team-name-stack">
-<span>Atlanta Elite</span>
-<span class="team-id">Club ID 1003</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">7</td>
-<td class="num-col">1</td>
-<td class="num-col">4</td>
-<td class="num-col">24</td>
-<td class="num-col">19</td>
-<td class="num-col">+5</td>
-<td class="num-col" style="font-weight:700;">22</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot win">W</span><span class="form-dot win">W</span></div>
-</td>
-</tr>
-<tr data-team-id="1004">
-<td>
-<div class="team-cell">
-<span class="rank-num">4</span>
-<div class="mini-badge">LK</div>
-<div class="team-name-stack">
-<span>London Kings</span>
-<span class="team-id">Club ID 1004</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">5</td>
-<td class="num-col">3</td>
-<td class="num-col">4</td>
-<td class="num-col">19</td>
-<td class="num-col">21</td>
-<td class="num-col">-2</td>
-<td class="num-col" style="font-weight:700;">18</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot loss">L</span><span class="form-dot win">W</span></div>
-</td>
-</tr>
-<tr data-team-id="1005">
-<td>
-<div class="team-cell">
-<span class="rank-num">5</span>
-<div class="mini-badge">CP</div>
-<div class="team-name-stack">
-<span>Cairo Pharaohs</span>
-<span class="team-id">Club ID 1005</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">3</td>
-<td class="num-col">2</td>
-<td class="num-col">7</td>
-<td class="num-col">15</td>
-<td class="num-col">28</td>
-<td class="num-col">-13</td>
-<td class="num-col" style="font-weight:700;">11</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot draw">D</span><span class="form-dot loss">L</span></div>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-
-<!-- Right Work Area: Western Standings Table -->
-<div class="panel">
-<div class="panel-title">
-<span>Western Conference Standings</span>
-<span class="live-indicator">Top 2 Qualify</span>
-</div>
-<div class="table-scroll">
-<table class="dense-table">
-<thead>
-<tr>
-<th>Team</th>
-<th class="num-col">PL</th>
-<th class="num-col">W</th>
-<th class="num-col">D</th>
-<th class="num-col">L</th>
-<th class="num-col">GF</th>
-<th class="num-col">GA</th>
-<th class="num-col">GD</th>
-<th class="num-col">PTS</th>
-<th class="num-col">Form</th>
-</tr>
-</thead>
-<tbody>
-<tr class="leader-row" data-team-id="2001">
-<td>
-<div class="team-cell">
-<span class="rank-num">1</span>
-<div class="mini-badge">LA</div>
-<div class="team-name-stack">
-<span>LA FC</span>
-<span class="team-id">Club ID 2001</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">9</td>
-<td class="num-col">2</td>
-<td class="num-col">1</td>
-<td class="num-col">31</td>
-<td class="num-col">12</td>
-<td class="num-col">+19</td>
-<td class="num-col points-col">29</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot win">W</span><span class="form-dot loss">L</span></div>
-</td>
-</tr>
-<tr class="qualified-row" data-team-id="2002">
-<td>
-<div class="team-cell">
-<span class="rank-num">2</span>
-<div class="mini-badge">SS</div>
-<div class="team-name-stack">
-<span>Seattle Sounders</span>
-<span class="team-id">Club ID 2002</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">8</td>
-<td class="num-col">2</td>
-<td class="num-col">2</td>
-<td class="num-col">27</td>
-<td class="num-col">15</td>
-<td class="num-col">+12</td>
-<td class="num-col points-col">26</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot win">W</span><span class="form-dot win">W</span></div>
-</td>
-</tr>
-<tr data-team-id="2003">
-<td>
-<div class="team-cell">
-<span class="rank-num">3</span>
-<div class="mini-badge">VV</div>
-<div class="team-name-stack">
-<span>Vegas Vipers</span>
-<span class="team-id">Club ID 2003</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">6</td>
-<td class="num-col">3</td>
-<td class="num-col">3</td>
-<td class="num-col">22</td>
-<td class="num-col">18</td>
-<td class="num-col">+4</td>
-<td class="num-col" style="font-weight:700;">21</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot win">W</span><span class="form-dot loss">L</span><span class="form-dot draw">D</span></div>
-</td>
-</tr>
-<tr data-team-id="2004">
-<td>
-<div class="team-cell">
-<span class="rank-num">4</span>
-<div class="mini-badge">TR</div>
-<div class="team-name-stack">
-<span>Tokyo Neo Ronin</span>
-<span class="team-id">Club ID 2004</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">4</td>
-<td class="num-col">4</td>
-<td class="num-col">4</td>
-<td class="num-col">18</td>
-<td class="num-col">20</td>
-<td class="num-col">-2</td>
-<td class="num-col" style="font-weight:700;">16</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot draw">D</span><span class="form-dot draw">D</span><span class="form-dot loss">L</span></div>
-</td>
-</tr>
-<tr data-team-id="2005">
-<td>
-<div class="team-cell">
-<span class="rank-num">5</span>
-<div class="mini-badge">BH</div>
-<div class="team-name-stack">
-<span>Bangkok Hydras</span>
-<span class="team-id">Club ID 2005</span>
-</div>
-</div>
-</td>
-<td class="num-col">12</td>
-<td class="num-col">2</td>
-<td class="num-col">3</td>
-<td class="num-col">7</td>
-<td class="num-col">14</td>
-<td class="num-col">29</td>
-<td class="num-col">-15</td>
-<td class="num-col" style="font-weight:700;">9</td>
-<td class="num-col">
-<div class="form-cell"><span class="form-dot loss">L</span><span class="form-dot loss">L</span><span class="form-dot draw">D</span></div>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-
-</div> <!-- End Dashboard Grid -->
-
-<div id="fixtures-tab" class="fixtures-tab-panel panel">
-<div class="panel-title">
-<span>Live Fixtures</span>
-<span class="live-indicator">EA Pro Clubs Feed</span>
-</div>
-<div id="fixtures-list" class="fixtures-shell">
-<div class="empty-impact">Loading live fixtures...</div>
-</div>
-</div>
-
-</div> <!-- End App Layout -->
+  <section id="clubs" class="panel" style="margin-top: 24px;">
+    <div class="panel-title">
+      <span>Registered Clubs</span>
+      <span class="live-indicator">EA Club IDs</span>
+    </div>
+    <div id="roster-grid" class="roster-grid"></div>
+  </section>
+</main>
 
 <script>
-const LEAGUE_CLUB_REGISTRY = {
-  "57985": { upclId: 1001, name: "New York Empire", conference: "EAST" },
-  "129307": { upclId: 1004, name: "London Kings", conference: "EAST" },
-  "6297844": { upclId: 2004, name: "Tokyo Neo Ronin", conference: "WEST" }
-};
-
-const EA_MATCHES_ENDPOINT = "https://proclubs.ea.com/api/fc/clubs/matches?matchType=friendlyMatch&platform=common-gen5&clubIds=57985";
-
-const SAMPLE_EA_MATCHES = [
-  {
-    timestamp: Date.now() - 1000 * 60 * 18,
-    clubs: {
-      "57985": { details: { name: "NY Empire API" }, score: "3" },
-      "129307": { details: { name: "London Kings API" }, score: "2" }
-    },
-    players: {
-      "57985": {
-        "p1": { playername: "EmpireNine", goals: "2", assists: "0" },
-        "p2": { playername: "MetroCAM", goals: "1", assists: "1" },
-        "p3": { playername: "QuietFullback", goals: "0", assists: "0" }
-      },
-      "129307": {
-        "p4": { playername: "KingStriker", goals: "1", assists: "0" },
-        "p5": { playername: "Thames10", goals: "1", assists: "1" }
-      }
-    }
-  },
-  {
-    timestamp: Date.now() - 1000 * 60 * 72,
-    clubs: {
-      "6297844": { details: { name: "Tokyo Neo Ronin API" }, score: "1" },
-      "57985": { details: { name: "NY Empire API" }, score: "1" }
-    },
-    players: {
-      "6297844": {
-        "p6": { playername: "RoninPress", goals: "1", assists: "0" }
-      },
-      "57985": {
-        "p7": { playername: "EmpireNine", goals: "1", assists: "0" },
-        "p8": { playername: "MetroCAM", goals: "0", assists: "1" }
-      }
-    }
-  }
-];
-
-function getClubDisplay(match, clubId) {
-  const registryClub = LEAGUE_CLUB_REGISTRY[String(clubId)];
-  const apiClub = match?.clubs?.[clubId];
-  const apiName = apiClub?.details?.name || apiClub?.name || `Club ${clubId}`;
-
-  return {
-    id: String(clubId),
-    upclId: registryClub?.upclId || null,
-    name: registryClub?.name || apiName,
-    conference: registryClub?.conference || "API"
-  };
-}
-
-function parseScore(match, clubId) {
-  return Number.parseInt(match?.clubs?.[clubId]?.score ?? "0", 10) || 0;
-}
-
-function getTimeAgo(match) {
-  const rawTimestamp = match.timestamp || match.timeAgo || match.matchTimestamp || match.date;
-  const date = typeof rawTimestamp === "number" ? new Date(rawTimestamp) : new Date(rawTimestamp || Date.now());
-  const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
-
-  if (elapsedMinutes < 1) return "just now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
-
-  const elapsedHours = Math.round(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h ago`;
-
-  return `${Math.round(elapsedHours / 24)}d ago`;
-}
-
-function createImpactRows(playersByClubId = {}) {
-  const rows = Object.values(playersByClubId)
-    .map((player) => {
-      const goals = Number.parseInt(player.goals || "0", 10) || 0;
-      const assists = Number.parseInt(player.assists || "0", 10) || 0;
-      const name = player.playername || player.playerName || player.name || "Unknown Player";
-      return { name, goals, assists };
-    })
-    .filter((player) => player.goals > 0 || player.assists > 0);
-
-  if (!rows.length) {
-    return '<div class="empty-impact">No scoring impact recorded.</div>';
-  }
-
-  return rows.map((player) => {
-    const goalBadge = player.goals > 0 ? `<span class="impact-badge goal">${player.goals} G</span>` : "";
-    const assistBadge = player.assists > 0 ? `<span class="impact-badge assist">${player.assists} A</span>` : "";
-
-    return `
-      <div class="impact-player-row">
-        <span class="impact-player-name">${escapeHtml(player.name)}</span>
-        <span class="impact-badges">${goalBadge}${assistBadge}</span>
-      </div>
-    `;
-  }).join("");
-}
+const STANDINGS_COLUMNS = ["PL", "W", "D", "L", "GF", "GA", "GD", "PTS", "Form"];
 
 function escapeHtml(value) {
-  return String(value)
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -1274,94 +589,193 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function renderLiveFixtures(matchDataArray) {
-  const fixturesList = document.querySelector("#fixtures-list");
-  if (!fixturesList) return;
+function formatDate(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
 
-  if (!Array.isArray(matchDataArray) || !matchDataArray.length) {
-    fixturesList.innerHTML = '<div class="empty-impact">No fixtures returned from the feed.</div>';
-    return;
+function renderLeagueMeta(league) {
+  const meta = document.querySelector("#league-meta");
+  meta.innerHTML = [
+    league.region,
+    league.season,
+    league.platform,
+    league.qualificationRule
+  ].map((item) => `<span class="hub-pill">${escapeHtml(item)}</span>`).join("");
+}
+
+function renderMetrics(metrics) {
+  const cards = [
+    ["Clubs Enrolled", metrics.clubsEnrolled, `${metrics.conferences} conferences`],
+    ["Matches Played", metrics.matchesPlayed, `${metrics.scheduledMatches} upcoming`],
+    ["Current Matchday", metrics.currentMatchday, "Regular season"],
+    ["Qualification", "Top 2", "Per conference"]
+  ];
+
+  document.querySelector("#metrics-grid").innerHTML = cards.map(([label, value, note]) => `
+    <article class="metric-card">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="metric-value">${escapeHtml(value)}</div>
+      <div class="metric-note">${escapeHtml(note)}</div>
+    </article>
+  `).join("");
+}
+
+function renderForm(form = []) {
+  return `<div class="form-cell">${form.map((result) => {
+    const className = result === "W" ? "win" : result === "D" ? "draw" : "loss";
+    return `<span class="form-dot ${className}">${escapeHtml(result)}</span>`;
+  }).join("")}</div>`;
+}
+
+function renderStandings(standings) {
+  const container = document.querySelector("#standings");
+
+  container.innerHTML = Object.entries(standings).map(([conference, teams]) => `
+    <article class="panel">
+      <div class="panel-title">
+        <span>${escapeHtml(conference)} Standings</span>
+        <span class="live-indicator">Top 2 Qualify</span>
+      </div>
+      <div class="table-scroll">
+        <table class="dense-table">
+          <thead>
+            <tr>
+              <th>Team</th>
+              ${STANDINGS_COLUMNS.map((column) => `<th class="num-col">${column}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${teams.map((team) => `
+              <tr class="${team.qualified ? "qualified-row" : ""}">
+                <td>
+                  <div class="team-cell">
+                    <span class="rank-num">${team.rank}</span>
+                    <span class="mini-badge">${escapeHtml(team.shortName)}</span>
+                    <span class="team-name-stack">
+                      <span>${escapeHtml(team.name)}</span>
+                      <span class="team-id">EA Club ${escapeHtml(team.eaClubId)}</span>
+                    </span>
+                  </div>
+                </td>
+                <td class="num-col">${team.played}</td>
+                <td class="num-col">${team.wins}</td>
+                <td class="num-col">${team.draws}</td>
+                <td class="num-col">${team.losses}</td>
+                <td class="num-col">${team.goalsFor}</td>
+                <td class="num-col">${team.goalsAgainst}</td>
+                <td class="num-col">${team.goalDifference > 0 ? "+" : ""}${team.goalDifference}</td>
+                <td class="num-col points-col">${team.points}</td>
+                <td class="num-col">${renderForm(team.form)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderFixtureEvents(fixture) {
+  if (!fixture.events.length) {
+    return `<div class="empty-state">Lineups and player impact will appear after the result is posted.</div>`;
   }
 
-  fixturesList.innerHTML = matchDataArray.map((match, index) => {
-    const clubIds = Object.keys(match.clubs || {});
-    const [homeId, awayId] = clubIds;
+  return fixture.events.map((event) => `
+    <div class="event-row">
+      <span class="event-player">${escapeHtml(event.player)}</span>
+      <span class="event-badges">${event.goals} G / ${event.assists} A</span>
+    </div>
+  `).join("");
+}
 
-    if (!homeId || !awayId) {
-      return "";
-    }
-
-    const homeClub = getClubDisplay(match, homeId);
-    const awayClub = getClubDisplay(match, awayId);
-    const homeScore = parseScore(match, homeId);
-    const awayScore = parseScore(match, awayId);
-    const timeAgo = getTimeAgo(match);
-    const homeImpactRows = createImpactRows(match.players?.[homeId]);
-    const awayImpactRows = createImpactRows(match.players?.[awayId]);
-
-    return `
-      <article class="match-card" data-match-index="${index}">
-        <div class="match-main-row">
-          <div class="match-team home">
-            <span class="match-team-name">${escapeHtml(homeClub.name)}</span>
-            <span class="conf-badge">${escapeHtml(homeClub.conference)}</span>
-          </div>
-          <div class="score-matrix">
-            <div class="score-line">${homeScore} - ${awayScore}</div>
-            <div class="time-ago">${escapeHtml(timeAgo)}</div>
-          </div>
-          <div class="match-team away">
-            <span class="conf-badge">${escapeHtml(awayClub.conference)}</span>
-            <span class="match-team-name">${escapeHtml(awayClub.name)}</span>
-          </div>
+function renderFixtures(fixtures) {
+  document.querySelector("#fixtures-list").innerHTML = fixtures.map((fixture, index) => `
+    <article class="match-card" data-match-index="${index}">
+      <div class="match-main-row">
+        <div class="match-team home">
+          <span class="mini-badge">${escapeHtml(fixture.homeTeam.shortName)}</span>
+          <span class="match-team-name">${escapeHtml(fixture.homeTeam.name)}</span>
         </div>
-        <div class="match-details-dropdown">
-          <div class="match-details-inner">
-            <div class="roster-impact-column">
-              <div class="roster-impact-title">${escapeHtml(homeClub.name)} Impact</div>
-              ${homeImpactRows}
-            </div>
-            <div class="roster-impact-column">
-              <div class="roster-impact-title">${escapeHtml(awayClub.name)} Impact</div>
-              ${awayImpactRows}
-            </div>
-          </div>
+        <div class="score-line">${escapeHtml(fixture.scoreline)}</div>
+        <div class="match-team away">
+          <span class="match-team-name">${escapeHtml(fixture.awayTeam.name)}</span>
+          <span class="mini-badge">${escapeHtml(fixture.awayTeam.shortName)}</span>
         </div>
-      </article>
-    `;
-  }).join("");
+      </div>
+      <div class="fixture-meta">
+        <span>${escapeHtml(fixture.venue)} · ${formatDate(fixture.playedAt)}</span>
+        <span class="fixture-status">${escapeHtml(fixture.status)}</span>
+      </div>
+      <div class="match-details-dropdown">
+        <div class="match-details-inner">${renderFixtureEvents(fixture)}</div>
+      </div>
+    </article>
+  `).join("");
 
-  fixturesList.querySelectorAll(".match-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      card.classList.toggle("is-open");
+  document.querySelectorAll(".match-card").forEach((card) => {
+    card.addEventListener("click", () => card.classList.toggle("is-open"));
+  });
+}
+
+function renderRosters(teams) {
+  document.querySelector("#roster-grid").innerHTML = teams.map((team) => `
+    <article class="roster-card">
+      <div class="roster-header">
+        <span class="mini-badge">${escapeHtml(team.shortName)}</span>
+        <div class="team-name-stack">
+          <strong>${escapeHtml(team.name)}</strong>
+          <span class="team-id">${escapeHtml(team.conference)} · EA Club ${escapeHtml(team.eaClubId)}</span>
+        </div>
+      </div>
+      <ul>${team.roster.map((player) => `<li>${escapeHtml(player)}</li>`).join("")}</ul>
+    </article>
+  `).join("");
+}
+
+function bindSectionTabs() {
+  document.querySelectorAll(".tab-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".tab-link").forEach((tab) => tab.classList.remove("active"));
+      button.classList.add("active");
+      document.getElementById(button.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 }
 
-async function fetchLiveFixtures() {
+async function loadLeague() {
   try {
-    const response = await fetch(EA_MATCHES_ENDPOINT, {
-      headers: {
-        "Accept": "application/json",
-        "Referer": "https://www.ea.com/",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      }
-    });
+    const response = await fetch("/api/league");
 
     if (!response.ok) {
-      throw new Error(`EA feed returned ${response.status}`);
+      throw new Error(`League API returned ${response.status}`);
     }
 
-    const matches = await response.json();
-    renderLiveFixtures(matches);
+    const league = await response.json();
+    document.querySelector("#league-kicker").textContent = `${league.game} · ${league.region}`;
+    document.querySelector("#league-title").textContent = league.name;
+    renderLeagueMeta(league);
+    renderMetrics(league.metrics);
+    renderStandings(league.standings);
+    renderFixtures(league.fixtures);
+    renderRosters(league.teams);
   } catch (error) {
-    console.warn("Using sample fixtures because the EA feed could not be loaded.", error);
-    renderLiveFixtures(SAMPLE_EA_MATCHES);
+    console.error("League load failed", error);
+    document.querySelector(".app-layout").insertAdjacentHTML(
+      "afterbegin",
+      `<div class="error-state">Could not load the EAFC league API: ${escapeHtml(error.message)}</div>`
+    );
   }
 }
 
-document.addEventListener("DOMContentLoaded", fetchLiveFixtures);
+document.addEventListener("DOMContentLoaded", () => {
+  bindSectionTabs();
+  loadLeague();
+});
 </script>
-
 </body>
 </html>

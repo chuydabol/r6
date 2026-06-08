@@ -1,0 +1,83 @@
+{
+  "league": {
+    "name": "United Pro Clubs League",
+    "shortName": "UPCL",
+    "game": "EA SPORTS FC Pro Clubs",
+    "season": "Season 6",
+    "region": "North America",
+    "platform": "Cross-play Gen 5",
+    "currentMatchday": 12,
+    "qualificationRule": "Top 2 from each conference qualify for playoffs"
+  },
+  "teams": [
+    { "id": 1001, "eaClubId": "57985", "name": "New York Empire", "shortName": "NY", "conference": "Eastern Conference", "played": 12, "wins": 10, "draws": 2, "losses": 0, "goalsFor": 34, "goalsAgainst": 9, "form": ["W", "W", "D"], "roster": ["EmpireNine", "MetroCAM", "QuietFullback"] },
+    { "id": 1002, "eaClubId": "847221", "name": "Miami United", "shortName": "MU", "conference": "Eastern Conference", "played": 12, "wins": 8, "draws": 3, "losses": 1, "goalsFor": 28, "goalsAgainst": 13, "form": ["W", "D", "W"], "roster": ["SouthBeach10", "VicePress", "OceanLock"] },
+    { "id": 1003, "eaClubId": "913408", "name": "Atlanta Elite", "shortName": "AE", "conference": "Eastern Conference", "played": 12, "wins": 7, "draws": 1, "losses": 4, "goalsFor": 24, "goalsAgainst": 19, "form": ["L", "W", "W"], "roster": ["PeachStriker", "ATLTempo", "EliteBack"] },
+    { "id": 1004, "eaClubId": "129307", "name": "London Kings", "shortName": "LK", "conference": "Eastern Conference", "played": 12, "wins": 5, "draws": 3, "losses": 4, "goalsFor": 19, "goalsAgainst": 21, "form": ["D", "L", "W"], "roster": ["KingStriker", "Thames10", "RoyalShield"] },
+    { "id": 1005, "eaClubId": "715944", "name": "Cairo Pharaohs", "shortName": "CP", "conference": "Eastern Conference", "played": 12, "wins": 3, "draws": 2, "losses": 7, "goalsFor": 15, "goalsAgainst": 28, "form": ["L", "D", "L"], "roster": ["NileNine", "PharaohCAM", "GizaWall"] },
+    { "id": 2001, "eaClubId": "440802", "name": "LA FC", "shortName": "LA", "conference": "Western Conference", "played": 12, "wins": 9, "draws": 2, "losses": 1, "goalsFor": 31, "goalsAgainst": 12, "form": ["W", "W", "L"], "roster": ["HollywoodST", "SunsetCM", "CaliKeeper"] },
+    { "id": 2002, "eaClubId": "551902", "name": "Seattle Sounders", "shortName": "SS", "conference": "Western Conference", "played": 12, "wins": 8, "draws": 2, "losses": 2, "goalsFor": 27, "goalsAgainst": 15, "form": ["D", "W", "W"], "roster": ["SounderNine", "RainCity8", "EmeraldCB"] },
+    { "id": 2003, "eaClubId": "680114", "name": "Vegas Vipers", "shortName": "VV", "conference": "Western Conference", "played": 12, "wins": 6, "draws": 3, "losses": 3, "goalsFor": 22, "goalsAgainst": 18, "form": ["W", "L", "D"], "roster": ["StripFinisher", "ViperCAM", "DesertDM"] },
+    { "id": 2004, "eaClubId": "6297844", "name": "Tokyo Neo Ronin", "shortName": "TR", "conference": "Western Conference", "played": 12, "wins": 4, "draws": 4, "losses": 4, "goalsFor": 18, "goalsAgainst": 20, "form": ["D", "D", "L"], "roster": ["RoninPress", "Shibuya10", "NeoAnchor"] },
+    { "id": 2005, "eaClubId": "732400", "name": "Bangkok Hydras", "shortName": "BH", "conference": "Western Conference", "played": 12, "wins": 2, "draws": 3, "losses": 7, "goalsFor": 14, "goalsAgainst": 29, "form": ["L", "L", "D"], "roster": ["HydraNine", "BangkokBox", "SiamStopper"] }
+  ],
+  "fixtures": [
+    {
+      "id": "md12-ny-lk",
+      "matchday": 12,
+      "status": "Final",
+      "playedAt": "2026-06-07T02:15:00.000Z",
+      "homeTeamId": 1001,
+      "awayTeamId": 1004,
+      "homeScore": 3,
+      "awayScore": 2,
+      "venue": "UPCL Arena A",
+      "events": [
+        { "teamId": 1001, "player": "EmpireNine", "goals": 2, "assists": 0 },
+        { "teamId": 1001, "player": "MetroCAM", "goals": 1, "assists": 1 },
+        { "teamId": 1004, "player": "KingStriker", "goals": 1, "assists": 0 },
+        { "teamId": 1004, "player": "Thames10", "goals": 1, "assists": 1 }
+      ]
+    },
+    {
+      "id": "md12-tr-ny",
+      "matchday": 12,
+      "status": "Final",
+      "playedAt": "2026-06-06T23:20:00.000Z",
+      "homeTeamId": 2004,
+      "awayTeamId": 1001,
+      "homeScore": 1,
+      "awayScore": 1,
+      "venue": "UPCL Arena B",
+      "events": [
+        { "teamId": 2004, "player": "RoninPress", "goals": 1, "assists": 0 },
+        { "teamId": 1001, "player": "EmpireNine", "goals": 1, "assists": 0 },
+        { "teamId": 1001, "player": "MetroCAM", "goals": 0, "assists": 1 }
+      ]
+    },
+    {
+      "id": "md12-la-ss",
+      "matchday": 12,
+      "status": "Scheduled",
+      "playedAt": "2026-06-09T01:00:00.000Z",
+      "homeTeamId": 2001,
+      "awayTeamId": 2002,
+      "homeScore": null,
+      "awayScore": null,
+      "venue": "UPCL Main Stream",
+      "events": []
+    },
+    {
+      "id": "md12-mu-ae",
+      "matchday": 12,
+      "status": "Scheduled",
+      "playedAt": "2026-06-09T02:00:00.000Z",
+      "homeTeamId": 1002,
+      "awayTeamId": 1003,
+      "homeScore": null,
+      "awayScore": null,
+      "venue": "UPCL Main Stream",
+      "events": []
+    }
+  ]
+}
