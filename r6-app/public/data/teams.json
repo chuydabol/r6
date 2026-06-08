@@ -1,25 +1,135 @@
 {
   "conferences": [
     {
-      "id": "east",
+      "id": "eastern",
       "name": "Eastern Conference",
       "teams": [
-        { "id": 1001, "name": "New York Empire", "shortName": "NY", "conference": "Eastern Conference" },
-        { "id": 1002, "name": "Miami United", "shortName": "MU", "conference": "Eastern Conference" },
-        { "id": 1003, "name": "Atlanta Elite", "shortName": "AE", "conference": "Eastern Conference" },
-        { "id": 1004, "name": "London Kings", "shortName": "LK", "conference": "Eastern Conference" },
-        { "id": 1005, "name": "Cairo Pharaohs", "shortName": "CP", "conference": "Eastern Conference" }
+        {
+          "id": 1001,
+          "eaClubId": "57985",
+          "name": "New York Empire",
+          "shortName": "NY",
+          "conference": "Eastern Conference",
+          "roster": [
+            "EmpireNine",
+            "MetroCAM",
+            "QuietFullback"
+          ]
+        },
+        {
+          "id": 1002,
+          "eaClubId": "847221",
+          "name": "Miami United",
+          "shortName": "MU",
+          "conference": "Eastern Conference",
+          "roster": [
+            "SouthBeach10",
+            "VicePress",
+            "OceanLock"
+          ]
+        },
+        {
+          "id": 1003,
+          "eaClubId": "913408",
+          "name": "Atlanta Elite",
+          "shortName": "AE",
+          "conference": "Eastern Conference",
+          "roster": [
+            "PeachStriker",
+            "ATLTempo",
+            "EliteBack"
+          ]
+        },
+        {
+          "id": 1004,
+          "eaClubId": "129307",
+          "name": "London Kings",
+          "shortName": "LK",
+          "conference": "Eastern Conference",
+          "roster": [
+            "KingStriker",
+            "Thames10",
+            "RoyalShield"
+          ]
+        },
+        {
+          "id": 1005,
+          "eaClubId": "715944",
+          "name": "Cairo Pharaohs",
+          "shortName": "CP",
+          "conference": "Eastern Conference",
+          "roster": [
+            "NileNine",
+            "PharaohCAM",
+            "GizaWall"
+          ]
+        }
       ]
     },
     {
-      "id": "west",
+      "id": "western",
       "name": "Western Conference",
       "teams": [
-        { "id": 2001, "name": "LA FC", "shortName": "LA", "conference": "Western Conference" },
-        { "id": 2002, "name": "Seattle Sounders", "shortName": "SS", "conference": "Western Conference" },
-        { "id": 2003, "name": "Vegas Vipers", "shortName": "VV", "conference": "Western Conference" },
-        { "id": 2004, "name": "Tokyo Neo Ronin", "shortName": "TR", "conference": "Western Conference" },
-        { "id": 2005, "name": "Bangkok Hydras", "shortName": "BH", "conference": "Western Conference" }
+        {
+          "id": 2001,
+          "eaClubId": "440802",
+          "name": "LA FC",
+          "shortName": "LA",
+          "conference": "Western Conference",
+          "roster": [
+            "HollywoodST",
+            "SunsetCM",
+            "CaliKeeper"
+          ]
+        },
+        {
+          "id": 2002,
+          "eaClubId": "551902",
+          "name": "Seattle Sounders",
+          "shortName": "SS",
+          "conference": "Western Conference",
+          "roster": [
+            "SounderNine",
+            "RainCity8",
+            "EmeraldCB"
+          ]
+        },
+        {
+          "id": 2003,
+          "eaClubId": "680114",
+          "name": "Vegas Vipers",
+          "shortName": "VV",
+          "conference": "Western Conference",
+          "roster": [
+            "StripFinisher",
+            "ViperCAM",
+            "DesertDM"
+          ]
+        },
+        {
+          "id": 2004,
+          "eaClubId": "6297844",
+          "name": "Tokyo Neo Ronin",
+          "shortName": "TR",
+          "conference": "Western Conference",
+          "roster": [
+            "RoninPress",
+            "Shibuya10",
+            "NeoAnchor"
+          ]
+        },
+        {
+          "id": 2005,
+          "eaClubId": "732400",
+          "name": "Bangkok Hydras",
+          "shortName": "BH",
+          "conference": "Western Conference",
+          "roster": [
+            "HydraNine",
+            "BangkokBox",
+            "SiamStopper"
+          ]
+        }
       ]
     }
   ]
