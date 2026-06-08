@@ -579,6 +579,192 @@ text-transform: uppercase;
 color: #00f0ff;
 }
 
+/* Live Fixtures Analytics Module */
+.fixtures-tab-panel {
+margin-top: 24px;
+}
+
+.fixtures-shell {
+display: grid;
+gap: 14px;
+}
+
+.match-card {
+background: #11131a;
+border: 1px solid rgba(255,255,255,0.03);
+border-radius: 12px;
+cursor: pointer;
+overflow: hidden;
+transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.match-card:hover {
+border-color: rgba(188, 0, 255, 0.18);
+box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+transform: translateY(-1px);
+}
+
+.match-main-row {
+display: grid;
+grid-template-columns: 1fr auto 1fr;
+align-items: center;
+gap: 16px;
+padding: 16px;
+}
+
+.match-team {
+display: flex;
+align-items: center;
+gap: 10px;
+min-width: 0;
+}
+
+.match-team.away {
+justify-content: flex-end;
+}
+
+.match-team-name {
+color: #ffffff;
+font-weight: 800;
+font-size: 0.9rem;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+
+.conf-badge {
+background: rgba(255, 0, 119, 0.1);
+border: 1px solid rgba(255, 0, 119, 0.38);
+border-radius: 6px;
+color: #ff4f9d;
+font-size: 0.62rem;
+font-weight: 800;
+letter-spacing: 0.8px;
+padding: 4px 7px;
+text-transform: uppercase;
+}
+
+.score-matrix {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 5px;
+min-width: 112px;
+}
+
+.score-line {
+background: #161a24;
+border: 1px solid #ff0077;
+border-radius: 8px;
+box-shadow: inset 0 0 10px rgba(0,0,0,0.75), 0 0 16px rgba(255, 0, 119, 0.15);
+color: #ff4f9d;
+font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+font-size: 1.35rem;
+font-weight: 800;
+letter-spacing: 1.6px;
+line-height: 1;
+padding: 9px 16px;
+text-shadow: 0 0 10px #ff0077;
+}
+
+.time-ago {
+color: #64748b;
+font-size: 0.68rem;
+font-weight: 800;
+letter-spacing: 0.7px;
+text-transform: uppercase;
+}
+
+.match-details-dropdown {
+background: #0b0d12;
+max-height: 0;
+overflow: hidden;
+transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.match-card.is-open .match-details-dropdown {
+max-height: 520px;
+}
+
+.match-details-inner {
+border-top: 1px solid rgba(188, 0, 255, 0.08);
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 18px;
+padding: 16px;
+}
+
+.roster-impact-column {
+display: flex;
+flex-direction: column;
+gap: 8px;
+min-width: 0;
+}
+
+.roster-impact-title {
+color: #64748b;
+font-size: 0.72rem;
+font-weight: 800;
+letter-spacing: 0.8px;
+text-transform: uppercase;
+}
+
+.impact-player-row {
+background: rgba(255, 255, 255, 0.025);
+border: 1px solid rgba(255, 255, 255, 0.04);
+border-radius: 8px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 10px;
+padding: 9px 10px;
+}
+
+.impact-player-name {
+color: #ffffff;
+font-size: 0.78rem;
+font-weight: 700;
+min-width: 0;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.impact-badges {
+display: flex;
+gap: 6px;
+flex-shrink: 0;
+}
+
+.impact-badge {
+border-radius: 999px;
+font-size: 0.68rem;
+font-weight: 900;
+letter-spacing: 0.4px;
+padding: 4px 7px;
+}
+
+.impact-badge.goal {
+background: rgba(0, 240, 255, 0.1);
+border: 1px solid rgba(0, 240, 255, 0.42);
+color: #00f0ff;
+}
+
+.impact-badge.assist {
+background: rgba(188, 0, 255, 0.1);
+border: 1px solid rgba(188, 0, 255, 0.42);
+color: #bc00ff;
+}
+
+.empty-impact {
+border: 1px dashed rgba(255, 255, 255, 0.06);
+border-radius: 8px;
+color: #64748b;
+font-size: 0.72rem;
+font-weight: 700;
+padding: 10px;
+}
+
 /* Structural Breakpoints */
 @media (max-width: 950px) {
 .dashboard-grid {
@@ -598,6 +784,13 @@ justify-content: start;
 }
 .hub-meta {
 grid-template-columns: repeat(2, max-content);
+}
+.match-main-row,
+.match-details-inner {
+grid-template-columns: 1fr;
+}
+.match-team.away {
+justify-content: flex-start;
 }
 }
 </style>
@@ -956,7 +1149,219 @@ grid-template-columns: repeat(2, max-content);
 
 </div> <!-- End Dashboard Grid -->
 
+<div id="fixtures-tab" class="fixtures-tab-panel panel">
+<div class="panel-title">
+<span>Live Fixtures</span>
+<span class="live-indicator">EA Pro Clubs Feed</span>
+</div>
+<div id="fixtures-list" class="fixtures-shell">
+<div class="empty-impact">Loading live fixtures...</div>
+</div>
+</div>
+
 </div> <!-- End App Layout -->
+
+<script>
+const LEAGUE_CLUB_REGISTRY = {
+  "57985": { upclId: 1001, name: "New York Empire", conference: "EAST" },
+  "129307": { upclId: 1004, name: "London Kings", conference: "EAST" },
+  "6297844": { upclId: 2004, name: "Tokyo Neo Ronin", conference: "WEST" }
+};
+
+const EA_MATCHES_ENDPOINT = "https://proclubs.ea.com/api/fc/clubs/matches?matchType=friendlyMatch&platform=common-gen5&clubIds=57985";
+
+const SAMPLE_EA_MATCHES = [
+  {
+    timestamp: Date.now() - 1000 * 60 * 18,
+    clubs: {
+      "57985": { details: { name: "NY Empire API" }, score: "3" },
+      "129307": { details: { name: "London Kings API" }, score: "2" }
+    },
+    players: {
+      "57985": {
+        "p1": { playername: "EmpireNine", goals: "2", assists: "0" },
+        "p2": { playername: "MetroCAM", goals: "1", assists: "1" },
+        "p3": { playername: "QuietFullback", goals: "0", assists: "0" }
+      },
+      "129307": {
+        "p4": { playername: "KingStriker", goals: "1", assists: "0" },
+        "p5": { playername: "Thames10", goals: "1", assists: "1" }
+      }
+    }
+  },
+  {
+    timestamp: Date.now() - 1000 * 60 * 72,
+    clubs: {
+      "6297844": { details: { name: "Tokyo Neo Ronin API" }, score: "1" },
+      "57985": { details: { name: "NY Empire API" }, score: "1" }
+    },
+    players: {
+      "6297844": {
+        "p6": { playername: "RoninPress", goals: "1", assists: "0" }
+      },
+      "57985": {
+        "p7": { playername: "EmpireNine", goals: "1", assists: "0" },
+        "p8": { playername: "MetroCAM", goals: "0", assists: "1" }
+      }
+    }
+  }
+];
+
+function getClubDisplay(match, clubId) {
+  const registryClub = LEAGUE_CLUB_REGISTRY[String(clubId)];
+  const apiClub = match?.clubs?.[clubId];
+  const apiName = apiClub?.details?.name || apiClub?.name || `Club ${clubId}`;
+
+  return {
+    id: String(clubId),
+    upclId: registryClub?.upclId || null,
+    name: registryClub?.name || apiName,
+    conference: registryClub?.conference || "API"
+  };
+}
+
+function parseScore(match, clubId) {
+  return Number.parseInt(match?.clubs?.[clubId]?.score ?? "0", 10) || 0;
+}
+
+function getTimeAgo(match) {
+  const rawTimestamp = match.timestamp || match.timeAgo || match.matchTimestamp || match.date;
+  const date = typeof rawTimestamp === "number" ? new Date(rawTimestamp) : new Date(rawTimestamp || Date.now());
+  const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+
+  return `${Math.round(elapsedHours / 24)}d ago`;
+}
+
+function createImpactRows(playersByClubId = {}) {
+  const rows = Object.values(playersByClubId)
+    .map((player) => {
+      const goals = Number.parseInt(player.goals || "0", 10) || 0;
+      const assists = Number.parseInt(player.assists || "0", 10) || 0;
+      const name = player.playername || player.playerName || player.name || "Unknown Player";
+      return { name, goals, assists };
+    })
+    .filter((player) => player.goals > 0 || player.assists > 0);
+
+  if (!rows.length) {
+    return '<div class="empty-impact">No scoring impact recorded.</div>';
+  }
+
+  return rows.map((player) => {
+    const goalBadge = player.goals > 0 ? `<span class="impact-badge goal">${player.goals} G</span>` : "";
+    const assistBadge = player.assists > 0 ? `<span class="impact-badge assist">${player.assists} A</span>` : "";
+
+    return `
+      <div class="impact-player-row">
+        <span class="impact-player-name">${escapeHtml(player.name)}</span>
+        <span class="impact-badges">${goalBadge}${assistBadge}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderLiveFixtures(matchDataArray) {
+  const fixturesList = document.querySelector("#fixtures-list");
+  if (!fixturesList) return;
+
+  if (!Array.isArray(matchDataArray) || !matchDataArray.length) {
+    fixturesList.innerHTML = '<div class="empty-impact">No fixtures returned from the feed.</div>';
+    return;
+  }
+
+  fixturesList.innerHTML = matchDataArray.map((match, index) => {
+    const clubIds = Object.keys(match.clubs || {});
+    const [homeId, awayId] = clubIds;
+
+    if (!homeId || !awayId) {
+      return "";
+    }
+
+    const homeClub = getClubDisplay(match, homeId);
+    const awayClub = getClubDisplay(match, awayId);
+    const homeScore = parseScore(match, homeId);
+    const awayScore = parseScore(match, awayId);
+    const timeAgo = getTimeAgo(match);
+    const homeImpactRows = createImpactRows(match.players?.[homeId]);
+    const awayImpactRows = createImpactRows(match.players?.[awayId]);
+
+    return `
+      <article class="match-card" data-match-index="${index}">
+        <div class="match-main-row">
+          <div class="match-team home">
+            <span class="match-team-name">${escapeHtml(homeClub.name)}</span>
+            <span class="conf-badge">${escapeHtml(homeClub.conference)}</span>
+          </div>
+          <div class="score-matrix">
+            <div class="score-line">${homeScore} - ${awayScore}</div>
+            <div class="time-ago">${escapeHtml(timeAgo)}</div>
+          </div>
+          <div class="match-team away">
+            <span class="conf-badge">${escapeHtml(awayClub.conference)}</span>
+            <span class="match-team-name">${escapeHtml(awayClub.name)}</span>
+          </div>
+        </div>
+        <div class="match-details-dropdown">
+          <div class="match-details-inner">
+            <div class="roster-impact-column">
+              <div class="roster-impact-title">${escapeHtml(homeClub.name)} Impact</div>
+              ${homeImpactRows}
+            </div>
+            <div class="roster-impact-column">
+              <div class="roster-impact-title">${escapeHtml(awayClub.name)} Impact</div>
+              ${awayImpactRows}
+            </div>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  fixturesList.querySelectorAll(".match-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      card.classList.toggle("is-open");
+    });
+  });
+}
+
+async function fetchLiveFixtures() {
+  try {
+    const response = await fetch(EA_MATCHES_ENDPOINT, {
+      headers: {
+        "Accept": "application/json",
+        "Referer": "https://www.ea.com/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`EA feed returned ${response.status}`);
+    }
+
+    const matches = await response.json();
+    renderLiveFixtures(matches);
+  } catch (error) {
+    console.warn("Using sample fixtures because the EA feed could not be loaded.", error);
+    renderLiveFixtures(SAMPLE_EA_MATCHES);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", fetchLiveFixtures);
+</script>
 
 </body>
 </html>
